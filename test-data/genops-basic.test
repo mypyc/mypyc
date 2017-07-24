@@ -336,3 +336,20 @@ L4:
 L5:
 L6:
     return x
+
+[case testConditionalExpr]
+def f(n: int) -> int:
+    return 0 if n == 0 else 1
+[out]
+def f(n):
+    n, r0, r1 :: int
+L0:
+    r0 = 0
+    if n == r0 goto L1 else goto L2 :: int
+L1:
+    r1 = 0
+    goto L3
+L2:
+    r1 = 1
+L3:
+    return r1
