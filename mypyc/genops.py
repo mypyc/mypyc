@@ -285,10 +285,14 @@ class IRBuilder(NodeVisitor[int]):
             assert isinstance(s.index.node, Var)
             lvalue_reg = self.environment.add_local(s.index.node, self.node_type(s.index))
 
-            len_reg = self.alloc_temp(RTType('int'))
-            self.add(PrimitiveOp(len_reg, PrimitiveOp.LIST_LEN, expr_reg))
 
             condition_block = self.goto_new_block()
+
+            # For compatibility with python semantics we recalculate the length
+            # at every iteration.
+            len_reg = self.alloc_temp(RTType('int'))
+            self.add(PrimitiveOp(len_reg, PrimitiveOp.LIST_LEN, expr_reg))
+            
             branch = Branch(index_reg, len_reg, -1, -1, Branch.INT_LT)
             self.add(branch)
             branches = [branch]
@@ -299,7 +303,7 @@ class IRBuilder(NodeVisitor[int]):
             target_list_type = self.types[s.expr]
             assert isinstance(target_list_type, Instance)
             target_type = type_to_rttype(target_list_type.args[0])
-            value_box = self.alloc_temp(RTType('int'))
+            value_box = self.alloc_temp(RTType('object'))
             self.add(PrimitiveOp(value_box, PrimitiveOp.LIST_GET, expr_reg, index_reg))
 
             self.unbox(value_box, target_type, target=lvalue_reg)
