@@ -30,7 +30,12 @@ class int:
 
 class float: pass
 class bool: pass
-class tuple: pass
+
+class tuple(Generic[T], Sized):
+    def __init__(self, i: Iterable[T]) -> None: pass
+    def __getitem__(self, i: int) -> T: pass
+    def __len__(self) -> int: pass
+
 class function: pass
 
 class list(Generic[T], Iterable[T], Sized):
