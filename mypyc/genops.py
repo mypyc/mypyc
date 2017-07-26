@@ -20,7 +20,7 @@ from mypy.nodes import (
     Node, MypyFile, FuncDef, ReturnStmt, AssignmentStmt, OpExpr, IntExpr, NameExpr, LDEF, Var,
     IfStmt, Node, UnaryExpr, ComparisonExpr, WhileStmt, Argument, CallExpr, IndexExpr, Block,
     Expression, ListExpr, ExpressionStmt, MemberExpr, ForStmt, RefExpr, Lvalue, BreakStmt,
-    ContinueStmt, ConditionalExpr, OperatorAssignmentStmt, ARG_POS
+    ContinueStmt, ConditionalExpr, OperatorAssignmentStmt, TupleExpr, ARG_POS
 )
 from mypy.types import Type, Instance, CallableType, NoneTyp, TupleType
 from mypy.visitor import NodeVisitor
@@ -28,7 +28,8 @@ from mypy.subtypes import is_named_instance
 
 from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RTType, Register, Return, FuncIR, Assign,
-    PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, TupleRTType
+    PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, TupleRTType,
+    TupleGet
 )
 
 
@@ -442,25 +443,34 @@ class IRBuilder(NodeVisitor[int]):
 
     def visit_index_expr(self, expr: IndexExpr) -> int:
         base_type = self.types[expr.base]
-        index_type = self.types[expr.index]
         result_type = self.types[expr]
-        allows_index = is_named_instance(base_type, 'builtins.list') or type_to_rttype(base_type).name == 'tuple'
-        if allows_index and is_named_instance(index_type, 'builtins.int'):
 
-            # List indexing
+        base_rttype = type_to_rttype(base_type)
+
+        if is_named_instance(base_type, 'builtins.list'):
+            index_type = self.types[expr.index]
+            if not is_named_instance(index_type, 'builtins.int'):
+                assert False, 'Unsupported indexing operation'
+
             base_reg = self.accept(expr.base)
             index_reg = self.accept(expr.index)
             target_type = self.node_type(expr)
             tmp = self.alloc_temp(RTType('object'))
-
-            if is_named_instance(base_type, 'builtins.list'):
-                op = PrimitiveOp.LIST_GET
-            else:
-                assert is_named_instance(base_type, 'builtins.tuple')
-                op = PrimitiveOp.TUPLE_GET
+            op = PrimitiveOp.LIST_GET
 
             self.add(PrimitiveOp(tmp, op, base_reg, index_reg))
             return self.unbox(tmp, target_type)
+
+        elif isinstance(base_rttype, TupleRTType):
+            base_reg = self.accept(expr.base)
+            target_type = self.node_type(expr)
+
+            assert isinstance(expr.index, IntExpr)
+
+            target = self.alloc_target(target_type)
+            self.add(TupleGet(target, base_reg, expr.index.value, base_rttype.types[expr.index.value]))
+            return target
+
         assert False, 'Unsupported indexing operation'
 
     def visit_int_expr(self, expr: IntExpr) -> int:
@@ -500,7 +510,14 @@ class IRBuilder(NodeVisitor[int]):
         if fn == 'len' and len(expr.args) == 1 and expr.arg_kinds == [ARG_POS]:
             target = self.alloc_target(RTType('int'))
             arg = self.accept(expr.args[0])
-            self.add(PrimitiveOp(target, PrimitiveOp.LIST_LEN, arg))
+
+            expr_rttype = type_to_rttype(self.types[expr.args[0]])
+            if expr_rttype.name == 'list':
+                self.add(PrimitiveOp(target, PrimitiveOp.LIST_LEN, arg))
+            elif isinstance(expr_rttype, TupleRTType):
+                self.add(LoadInt(target, len(expr_rttype.types)))
+            else:
+                assert False, "unsupported use of len"
         else:
             target = self.alloc_target(RTType('int'))
             args = [self.accept(arg) for arg in expr.args]
@@ -552,6 +569,15 @@ class IRBuilder(NodeVisitor[int]):
             boxed = self.box(item_reg, item_type)
             items.append(boxed)
         self.add(PrimitiveOp(target, PrimitiveOp.NEW_LIST, *items))
+        return target
+
+    def visit_tuple_expr(self, expr: TupleExpr) -> int:
+        tuple_type = self.types[expr]
+        assert isinstance(tuple_type, TupleType)
+
+        target = self.alloc_target(type_to_rttype(tuple_type))
+        items = [self.accept(i) for i in expr.items]
+        self.add(PrimitiveOp(target, PrimitiveOp.NEW_TUPLE, *items))
         return target
 
     # Conditional expressions
