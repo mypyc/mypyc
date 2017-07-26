@@ -6,7 +6,7 @@ from typing import Dict, Tuple, List, Set, TypeVar, Iterator
 
 from mypyc.ops import (
     BasicBlock, OpVisitor, PrimitiveOp, Assign, LoadInt, RegisterOp, Goto,
-    Branch, Return, Call, Environment, Box, Unbox, Cast, Op
+    Branch, Return, Call, Environment, Box, Unbox, Cast, Op, TupleGet
 )
 
 
@@ -78,6 +78,9 @@ class BaseAnalysisVisitor(OpVisitor[GenAndKill]):
         return self.visit_register_op(op)
 
     def visit_load_int(self, op: LoadInt) -> GenAndKill:
+        return self.visit_register_op(op)
+
+    def visit_tuple_get(self, op: TupleGet) -> GenAndKill:
         return self.visit_register_op(op)
 
     def visit_box(self, op: Box) -> GenAndKill:
