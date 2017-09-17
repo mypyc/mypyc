@@ -39,34 +39,34 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          "cpy_r_m = 10;")
 
     def test_tuple_get(self) -> None:
-        self.assert_emit(TupleGet(self.m, self.n, 1, BoolRType()), 'cpy_r_m = cpy_r_n.f1;')
+        self.assert_emit(TupleGet(self.m, self.n, 1, BoolRType(), 0), 'cpy_r_m = cpy_r_n.f1;')
 
     def test_load_None(self) -> None:
-        self.assert_emit(PrimitiveOp(self.m, PrimitiveOp.NONE),
+        self.assert_emit(PrimitiveOp(self.m, PrimitiveOp.NONE, [], 0),
                          """cpy_r_m = Py_None;
                             Py_INCREF(cpy_r_m);
                          """)
 
     def test_load_True(self) -> None:
-        self.assert_emit(PrimitiveOp(self.m, PrimitiveOp.TRUE), "cpy_r_m = 1;")
+        self.assert_emit(PrimitiveOp(self.m, PrimitiveOp.TRUE, [], 0), "cpy_r_m = 1;")
 
     def test_load_False(self) -> None:
-        self.assert_emit(PrimitiveOp(self.m, PrimitiveOp.FALSE), "cpy_r_m = 0;")
+        self.assert_emit(PrimitiveOp(self.m, PrimitiveOp.FALSE, [], 0), "cpy_r_m = 0;")
 
     def test_assign_int(self) -> None:
         self.assert_emit(Assign(self.m, self.n),
                          "cpy_r_m = cpy_r_n;")
 
     def test_int_add(self) -> None:
-        self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.INT_ADD, self.m, self.k),
+        self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.INT_ADD, [self.m, self.k], 55),
                          "cpy_r_n = CPyTagged_Add(cpy_r_m, cpy_r_k);")
 
     def test_int_sub(self) -> None:
-        self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.INT_SUB, self.m, self.k),
+        self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.INT_SUB, [self.m, self.k], 55),
                          "cpy_r_n = CPyTagged_Subtract(cpy_r_m, cpy_r_k);")
 
     def test_list_repeat(self) -> None:
-        self.assert_emit(PrimitiveOp(self.ll, PrimitiveOp.LIST_REPEAT, self.l, self.n),
+        self.assert_emit(PrimitiveOp(self.ll, PrimitiveOp.LIST_REPEAT, [self.l, self.n], 55),
                          """long long __tmp1;
                             __tmp1 = CPyTagged_AsLongLong(cpy_r_n);
                             if (__tmp1 == -1 && PyErr_Occurred())
@@ -77,11 +77,11 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """)
 
     def test_int_neg(self) -> None:
-        self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.INT_NEG, self.m),
+        self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.INT_NEG, [self.m], 55),
                          "cpy_r_n = CPy_NegateInt(cpy_r_m);")
 
     def test_list_len(self) -> None:
-        self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.LIST_LEN, self.l),
+        self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.LIST_LEN, [self.l], 55),
                          """long long __tmp1;
                             __tmp1 = PyList_GET_SIZE(cpy_r_l);
                             cpy_r_n = CPyTagged_ShortFromLongLong(__tmp1);
@@ -104,15 +104,15 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """)
 
     def test_call(self) -> None:
-        self.assert_emit(Call(self.n, 'myfn', [self.m]),
+        self.assert_emit(Call(self.n, 'myfn', [self.m], 55),
                          "cpy_r_n = CPyDef_myfn(cpy_r_m);")
 
     def test_call_two_args(self) -> None:
-        self.assert_emit(Call(self.n, 'myfn', [self.m, self.k]),
+        self.assert_emit(Call(self.n, 'myfn', [self.m, self.k], 55),
                          "cpy_r_n = CPyDef_myfn(cpy_r_m, cpy_r_k);")
 
     def test_call_no_return(self) -> None:
-        self.assert_emit(Call(None, 'myfn', [self.m, self.k]),
+        self.assert_emit(Call(None, 'myfn', [self.m, self.k], 55),
                          "CPyDef_myfn(cpy_r_m, cpy_r_k);")
 
     def test_inc_ref(self) -> None:
@@ -132,14 +132,14 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.assert_emit(DecRef(self.m, tuple_type), 'CPyTagged_DecRef(cpy_r_m.f0.f0);')
 
     def test_list_get_item(self) -> None:
-        self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.LIST_GET, self.m, self.k),
+        self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.LIST_GET, [self.m, self.k], 55),
                          """cpy_r_n = CPyList_GetItem(cpy_r_m, cpy_r_k);
                             if (!cpy_r_n)
                                 abort();
                          """)
 
     def test_list_set_item(self) -> None:
-        self.assert_emit(PrimitiveOp(None, PrimitiveOp.LIST_SET, self.l, self.n, self.o),
+        self.assert_emit(PrimitiveOp(None, PrimitiveOp.LIST_SET, [self.l, self.n, self.o], 55),
                          """if (!CPyList_SetItem(cpy_r_l, cpy_r_n, cpy_r_o))
                                 abort();
                          """)
@@ -149,7 +149,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """cpy_r_o = CPyTagged_StealAsObject(cpy_r_n);""")
 
     def test_unbox(self) -> None:
-        self.assert_emit(Unbox(self.n, self.m, IntRType()),
+        self.assert_emit(Unbox(self.n, self.m, IntRType(), 55),
                          """if (PyLong_Check(cpy_r_m))
                                 cpy_r_n = CPyTagged_FromObject(cpy_r_m);
                             else
@@ -157,7 +157,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """)
 
     def test_new_list(self) -> None:
-        self.assert_emit(PrimitiveOp(self.l, PrimitiveOp.NEW_LIST, self.n, self.m),
+        self.assert_emit(PrimitiveOp(self.l, PrimitiveOp.NEW_LIST, [self.n, self.m], 55),
                          """cpy_r_l = PyList_New(2);
                             Py_INCREF(cpy_r_n);
                             PyList_SET_ITEM(cpy_r_l, 0, cpy_r_n);
@@ -166,7 +166,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """)
 
     def test_list_append(self) -> None:
-        self.assert_emit(PrimitiveOp(None, PrimitiveOp.LIST_APPEND, self.l, self.o),
+        self.assert_emit(PrimitiveOp(None, PrimitiveOp.LIST_APPEND, [self.l, self.o], 1),
                          """if (PyList_Append(cpy_r_l, cpy_r_o) == -1)
                                 abort();
                          """)
@@ -175,14 +175,14 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         ir = ClassIR('A', [('x', BoolRType()),
                            ('y', IntRType())])
         rtype = UserRType(ir)
-        self.assert_emit(GetAttr(self.n, self.m, 'y', rtype),
+        self.assert_emit(GetAttr(self.n, self.m, 'y', rtype, 1),
                          """cpy_r_n = CPY_GET_ATTR(cpy_r_m, 2, AObject, CPyTagged);""")
 
     def test_set_attr(self) -> None:
         ir = ClassIR('A', [('x', BoolRType()),
                            ('y', IntRType())])
         rtype = UserRType(ir)
-        self.assert_emit(SetAttr(self.n, 'y', self.m, rtype),
+        self.assert_emit(SetAttr(self.n, 'y', self.m, rtype, 1),
                          """CPY_SET_ATTR(cpy_r_n, 3, cpy_r_m, AObject, CPyTagged);""")
 
     def assert_emit(self, op: Op, expected: str) -> None:
