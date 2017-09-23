@@ -363,9 +363,15 @@ class Environment:
 class Op:
     # Source line number
     line = -1
+    # Where to go to on an exception?
+    error_label = None  # type: Optional[Label]
 
     @abstractmethod
     def to_str(self, env: Environment) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def can_raise(self) -> bool:
         raise NotImplementedError
 
     @abstractmethod
@@ -382,6 +388,9 @@ class Goto(Op):
 
     def to_str(self, env: Environment) -> str:
         return env.format('goto %l', self.label)
+
+    def can_raise(self) -> bool:
+        return False
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_goto(self)
@@ -454,6 +463,9 @@ class Branch(Op):
         self.true, self.false = self.false, self.true
         self.negated = not self.negated
 
+    def can_raise(self) -> bool:
+        return False
+
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_branch(self)
 
@@ -466,6 +478,9 @@ class Return(Op):
 
     def to_str(self, env: Environment) -> str:
         return env.format('return %r', self.reg)
+
+    def can_raise(self) -> bool:
+        return False
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_return(self)
@@ -485,6 +500,9 @@ class Unreachable(Op):
 
     def to_str(self, env: Environment) -> str:
         return "unreachable"
+
+    def can_raise(self) -> bool:
+        return False
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_unreachable(self)
@@ -527,6 +545,9 @@ class IncRef(RegisterOp):
             s += ' :: {}'.format(self.target_type.name)
         return s
 
+    def can_raise(self) -> bool:
+        return False
+
     def sources(self) -> List[Register]:
         return [self.dest]
 
@@ -547,6 +568,9 @@ class DecRef(RegisterOp):
         if self.target_type.name in ['bool', 'int']:
             s += ' :: {}'.format(self.target_type.name)
         return s
+
+    def can_raise(self) -> bool:
+        return False
 
     def sources(self) -> List[Register]:
         return [self.dest]
@@ -573,6 +597,9 @@ class Call(RegisterOp):
         if self.dest is not None:
             s = env.format('%r = ', self.dest) + s
         return s
+
+    def can_raise(self) -> bool:
+        return True
 
     def sources(self) -> List[Register]:
         return self.args[:]
@@ -605,6 +632,9 @@ class PyCall(RegisterOp):
             s = env.format('%r = ', self.dest) + s
         return s + ' :: py'
 
+    def can_raise(self) -> bool:
+        return True
+
     def sources(self) -> List[Register]:
         return self.args[:] + [self.function]
 
@@ -627,6 +657,9 @@ class PyGetAttr(RegisterOp):
     def to_str(self, env: Environment) -> str:
         return env.format('%r = %r.%s', self.dest, self.left, self.right)
 
+    def can_raise(self) -> bool:
+        return True
+
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_py_get_attr(self)
 
@@ -642,11 +675,12 @@ OpDesc = NamedTuple('OpDesc', [('name', str),        # Symbolic name of the oper
                                ('type', str),        # Type string, used for disambiguation
                                ('format_str', str),  # Format string for pretty printing
                                ('is_void', bool),    # Is this a void op (no value produced)?
-                               ('kind', int)])
+                               ('kind', int),
+                               ('can_raise', bool)])
 
 
 def make_op(name: str, num_args: int, typ: str, format_str: str = None,
-            is_void: bool = False, kind: int = OP_MISC) -> OpDesc:
+            is_void: bool = False, kind: int = OP_MISC, can_raise: bool = True) -> OpDesc:
     if format_str is None:
         # Default format strings for some common things.
         if name == '[]':
@@ -662,7 +696,7 @@ def make_op(name: str, num_args: int, typ: str, format_str: str = None,
             format_str = '{dest} = %s{args[0]} :: %s' % (name, typ)
         else:
             assert False, 'format_str must be defined; no default format available'
-    return OpDesc(name, num_args, typ, format_str, is_void, kind)
+    return OpDesc(name, num_args, typ, format_str, is_void, kind, can_raise)
 
 
 class PrimitiveOp(RegisterOp):
@@ -673,41 +707,42 @@ class PrimitiveOp(RegisterOp):
     """
 
     # Binary
-    INT_ADD = make_op('+', 2, 'int', kind=OP_BINARY)
-    INT_SUB = make_op('-', 2, 'int', kind=OP_BINARY)
-    INT_MUL = make_op('*', 2, 'int', kind=OP_BINARY)
-    INT_DIV = make_op('//', 2, 'int', kind=OP_BINARY)
-    INT_MOD = make_op('%', 2, 'int', kind=OP_BINARY)
-    INT_AND = make_op('&', 2, 'int', kind=OP_BINARY)
-    INT_OR =  make_op('|', 2, 'int', kind=OP_BINARY)
-    INT_XOR = make_op('^', 2, 'int', kind=OP_BINARY)
-    INT_SHL = make_op('<<', 2, 'int', kind=OP_BINARY)
-    INT_SHR = make_op('>>', 2, 'int', kind=OP_BINARY)
+    INT_ADD = make_op('+', 2, 'int', kind=OP_BINARY, can_raise=False)
+    INT_SUB = make_op('-', 2, 'int', kind=OP_BINARY, can_raise=False)
+    INT_MUL = make_op('*', 2, 'int', kind=OP_BINARY, can_raise=False)
+    INT_DIV = make_op('//', 2, 'int', kind=OP_BINARY, can_raise=True)
+    INT_MOD = make_op('%', 2, 'int', kind=OP_BINARY, can_raise=True)
+    INT_AND = make_op('&', 2, 'int', kind=OP_BINARY, can_raise=False)
+    INT_OR =  make_op('|', 2, 'int', kind=OP_BINARY, can_raise=False)
+    INT_XOR = make_op('^', 2, 'int', kind=OP_BINARY, can_raise=False)
+    INT_SHL = make_op('<<', 2, 'int', kind=OP_BINARY, can_raise=False)
+    INT_SHR = make_op('>>', 2, 'int', kind=OP_BINARY, can_raise=False)
 
     # Unary
-    INT_NEG = make_op('-', 1, 'int')
-    LIST_LEN = make_op('len', 1, 'list')
-    HOMOGENOUS_TUPLE_LEN = make_op('len', 1, 'sequence_tuple')
-    LIST_TO_HOMOGENOUS_TUPLE = make_op('tuple', 1, 'list')
+    INT_NEG = make_op('-', 1, 'int', can_raise=False)
+    LIST_LEN = make_op('len', 1, 'list', can_raise=False)
+    HOMOGENOUS_TUPLE_LEN = make_op('len', 1, 'sequence_tuple', can_raise=False)
+    LIST_TO_HOMOGENOUS_TUPLE = make_op('tuple', 1, 'list', can_raise=True)
 
     # Other
-    NONE = make_op('None', 0, 'None', format_str='{dest} = None')
-    TRUE = make_op('True', 0, 'True', format_str='{dest} = True')
-    FALSE = make_op('False', 0, 'False', format_str='{dest} = False')
+    NONE = make_op('None', 0, 'None', format_str='{dest} = None', can_raise=False)
+    TRUE = make_op('True', 0, 'True', format_str='{dest} = True', can_raise=False)
+    FALSE = make_op('False', 0, 'False', format_str='{dest} = False', can_raise=False)
 
     # List
-    LIST_GET = make_op('[]', 2, 'list', kind=OP_BINARY)
-    LIST_REPEAT = make_op('*', 2, 'list', kind=OP_BINARY)
-    LIST_SET = make_op('[]=', 3, 'list', is_void=True)
-    NEW_LIST = make_op('new', VAR_ARG, 'list', format_str='{dest} = [{comma_args}]')
+    LIST_GET = make_op('[]', 2, 'list', kind=OP_BINARY, can_raise=True)
+    LIST_REPEAT = make_op('*', 2, 'list', kind=OP_BINARY, can_raise=True)
+    LIST_SET = make_op('[]=', 3, 'list', is_void=True, can_raise=True)
+    NEW_LIST = make_op('new', VAR_ARG, 'list', format_str='{dest} = [{comma_args}]', can_raise=True)
     LIST_APPEND = make_op('append', 2, 'list',
-                          is_void=True, format_str='{args[0]}.append({args[1]})')
+                          is_void=True, format_str='{args[0]}.append({args[1]})', can_raise=True)
 
     # Sequence Tuple
-    HOMOGENOUS_TUPLE_GET = make_op('[]', 2, 'sequence_tuple', kind=OP_BINARY)
+    HOMOGENOUS_TUPLE_GET = make_op('[]', 2, 'sequence_tuple', kind=OP_BINARY, can_raise=True)
 
     # Tuple
-    NEW_TUPLE = make_op('new', VAR_ARG, 'tuple', format_str='{dest} = ({comma_args})')
+    NEW_TUPLE = make_op('new', VAR_ARG, 'tuple', format_str='{dest} = ({comma_args})',
+                        can_raise=True)
 
     def __init__(self, dest: Optional[Register], desc: OpDesc, args: List[Register],
                  line: int) -> None:
@@ -734,6 +769,9 @@ class PrimitiveOp(RegisterOp):
         params['comma_args'] = ', '.join(args)
         return self.desc.format_str.format(**params)
 
+    def can_raise(self) -> bool:
+        return self.desc.can_raise
+
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_primitive_op(self)
 
@@ -752,6 +790,9 @@ class Assign(RegisterOp):
     def to_str(self, env: Environment) -> str:
         return env.format('%r = %r', self.dest, self.src)
 
+    def can_raise(self) -> bool:
+        return False
+
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_assign(self)
 
@@ -769,6 +810,9 @@ class LoadInt(RegisterOp):
 
     def to_str(self, env: Environment) -> str:
         return env.format('%r = %d', self.dest, self.value)
+
+    def can_raise(self) -> bool:
+        return False
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_load_int(self)
@@ -790,6 +834,9 @@ class GetAttr(RegisterOp):
 
     def to_str(self, env: Environment) -> str:
         return env.format('%r = %r.%s', self.dest, self.obj, self.attr)
+
+    def can_raise(self) -> bool:
+        return True
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_get_attr(self)
@@ -813,6 +860,9 @@ class SetAttr(RegisterOp):
     def to_str(self, env: Environment) -> str:
         return env.format('%r.%s = %r', self.obj, self.attr, self.src)
 
+    def can_raise(self) -> bool:
+        return True
+
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_set_attr(self)
 
@@ -830,6 +880,9 @@ class LoadStatic(RegisterOp):
 
     def to_str(self, env: Environment) -> str:
         return env.format('%r = %s :: static', self.dest, self.identifier)
+
+    def can_raise(self) -> bool:
+        return False
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_load_static(self)
@@ -851,6 +904,9 @@ class TupleGet(RegisterOp):
 
     def to_str(self, env: Environment) -> str:
         return env.format('%r = %r[%d]', self.dest, self.src, self.index)
+
+    def can_raise(self) -> bool:
+        return False
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_tuple_get(self)
@@ -877,6 +933,9 @@ class Cast(RegisterOp):
     def to_str(self, env: Environment) -> str:
         return env.format('%r = cast(%s, %r)', self.dest, self.typ.name, self.src)
 
+    def can_raise(self) -> bool:
+        return True
+
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_cast(self)
 
@@ -899,6 +958,9 @@ class Box(RegisterOp):
 
     def to_str(self, env: Environment) -> str:
         return env.format('%r = box(%s, %r)', self.dest, self.type, self.src)
+
+    def can_raise(self) -> bool:
+        return False
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_box(self)
@@ -923,6 +985,9 @@ class Unbox(RegisterOp):
 
     def to_str(self, env: Environment) -> str:
         return env.format('%r = unbox(%s, %r)', self.dest, self.type, self.src)
+
+    def can_raise(self) -> bool:
+        return True
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_unbox(self)
