@@ -818,6 +818,26 @@ class LoadInt(RegisterOp):
         return visitor.visit_load_int(self)
 
 
+class LoadErrorValue(RegisterOp):
+    """dest = <error value for type>"""
+
+    def __init__(self, dest: Register, rtype: RType) -> None:
+        self.dest = dest
+        self.rtype = rtype
+
+    def sources(self) -> List[Register]:
+        return []
+
+    def to_str(self, env: Environment) -> str:
+        return env.format('%r = ERROR :: %s', self.dest, self.rtype)
+
+    def can_raise(self) -> bool:
+        return False
+
+    def accept(self, visitor: 'OpVisitor[T]') -> T:
+        return visitor.visit_load_error_value(self)
+
+
 class GetAttr(RegisterOp):
     """dest = obj.attr (for a native object)"""
 
@@ -1028,7 +1048,6 @@ class FuncIR:
         self.ret_type = ret_type
         self.blocks = blocks
         self.env = env
-        self._next_block_label = 0
 
 
 class ClassIR:
@@ -1092,6 +1111,9 @@ class OpVisitor(Generic[T]):
     def visit_load_int(self, op: LoadInt) -> T:
         pass
 
+    def visit_load_error_value(self, op: LoadErrorValue) -> T:
+        pass
+
     def visit_get_attr(self, op: GetAttr) -> T:
         pass
 
@@ -1141,7 +1163,10 @@ def format_blocks(blocks: List[BasicBlock], env: Environment) -> List[str]:
             # Hide the last goto if it just goes to the next basic block.
             ops = ops[:-1]
         for op in ops:
-            lines.append('    ' + op.to_str(env))
+            line = '    ' + op.to_str(env)
+            if op.error_label is not None:
+                line += env.format(' [error %l]', op.error_label)
+            lines.append(line)
 
         if not isinstance(block.ops[-1], (Goto, Branch, Return, Unreachable)):
             # Each basic block needs to exit somewhere.

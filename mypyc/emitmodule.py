@@ -14,6 +14,7 @@ from mypyc.emitclass import generate_class
 from mypyc.emitwrapper import generate_wrapper_function, wrapper_function_header
 from mypyc.ops import c_module_name, FuncIR, ClassIR, ModuleIR
 from mypyc.refcount import insert_ref_count_opcodes
+from mypyc.exceptions import insert_exception_handling
 
 
 class MarkedDeclaration:
@@ -33,10 +34,15 @@ def compile_module_to_c(sources: List[BuildSource], module_name: str, options: O
     if result.errors:
         raise CompileError(result.errors)
 
+    # Generate basic IR, with missing exception and refcount handling.
     module = genops.build_ir(result.files[module_name], result.types)
+    # Insert exception handling.
+    for fn in module.functions:
+        insert_exception_handling(fn)
+    # Insert refcount handling.
     for fn in module.functions:
         insert_ref_count_opcodes(fn)
-
+    # Generate C code.
     generator = ModuleGenerator(module_name, module)
     return generator.generate_c_module()
 

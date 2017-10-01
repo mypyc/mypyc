@@ -3,8 +3,8 @@
 from mypyc.common import REG_PREFIX, NATIVE_PREFIX
 from mypyc.emit import Emitter
 from mypyc.ops import (
-    FuncIR, OpVisitor, Goto, Branch, Return, PrimitiveOp, Assign, LoadInt, GetAttr, SetAttr,
-    LoadStatic, TupleGet, Call, PyCall, PyGetAttr, IncRef, DecRef, Box, Cast, Unbox, Label,
+    FuncIR, OpVisitor, Goto, Branch, Return, PrimitiveOp, Assign, LoadInt, LoadErrorValue, GetAttr,
+    SetAttr, LoadStatic, TupleGet, Call, PyCall, PyGetAttr, IncRef, DecRef, Box, Cast, Unbox, Label,
     Register, RType, OP_BINARY, TupleRType
 )
 
@@ -204,6 +204,10 @@ class FunctionEmitterVisitor(OpVisitor):
     def visit_load_int(self, op: LoadInt) -> None:
         dest = self.reg(op.dest)
         self.emit_line('%s = %d;' % (dest, op.value * 2))
+
+    def visit_load_error_value(self, op: LoadErrorValue) -> None:
+        self.emit_line('%s = %s;' % (self.reg(op.dest),
+                                     op.rtype.c_error_value))
 
     def visit_get_attr(self, op: GetAttr) -> None:
         dest = self.reg(op.dest)
