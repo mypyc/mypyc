@@ -58,6 +58,9 @@ class ModuleGenerator:
 
         self.declare_imports(self.module.imports)
 
+        for symbol in self.module.unicode_literals.values():
+            self.declare_static_pyobject(symbol)
+
         for cl in self.module.classes:
             generate_class(cl, self.module_name, emitter)
 
@@ -116,6 +119,15 @@ class ModuleGenerator:
                            'if (m == NULL)',
                            '    return NULL;')
         self.generate_imports_init_section(self.module.imports, emitter)
+
+        for unicode_literal, symbol in self.module.unicode_literals.items():
+            # TODO UTF8 encode the unicode_literal to byte-representation
+            emitter.emit_lines(
+                '{} = PyUnicode_FromString("{}");'.format(symbol, unicode_literal),
+                'if ({} == NULL)'.format(symbol),
+                '    return NULL;',
+            )
+
         for cl in self.module.classes:
             name = cl.name
             type_struct = cl.type_struct
@@ -168,6 +180,9 @@ class ModuleGenerator:
     def declare_imports(self, imps) -> None:
         for imp in imps:
             self.declare_import(imp)
+
+    def declare_static_pyobject(self, symbol):
+        self.declare_global('PyObject *', symbol)
 
     def generate_imports_init_section(self, imps: List[str], emitter: Emitter) -> None:
         for imp in imps:

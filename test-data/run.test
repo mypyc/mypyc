@@ -279,3 +279,10 @@ assert f(None) is None
 assert f(a) is a
 assert g(None) == 1
 assert g(a) == 2
+
+[case testUnicodeLiteral]
+def f() -> str:
+    return 'some string'
+[file driver.py]
+from native import f
+assert f() == 'some string'
