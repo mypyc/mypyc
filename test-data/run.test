@@ -303,3 +303,11 @@ def f(x: int) -> int:
 from native import f
 assert f(1) == 2
 assert f(2) == 1
+
+[case testPyMethodCall]
+from typing import List
+def f(x: List[int]) -> int:
+    return x.pop()
+[file driver.py]
+from native import f
+assert f([1, 2]) == 2
