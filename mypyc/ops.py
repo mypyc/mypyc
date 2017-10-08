@@ -647,7 +647,10 @@ def make_op(name: str, num_args: int, typ: str, format_str: str = None,
             assert is_void
             format_str = '{args[0]}[{args[1]}] = {args[2]} :: %s' % typ
         elif kind == OP_BINARY:
-            format_str = '{dest} = {args[0]} %s {args[1]} :: %s' % (name, typ)
+            if is_void:
+                format_str = '{args[0]} %s {args[1]} :: %s' % (name, typ)
+            else:
+                format_str = '{dest} = {args[0]} %s {args[1]} :: %s' % (name, typ)
         elif num_args == 1:
             if name[-1].isalpha():
                 name += ' '
@@ -700,6 +703,7 @@ class PrimitiveOp(RegisterOp):
     DICT_SET = make_op('[]=', 3, 'dict', is_void=True)
     NEW_DICT = make_op('new', 0, 'dict', format_str='{dest} = {{}}')
     DICT_CONTAINS = make_op('in', 2, 'dict', kind=OP_BINARY)
+    DICT_UPDATE = make_op('update', 2, 'dict', kind=OP_BINARY, is_void=True)
 
     # Sequence Tuple
     HOMOGENOUS_TUPLE_GET = make_op('[]', 2, 'sequence_tuple', kind=OP_BINARY)
