@@ -5,7 +5,7 @@ from mypyc.emit import Emitter
 from mypyc.ops import (
     FuncIR, OpVisitor, Goto, Branch, Return, PrimitiveOp, Assign, LoadInt, GetAttr, SetAttr,
     LoadStatic, TupleGet, Call, PyCall, PyGetAttr, IncRef, DecRef, Box, Cast, Unbox, Label,
-    Register, RType, OP_BINARY, TupleRType
+    Register, RType, PyLoadGlobal, OP_BINARY, TupleRType
 )
 
 
@@ -258,6 +258,10 @@ class FunctionEmitterVisitor(OpVisitor):
         left = self.reg(op.left)
         self.emit_line('{} = CPyObject_GetAttrString({}, "{}");'.format(dest, left, op.right))
 
+    def visit_py_load_global(self, op: PyLoadGlobal) -> None:
+        dest = self.reg(op.dest)
+        self.emit_line('{} = CPyObject_GetAttrString(self_module, "{}");'.format(dest, op.name))
+
     def visit_tuple_get(self, op: TupleGet) -> None:
         dest = self.reg(op.dest)
         src = self.reg(op.src)
@@ -269,7 +273,8 @@ class FunctionEmitterVisitor(OpVisitor):
             dest = self.reg(op.dest) + ' = '
         else:
             dest = ''
-        args = ', '.join(self.reg(arg) for arg in op.args)
+        arg_list = [self.reg(arg) for arg in op.args]
+        args = ', '.join(arg_list)
         self.emit_line('%s%s%s(%s);' % (dest, NATIVE_PREFIX, op.fn, args))
 
     def visit_py_call(self, op: PyCall) -> None:

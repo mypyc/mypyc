@@ -623,6 +623,21 @@ class PyGetAttr(RegisterOp):
         return visitor.visit_py_get_attr(self)
 
 
+class PyLoadGlobal(RegisterOp):
+    """dest = name :: py"""
+    def __init__(self, dest: Register, name: str) -> None:
+        self.dest = dest
+        self.name = name
+
+    def sources(self) -> List[Register]:
+        return []
+
+    def to_str(self, env: Environment) -> str:
+        return env.format('%r = %s :: py', self.dest, self.name)
+
+    def accept(self, visitor: 'OpVisitor[T]') -> T:
+        return visitor.visit_py_load_global(self)
+
 VAR_ARG = -1
 
 # Primitive op inds
@@ -976,8 +991,13 @@ class ClassIR:
 class ModuleIR:
     """Intermediate representation of a module."""
 
-    def __init__(self, imports: List[str], functions: List[FuncIR], classes: List[ClassIR]) -> None:
+    def __init__(self,
+            imports: List[str],
+            from_imports: Dict[str, List[Tuple[str, str]]],
+            functions: List[FuncIR],
+            classes: List[ClassIR]) -> None:
         self.imports = imports[:]
+        self.from_imports = from_imports
         self.functions = functions
         self.classes = classes
 
@@ -1021,6 +1041,9 @@ class OpVisitor(Generic[T]):
         pass
 
     def visit_py_get_attr(self, op: PyGetAttr) -> T:
+        pass
+
+    def visit_py_load_global(self, op: PyLoadGlobal) -> T:
         pass
 
     def visit_tuple_get(self, op: TupleGet) -> T:

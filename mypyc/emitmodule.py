@@ -1,6 +1,6 @@
 """Generate C code for a Python C extension module from Python source code."""
 
-from typing import List
+from typing import Dict, List, Tuple
 
 from mypy.build import BuildSource, build
 from mypy.errors import CompileError
@@ -79,6 +79,8 @@ class ModuleGenerator:
         declarations.emit_line('#include <CPy.h>')
         declarations.emit_line()
 
+        declarations.emit_line('static CPyModule *self_module;');
+
         for declaration in self.toposort_declarations():
             declarations.emit_lines(*declaration.body)
 
@@ -112,10 +114,19 @@ class ModuleGenerator:
             type_struct = cl.type_struct
             emitter.emit_lines('if (PyType_Ready(&{}) < 0)'.format(type_struct),
                                 '    return NULL;')
+
+        # Save a copy of the current module to a static global
         emitter.emit_lines('m = PyModule_Create(&module);',
                            'if (m == NULL)',
-                           '    return NULL;')
+                           '    return NULL;',
+                           'self_module = m;',
+                           'Py_INCREF(self_module);')
         self.generate_imports_init_section(self.module.imports, emitter)
+        self.generate_from_imports_init_section(
+            self.module.imports,
+            self.module.from_imports,
+            emitter,
+        )
         for cl in self.module.classes:
             name = cl.name
             type_struct = cl.type_struct
@@ -171,6 +182,44 @@ class ModuleGenerator:
 
     def generate_imports_init_section(self, imps: List[str], emitter: Emitter) -> None:
         for imp in imps:
-            emitter.emit_line('{} = PyImport_ImportModule("{}");'.format(c_module_name(imp), imp))
-            emitter.emit_line('if ({} == NULL)'.format(c_module_name(imp)))
-            emitter.emit_line('    return NULL;')
+            self.generate_import(imp, emitter)
+
+    def generate_import(self, imp: str, emitter: Emitter):
+        emitter.emit_line('{} = PyImport_ImportModule("{}");'.format(c_module_name(imp), imp))
+        emitter.emit_line('if ({} == NULL)'.format(c_module_name(imp)))
+        emitter.emit_line('    return NULL;')
+
+    def generate_from_imports_init_section(self,
+            imps: List[str],
+            from_imps: Dict[str, List[Tuple[str, str]]],
+            emitter: Emitter) -> None:
+        for imp, import_names in from_imps.items():
+            # Only import it again if we haven't imported it from the main
+            # imports section
+            if imp not in imps:
+                emitter.emit_line('CPyModule *{};'.format(c_module_name(imp)))
+                self.generate_import(imp, emitter)
+
+            for original_name, as_name in import_names:
+                # Obtain a reference to the original object
+                object_temp_name = emitter.temp_name()
+                emitter.emit_line('PyObject *{} = CPyObject_GetAttrString({}, "{}");'.format(
+                    object_temp_name,
+                    c_module_name(imp),
+                    original_name,
+                ))
+                emitter.emit_lines(
+                    'if ({} == NULL)'.format(object_temp_name),
+                    '    return NULL;',
+                )
+                # and add it to the namespace of the current module, which eats the ref
+                emitter.emit_line('if(-1 == PyModule_AddObject(m, "{}", {}))'.format(
+                    as_name,
+                    object_temp_name,
+                ))
+                emitter.emit_line('   return NULL;')
+
+            # This particular import isn't saved as a global so we should decref it
+            # and not keep it around
+            if imp not in imps:
+                emitter.emit_line('Py_DECREF({});'.format(c_module_name(imp)))

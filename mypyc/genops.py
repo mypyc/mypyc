@@ -31,8 +31,9 @@ from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Register, Label, Return, FuncIR, Assign,
     PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, TupleRType,
     Unreachable, TupleGet, ClassIR, UserRType, ModuleIR, GetAttr, SetAttr, LoadStatic,
-    PyGetAttr, PyCall, IntRType, BoolRType, ListRType, SequenceTupleRType, ObjectRType, NoneRType,
-    OptionalRType, DictRType, c_module_name, INVALID_REGISTER, INVALID_LABEL
+    PyGetAttr, PyCall, PyLoadGlobal, IntRType, BoolRType, ListRType, SequenceTupleRType,
+    ObjectRType, NoneRType, OptionalRType, DictRType, c_module_name, INVALID_REGISTER,
+    INVALID_LABEL
 )
 
 
@@ -42,7 +43,7 @@ def build_ir(module: MypyFile,
     builder = IRBuilder(types, mapper)
     module.accept(builder)
 
-    return ModuleIR(builder.imports, builder.functions, builder.classes)
+    return ModuleIR(builder.imports, builder.from_imports, builder.functions, builder.classes)
 
 
 class Mapper:
@@ -124,6 +125,7 @@ class IRBuilder(NodeVisitor[Register]):
 
         self.mapper = mapper
         self.imports = [] # type: List[str]
+        self.from_imports = {} # type: Dict[str, List[Tuple[str, str]]]
 
         self.current_module_name = None # type: Optional[str]
 
@@ -173,10 +175,19 @@ class IRBuilder(NodeVisitor[Register]):
     def visit_import_from(self, node: ImportFrom) -> Register:
         if node.is_unreachable or node.is_mypy_only:
             pass
-        if not node.is_top_level:
-            assert False, "non-toplevel imports not supported"
 
-        self.imports.append(node.id)
+        # TODO support these?
+        assert not node.relative
+
+        if node.id not in self.from_imports:
+            self.from_imports[node.id] = []
+
+        for name, maybe_as_name in node.names:
+            if maybe_as_name:
+                as_name = maybe_as_name
+            else:
+                as_name = name
+            self.from_imports[node.id].append((name, as_name))
 
         return INVALID_REGISTER
 
@@ -654,6 +665,9 @@ class IRBuilder(NodeVisitor[Register]):
             self.add(PrimitiveOp(target, PrimitiveOp.FALSE))
             return target
 
+        if self.is_global_name(expr.name):
+            return self.py_load_global(expr)
+
         if not self.is_native_name_expr(expr):
             return self.load_static_module_attr(expr)
 
@@ -662,6 +676,18 @@ class IRBuilder(NodeVisitor[Register]):
 
         reg = self.environment.lookup(expr.node)
         return self.get_using_binder(reg, expr.node, expr)
+
+    def is_global_name(self, name: str):
+        for _, names in self.from_imports.items():
+            for _, as_name in names:
+                if name == as_name:
+                    return True
+        return False
+
+    def py_load_global(self, expr: NameExpr):
+        target = self.alloc_target(self.node_type(expr))
+        self.add(PyLoadGlobal(target, expr.name))
+        return target
 
     def get_using_binder(self, reg: Register, var: Var, expr: Expression) -> Register:
         var_type = self.type_to_rtype(var.type)
