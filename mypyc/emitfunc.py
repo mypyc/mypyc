@@ -110,8 +110,8 @@ class FunctionEmitterVisitor(OpVisitor):
         dest = self.reg(op.dest) if op.dest is not None else None
 
         if op.desc.kind == OP_BINARY:
-            if not op.desc.is_void:
-                assert dest is not None
+            assert op.dest is not None
+
             left = self.reg(op.args[0])
             right = self.reg(op.args[1])
             if op.desc in FunctionEmitterVisitor.OP_MAP:
@@ -146,13 +146,6 @@ class FunctionEmitterVisitor(OpVisitor):
                                 'if (%s < 0)' % temp,
                                 '    abort();',
                                 '%s = %s;' % (dest, temp))
-            elif op.desc is PrimitiveOp.DICT_UPDATE:
-                # NOTE: PyDict_Update is technically not equivalent to update, but the cases where it
-                # differs (when the second argument has no keys) should never typecheck for us, so the
-                # difference is irrelevant.
-                self.emit_lines(
-                    'if (PyDict_Update(%s, %s) == -1)' % (self.reg(op.args[0]), self.reg(op.args[1])),
-                    '    abort();')
             else:
                 assert False, op.desc
 
@@ -205,6 +198,14 @@ class FunctionEmitterVisitor(OpVisitor):
         elif op.desc is PrimitiveOp.LIST_APPEND:
             self.emit_lines(
                 'if (PyList_Append(%s, %s) == -1)' % (self.reg(op.args[0]), self.reg(op.args[1])),
+                '    abort();')
+
+        elif op.desc is PrimitiveOp.DICT_UPDATE:
+            # NOTE: PyDict_Update is technically not equivalent to update, but the cases where it
+            # differs (when the second argument has no keys) should never typecheck for us, so the
+            # difference is irrelevant.
+            self.emit_lines(
+                'if (PyDict_Update(%s, %s) == -1)' % (self.reg(op.args[0]), self.reg(op.args[1])),
                 '    abort();')
 
         else:

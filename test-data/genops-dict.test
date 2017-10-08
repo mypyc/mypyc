@@ -114,6 +114,6 @@ def f(a, b):
     a, b :: dict
     r0 :: None
 L0:
-    a update b :: dict
+    a.update b :: dict
     r0 = None
     return r0
