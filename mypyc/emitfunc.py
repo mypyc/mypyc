@@ -305,9 +305,8 @@ class FunctionEmitterVisitor(OpVisitor):
         args = ', '.join(self.reg(arg) for arg in op.args)
         if args:
             args += ', '
-        else:
-            self.emit_line('{}PyObject_CallMethodObjArgs({}, {}, {}NULL);'.format(
-                dest, obj, method, args))
+        self.emit_line('{}PyObject_CallMethodObjArgs({}, {}, {}NULL);'.format(
+            dest, obj, method, args))
 
     def visit_inc_ref(self, op: IncRef) -> None:
         dest = self.reg(op.dest)

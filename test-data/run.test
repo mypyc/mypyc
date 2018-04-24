@@ -308,6 +308,13 @@ assert f(2) == 1
 from typing import List
 def f(x: List[int]) -> int:
     return x.pop()
+def g(x: List[int], y: List[int]) -> None:
+    x.extend(y)
 [file driver.py]
-from native import f
-assert f([1, 2]) == 2
+from native import f, g
+l = [1, 2]
+assert f(l) == 2
+g(l, [10])
+assert l == [1, 10]
+assert f(l) == 10
+assert f(l) == 1

@@ -494,7 +494,7 @@ L0:
     r0 = __unicode_0 :: static
     return r0
 
-[case testPyMethodCall]
+[case testPyMethodCall1]
 from typing import List
 def f(x: List[int]) -> int:
     return x.pop()
