@@ -46,6 +46,10 @@ def generate_function_declaration(fn: FuncIR, emitter: Emitter) -> None:
         '{};'.format(native_function_header(fn)),
         '{};'.format(wrapper_function_header(fn)))
 
+def encode_utf8_string(s: str) -> str:
+    """Produce a utf-8 encoded C string from a string"""
+    # This is a kind of abusive way to do this...
+    return str(s.encode('utf-8'))[2:-1].replace('"', '\\"')
 
 class ModuleGenerator:
     def __init__(self, module_name: str, module: ModuleIR) -> None:
@@ -121,9 +125,9 @@ class ModuleGenerator:
         self.generate_imports_init_section(self.module.imports, emitter)
 
         for unicode_literal, symbol in self.module.unicode_literals.items():
-            # TODO UTF8 encode the unicode_literal to byte-representation
             emitter.emit_lines(
-                '{} = PyUnicode_FromString("{}");'.format(symbol, unicode_literal),
+                '{} = PyUnicode_FromString("{}");'.format(symbol,
+                                                          encode_utf8_string(unicode_literal)),
                 'if ({} == NULL)'.format(symbol),
                 '    return NULL;',
             )

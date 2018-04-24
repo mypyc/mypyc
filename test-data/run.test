@@ -283,6 +283,9 @@ assert g(a) == 2
 [case testUnicodeLiteral]
 def f() -> str:
     return 'some string'
+def g() -> str:
+    return 'some " string 🐍'
 [file driver.py]
-from native import f
+from native import f, g
 assert f() == 'some string'
+assert g() == 'some " string 🐍'

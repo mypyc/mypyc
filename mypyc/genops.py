@@ -247,7 +247,6 @@ class IRBuilder(NodeVisitor[Register]):
 
     def visit_return_stmt(self, stmt: ReturnStmt) -> Register:
         if stmt.expr:
-            print(stmt.expr)
             retval = self.accept(stmt.expr)
         else:
             retval = self.environment.add_temp(NoneRType())
@@ -846,7 +845,7 @@ class IRBuilder(NodeVisitor[Register]):
     }
 
     def visit_str_expr(self, expr: StrExpr) -> Register:
-        return self.load_static_unicode(expr.value) 
+        return self.load_static_unicode(expr.value)
 
     def process_conditional(self, e: Node) -> List[Branch]:
         if isinstance(e, ComparisonExpr):
