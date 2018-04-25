@@ -289,3 +289,17 @@ def g() -> str:
 from native import f, g
 assert f() == 'some string'
 assert g() == 'some " string 🐍'
+
+[case testDictUpdate]
+from typing import Dict
+def f(x: int) -> int:
+    dict1 = {} # type: Dict[int, int]
+    dict1[1] = 1
+    dict2 = {} # type: Dict[int, int]
+    dict2[x] = 2
+    dict1.update(dict2)
+    return dict1[1]
+[file driver.py]
+from native import f
+assert f(1) == 2
+assert f(2) == 1
