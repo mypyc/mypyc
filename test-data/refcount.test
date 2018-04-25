@@ -576,7 +576,6 @@ def g(x: List[int], y: List[int]) -> None:
 [out]
 L0:
     r0 = __unicode_0 :: static
--- TODO: these incref and decrefs are bummers
     inc_ref r0
     r1 = x.r0(y) :: py
     dec_ref r0
