@@ -318,3 +318,5 @@ g(l, [10])
 assert l == [1, 10]
 assert f(l) == 10
 assert f(l) == 1
+g(l, [11, 12])
+assert l == [11, 12]

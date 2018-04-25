@@ -618,7 +618,7 @@ class PyMethodCall(RegisterOp):
 
     All registers must be unboxed. Corresponds to PyObject_CallMethodObjArgs in C.
     """
-    def __init__(self, 
+    def __init__(self,
             dest: Optional[Register],
             obj: Register,
             method: Register,
@@ -636,7 +636,7 @@ class PyMethodCall(RegisterOp):
         return s + ' :: py'
 
     def sources(self) -> List[Register]:
-        return self.args[:] + [self.obj]
+        return self.args[:] + [self.obj, self.method]
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_py_method_call(self)
