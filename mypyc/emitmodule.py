@@ -1,6 +1,6 @@
 """Generate C code for a Python C extension module from Python source code."""
 
-from typing import List
+from typing import List, Tuple
 
 from mypy.build import BuildSource, build
 from mypy.errors import CompileError
@@ -46,10 +46,12 @@ def generate_function_declaration(fn: FuncIR, emitter: Emitter) -> None:
         '{};'.format(native_function_header(fn)),
         '{};'.format(wrapper_function_header(fn)))
 
-def encode_utf8_string(s: str) -> str:
-    """Produce a utf-8 encoded C string from a string"""
+def encode_as_c_string(s: str) -> Tuple[str, int]:
+    """Produce a utf-8 encoded, escaped, quoted C string and its size from a string"""
     # This is a kind of abusive way to do this...
-    return str(s.encode('utf-8'))[2:-1].replace('"', '\\"')
+    b = s.encode('utf-8')
+    escaped = str(b)[2:-1].replace('"', '\\"')
+    return '"{}"'.format(escaped), len(b)
 
 class ModuleGenerator:
     def __init__(self, module_name: str, module: ModuleIR) -> None:
@@ -126,8 +128,8 @@ class ModuleGenerator:
 
         for unicode_literal, symbol in self.module.unicode_literals.items():
             emitter.emit_lines(
-                '{} = PyUnicode_FromString("{}");'.format(symbol,
-                                                          encode_utf8_string(unicode_literal)),
+                '{} = PyUnicode_FromStringAndSize({}, {});'.format(
+                    symbol, *encode_as_c_string(unicode_literal)),
                 'if ({} == NULL)'.format(symbol),
                 '    return NULL;',
             )
