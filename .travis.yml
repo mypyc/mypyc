@@ -2,17 +2,24 @@ sudo: false
 language: python
 cache: pip
 
-python:
-  - "3.5"
-  - "3.6"
+matrix:
+  include:
+  - python: "3.5"
+  - python: "3.6"
+  - python: "3.6"
+    env: USE_PYTHON_DEBUG_BUILD=1
 
 install:
+  - if [[ $USE_PYTHON_DEBUG_BUILD == 1 ]]; then wget https://www.msully.net/travis-python-archives/python-3.6-debug.tar.bz2; tar xjf python-3.6-debug.tar.bz2 --directory /; source ~/virtualenv/python-3.6-debug/bin/activate; fi
   - pip install -U pip setuptools wheel
   - pip install -r external/mypy/test-requirements.txt
 
 script:
   - export PYTHONPATH=`pwd`/external/mypy
   - export PYTHONVERSION=`python --version | awk '{ print $2 }'`
-  - export PYTHONCONFIG="/opt/python/$PYTHONVERSION/bin/python-config"
-  - export LD_LIBRARY_PATH="/opt/python/$PYTHONVERSION/lib"
-  - pytest -n4 mypyc
+
+  - if [[ $USE_PYTHON_DEBUG_BUILD == 1 ]]; then export PYTHONDIR="/home/travis/python-3.6-debug"; else export PYTHONDIR="/opt/python/$PYTHONVERSION"; fi
+  - export PYTHONCONFIG="$PYTHONDIR/bin/python-config"
+  - export LD_LIBRARY_PATH="$PYTHONDIR/lib"
+  - if [[ $USE_PYTHON_DEBUG_BUILD != 1 ]]; then pytest -n4 mypyc; fi
+  - if [[ $USE_PYTHON_DEBUG_BUILD == 1 ]]; then pytest -n4 mypyc/test/test_run.py mypyc/test/test_external.py -k 'not test_self_type_check'; fi
