@@ -190,7 +190,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """CPY_SET_ATTR(cpy_r_n, 3, cpy_r_m, AObject, CPyTagged);""")
 
     def test_dict_get_item(self) -> None:
-        self.assert_emit(PrimitiveOp(self.o, PrimitiveOp.DICT_GET, self.d, self.o2),
+        self.assert_emit(PrimitiveOp(self.o, PrimitiveOp.DICT_GET, [self.d, self.o2], 1),
                          """cpy_r_o = PyDict_GetItem(cpy_r_d, cpy_r_o2);
                             if (!cpy_r_o)
                                 abort();
@@ -198,26 +198,26 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """)
 
     def test_dict_set_item(self) -> None:
-        self.assert_emit(PrimitiveOp(None, PrimitiveOp.DICT_SET, self.d, self.o, self.o2),
+        self.assert_emit(PrimitiveOp(None, PrimitiveOp.DICT_SET, [self.d, self.o, self.o2], 1),
                          """if (PyDict_SetItem(cpy_r_d, cpy_r_o, cpy_r_o2) < 0)
                                 abort();
                          """)
 
     def test_dict_update(self) -> None:
-        self.assert_emit(PrimitiveOp(None, PrimitiveOp.DICT_UPDATE, self.d, self.o),
+        self.assert_emit(PrimitiveOp(None, PrimitiveOp.DICT_UPDATE, [self.d, self.o], 1),
                         """if (PyDict_Update(cpy_r_d, cpy_r_o) == -1)
                                abort();
                         """)
 
     def test_new_dict(self) -> None:
-        self.assert_emit(PrimitiveOp(self.d, PrimitiveOp.NEW_DICT),
+        self.assert_emit(PrimitiveOp(self.d, PrimitiveOp.NEW_DICT, [], 1),
                          """cpy_r_d = PyDict_New();
                             if (!cpy_r_d)
                                 abort();
                          """)
 
     def test_dict_contains(self) -> None:
-        self.assert_emit(PrimitiveOp(self.b, PrimitiveOp.DICT_CONTAINS, self.o, self.d),
+        self.assert_emit(PrimitiveOp(self.b, PrimitiveOp.DICT_CONTAINS, [self.o, self.d], 1),
                          """int __tmp1 = PyDict_Contains(cpy_r_d, cpy_r_o);
                             if (__tmp1 < 0)
                                 abort();

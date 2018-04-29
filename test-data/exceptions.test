@@ -1,6 +1,6 @@
-[case testListGetAndUnboxError]
+[case testListGetAndUnboxError-skip]
 from typing import List
 def f(x: List[int]) -> int:
     return x[0]
 [out]
-.
+TODO: Output missing

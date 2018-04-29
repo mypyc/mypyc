@@ -551,7 +551,6 @@ class IncRef(RegisterOp):
     def __init__(self, dest: Register, typ: RType, line: int = -1) -> None:
         super().__init__(dest, line)
         self.target_type = typ
-        self.line = line
 
     def to_str(self, env: Environment) -> str:
         s = env.format('inc_ref %r', self.dest)
@@ -575,7 +574,6 @@ class DecRef(RegisterOp):
     def __init__(self, dest: Register, typ: RType, line: int = -1) -> None:
         super().__init__(dest, line)
         self.target_type = typ
-        self.line = line
 
     def to_str(self, env: Environment) -> str:
         s = env.format('dec_ref %r', self.dest)
@@ -600,10 +598,9 @@ class Call(RegisterOp):
     """
 
     def __init__(self, dest: Optional[Register], fn: str, args: List[Register], line: int) -> None:
-        super().__init__(dest)
+        super().__init__(dest, line)
         self.fn = fn
         self.args = args
-        self.line = line
 
     def to_str(self, env: Environment) -> str:
         args = ', '.join(env.format('%r', arg) for arg in self.args)
@@ -634,10 +631,9 @@ class PyCall(RegisterOp):
     """
     def __init__(self, dest: Optional[Register], function: Register, args: List[Register],
                  line: int) -> None:
-        super().__init__(dest)
+        super().__init__(dest, line)
         self.function = function
         self.args = args
-        self.line = line
 
     def to_str(self, env: Environment) -> str:
         args = ', '.join(env.format('%r', arg) for arg in self.args)
@@ -678,6 +674,9 @@ class PyMethodCall(RegisterOp):
             s = env.format('%r = ', self.dest) + s
         return s + ' :: py'
 
+    def can_raise(self) -> bool:
+        return True
+
     def sources(self) -> List[Register]:
         return self.args[:] + [self.obj, self.method]
 
@@ -689,10 +688,9 @@ class PyGetAttr(RegisterOp):
     """dest = left.right :: py"""
 
     def __init__(self, dest: Register, left: Register, right: str, line: int) -> None:
-        super().__init__(dest)
+        super().__init__(dest, line)
         self.left = left
         self.right = right
-        self.line = line
 
     def sources(self) -> List[Register]:
         return [self.left]
@@ -808,12 +806,11 @@ class PrimitiveOp(RegisterOp):
 
         If desc.is_void is true, dest should be None.
         """
-        super().__init__(dest)
+        super().__init__(dest, line)
         if desc.num_args != VAR_ARG:
             assert len(args) == desc.num_args
         self.desc = desc
         self.args = args
-        self.line = line
 
     def sources(self) -> List[Register]:
         return list(self.args)
@@ -838,9 +835,8 @@ class Assign(RegisterOp):
     """dest = int"""
 
     def __init__(self, dest: Register, src: Register, line: int = -1) -> None:
-        super().__init__(dest)
+        super().__init__(dest, line)
         self.src = src
-        self.line = line
 
     def sources(self) -> List[Register]:
         return [self.src]
@@ -859,9 +855,8 @@ class LoadInt(RegisterOp):
     """dest = int"""
 
     def __init__(self, dest: Register, value: int, line: int = -1) -> None:
-        super().__init__(dest)
+        super().__init__(dest, line)
         self.value = value
-        self.line = line
 
     def sources(self) -> List[Register]:
         return []
@@ -901,11 +896,10 @@ class GetAttr(RegisterOp):
 
     def __init__(self, dest: Register, obj: Register, attr: str, rtype: UserRType,
                  line: int) -> None:
-        super().__init__(dest)
+        super().__init__(dest, line)
         self.obj = obj
         self.attr = attr
         self.rtype = rtype
-        self.line = line
 
     def sources(self) -> List[Register]:
         return [self.obj]
@@ -925,12 +919,11 @@ class SetAttr(RegisterOp):
 
     def __init__(self, obj: Register, attr: str, src: Register, rtype: UserRType,
                  line: int) -> None:
-        super().__init__(None)
+        super().__init__(None, line)
         self.obj = obj
         self.attr = attr
         self.src = src
         self.rtype = rtype
-        self.line = line
 
     def sources(self) -> List[Register]:
         return [self.obj, self.src]
@@ -949,9 +942,8 @@ class LoadStatic(RegisterOp):
     """dest = name :: static"""
 
     def __init__(self, dest: Register, identifier: str, line: int = -1) -> None:
-        super().__init__(dest)
+        super().__init__(dest, line)
         self.identifier = identifier
-        self.line = line
 
     def sources(self) -> List[Register]:
         return []
@@ -971,11 +963,10 @@ class TupleGet(RegisterOp):
 
     def __init__(self, dest: Register, src: Register, index: int, target_type: RType,
                  line: int) -> None:
-        super().__init__(dest)
+        super().__init__(dest, line)
         self.src = src
         self.index = index
         self.target_type = target_type
-        self.line = line
 
     def sources(self) -> List[Register]:
         return [self.src]
@@ -1000,10 +991,9 @@ class Cast(RegisterOp):
     # TODO: Error checking
 
     def __init__(self, dest: Register, src: Register, typ: RType, line: int) -> None:
-        super().__init__(dest)
+        super().__init__(dest, line)
         self.src = src
         self.typ = typ
-        self.line = line
 
     def sources(self) -> List[Register]:
         return [self.src]
@@ -1026,10 +1016,9 @@ class Box(RegisterOp):
     """
 
     def __init__(self, dest: Register, src: Register, typ: RType, line: int = -1) -> None:
-        super().__init__(dest)
+        super().__init__(dest, line)
         self.src = src
         self.type = typ
-        self.line = line
 
     def sources(self) -> List[Register]:
         return [self.src]
@@ -1053,10 +1042,9 @@ class Unbox(RegisterOp):
     # TODO: Error checking
 
     def __init__(self, dest: Register, src: Register, typ: RType, line: int) -> None:
-        super().__init__(dest)
+        super().__init__(dest, line)
         self.src = src
         self.type = typ
-        self.line = line
 
     def sources(self) -> List[Register]:
         return [self.src]
