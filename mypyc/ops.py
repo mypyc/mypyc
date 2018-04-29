@@ -132,7 +132,6 @@ class BoolRType(RType):
     def is_refcounted(self) -> bool:
         return False
 
-
 class TupleRType(RType):
     """Fixed-length tuple."""
 
@@ -235,6 +234,20 @@ class NoneRType(PyObjectRType):
 class ListRType(PyObjectRType):
     def __init__(self) -> None:
         self.name = 'list'
+
+
+class DictRType(PyObjectRType):
+    def __init__(self) -> None:
+        self.name = 'dict'
+
+
+class UnicodeRType(PyObjectRType):
+    """str in python 3; but at the c layer, its refered to as unicode (PyUnicode)
+
+    Referring to these as Unicode and as Bytes leaves zero room for confusion.
+    """
+    def __init__(self) -> None:
+        self.name = 'unicode'
 
 
 class UserRType(PyObjectRType):
@@ -516,6 +529,7 @@ class RegisterOp(Op):
     """
 
     def __init__(self, dest: Optional[Register], line: int) -> None:
+        assert dest != INVALID_REGISTER
         self.dest = dest
         self.line = line
 
@@ -586,7 +600,7 @@ class Call(RegisterOp):
     """
 
     def __init__(self, dest: Optional[Register], fn: str, args: List[Register], line: int) -> None:
-        self.dest = dest
+        super().__init__(dest)
         self.fn = fn
         self.args = args
         self.line = line
@@ -616,11 +630,11 @@ class Call(RegisterOp):
 class PyCall(RegisterOp):
     """Python call f(arg, ...).
 
-    All registers must be unboxed.
+    All registers must be unboxed. Corresponds to PyObject_CallFunctionObjArgs in C.
     """
     def __init__(self, dest: Optional[Register], function: Register, args: List[Register],
                  line: int) -> None:
-        self.dest = dest
+        super().__init__(dest)
         self.function = function
         self.args = args
         self.line = line
@@ -642,11 +656,40 @@ class PyCall(RegisterOp):
         return visitor.visit_py_call(self)
 
 
+class PyMethodCall(RegisterOp):
+    """Python method call obj.m(arg, ...)
+
+    All registers must be unboxed. Corresponds to PyObject_CallMethodObjArgs in C.
+    """
+    def __init__(self,
+            dest: Optional[Register],
+            obj: Register,
+            method: Register,
+            args: List[Register]) -> None:
+        self.dest = dest
+        self.obj = obj
+        self.method = method
+        self.args = args
+
+    def to_str(self, env: Environment) -> str:
+        args = ', '.join(env.format('%r', arg) for arg in self.args)
+        s = env.format('%r.%r(%s)', self.obj, self.method, args)
+        if self.dest is not None:
+            s = env.format('%r = ', self.dest) + s
+        return s + ' :: py'
+
+    def sources(self) -> List[Register]:
+        return self.args[:] + [self.obj, self.method]
+
+    def accept(self, visitor: 'OpVisitor[T]') -> T:
+        return visitor.visit_py_method_call(self)
+
+
 class PyGetAttr(RegisterOp):
     """dest = left.right :: py"""
 
     def __init__(self, dest: Register, left: Register, right: str, line: int) -> None:
-        self.dest = dest
+        super().__init__(dest)
         self.left = left
         self.right = right
         self.line = line
@@ -669,6 +712,7 @@ VAR_ARG = -1
 # Primitive op inds
 OP_MISC = 0    # No specific kind
 OP_BINARY = 1  # Regular binary operation such as +
+OP_SPECIAL_METHOD_CALL = 2
 
 OpDesc = NamedTuple('OpDesc', [('name', str),        # Symbolic name of the operation
                                ('num_args', int),    # Number of args (or VAR_ARG for any number)
@@ -689,7 +733,14 @@ def make_op(name: str, num_args: int, typ: str, format_str: str = None,
             assert is_void
             format_str = '{args[0]}[{args[1]}] = {args[2]} :: %s' % typ
         elif kind == OP_BINARY:
+            assert not is_void
             format_str = '{dest} = {args[0]} %s {args[1]} :: %s' % (name, typ)
+        elif kind == OP_SPECIAL_METHOD_CALL:
+            args_joined = ', '.join(['{args[%d]}' % i for i in range (1, num_args)])
+            if is_void:
+                format_str = ('{args[0]}.%s ' + args_joined + ' :: %s') % (name, typ)
+            else:
+                format_str = ('{dest} = {args[0]}.%s ' + args_joined + ' :: %s') % (name, typ)
         elif num_args == 1:
             if name[-1].isalpha():
                 name += ' '
@@ -737,6 +788,13 @@ class PrimitiveOp(RegisterOp):
     LIST_APPEND = make_op('append', 2, 'list',
                           is_void=True, format_str='{args[0]}.append({args[1]})', can_raise=True)
 
+    # Dict
+    DICT_GET = make_op('[]', 2, 'dict', kind=OP_BINARY)
+    DICT_SET = make_op('[]=', 3, 'dict', is_void=True)
+    NEW_DICT = make_op('new', 0, 'dict', format_str='{dest} = {{}}')
+    DICT_CONTAINS = make_op('in', 2, 'dict', kind=OP_BINARY)
+    DICT_UPDATE = make_op('update', 2, 'dict', kind=OP_SPECIAL_METHOD_CALL, is_void=True)
+
     # Sequence Tuple
     HOMOGENOUS_TUPLE_GET = make_op('[]', 2, 'sequence_tuple', kind=OP_BINARY, can_raise=True)
 
@@ -750,9 +808,9 @@ class PrimitiveOp(RegisterOp):
 
         If desc.is_void is true, dest should be None.
         """
+        super().__init__(dest)
         if desc.num_args != VAR_ARG:
             assert len(args) == desc.num_args
-        self.dest = dest
         self.desc = desc
         self.args = args
         self.line = line
@@ -780,7 +838,7 @@ class Assign(RegisterOp):
     """dest = int"""
 
     def __init__(self, dest: Register, src: Register, line: int = -1) -> None:
-        self.dest = dest
+        super().__init__(dest)
         self.src = src
         self.line = line
 
@@ -801,7 +859,7 @@ class LoadInt(RegisterOp):
     """dest = int"""
 
     def __init__(self, dest: Register, value: int, line: int = -1) -> None:
-        self.dest = dest
+        super().__init__(dest)
         self.value = value
         self.line = line
 
@@ -843,7 +901,7 @@ class GetAttr(RegisterOp):
 
     def __init__(self, dest: Register, obj: Register, attr: str, rtype: UserRType,
                  line: int) -> None:
-        self.dest = dest
+        super().__init__(dest)
         self.obj = obj
         self.attr = attr
         self.rtype = rtype
@@ -867,7 +925,7 @@ class SetAttr(RegisterOp):
 
     def __init__(self, obj: Register, attr: str, src: Register, rtype: UserRType,
                  line: int) -> None:
-        self.dest = None
+        super().__init__(None)
         self.obj = obj
         self.attr = attr
         self.src = src
@@ -891,7 +949,7 @@ class LoadStatic(RegisterOp):
     """dest = name :: static"""
 
     def __init__(self, dest: Register, identifier: str, line: int = -1) -> None:
-        self.dest = dest
+        super().__init__(dest)
         self.identifier = identifier
         self.line = line
 
@@ -913,7 +971,7 @@ class TupleGet(RegisterOp):
 
     def __init__(self, dest: Register, src: Register, index: int, target_type: RType,
                  line: int) -> None:
-        self.dest = dest
+        super().__init__(dest)
         self.src = src
         self.index = index
         self.target_type = target_type
@@ -942,7 +1000,7 @@ class Cast(RegisterOp):
     # TODO: Error checking
 
     def __init__(self, dest: Register, src: Register, typ: RType, line: int) -> None:
-        self.dest = dest
+        super().__init__(dest)
         self.src = src
         self.typ = typ
         self.line = line
@@ -968,7 +1026,7 @@ class Box(RegisterOp):
     """
 
     def __init__(self, dest: Register, src: Register, typ: RType, line: int = -1) -> None:
-        self.dest = dest
+        super().__init__(dest)
         self.src = src
         self.type = typ
         self.line = line
@@ -995,7 +1053,7 @@ class Unbox(RegisterOp):
     # TODO: Error checking
 
     def __init__(self, dest: Register, src: Register, typ: RType, line: int) -> None:
-        self.dest = dest
+        super().__init__(dest)
         self.src = src
         self.type = typ
         self.line = line
@@ -1076,8 +1134,13 @@ class ClassIR:
 class ModuleIR:
     """Intermediate representation of a module."""
 
-    def __init__(self, imports: List[str], functions: List[FuncIR], classes: List[ClassIR]) -> None:
+    def __init__(self,
+            imports: List[str],
+            unicode_literals: Dict[str, str],
+            functions: List[FuncIR],
+            classes: List[ClassIR]) -> None:
         self.imports = imports[:]
+        self.unicode_literals = unicode_literals
         self.functions = functions
         self.classes = classes
 
@@ -1139,6 +1202,9 @@ class OpVisitor(Generic[T]):
         pass
 
     def visit_py_call(self, op: PyCall) -> T:
+        pass
+
+    def visit_py_method_call(self, op: PyMethodCall) -> T:
         pass
 
     def visit_cast(self, op: Cast) -> T:

@@ -125,6 +125,20 @@ print(primes(13))
 [[0, 0, 1, 1]
 [[0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1]
 
+[case testListAppend]
+from typing import List
+def f(x: List[int], n: int) -> None:
+    x.append(n)
+[file driver.py]
+from native import f
+l = [1, 2]
+f(l, 10)
+assert l == [1, 2, 10]
+f(l, 3)
+f(l, 4)
+f(l, 5)
+assert l == [1, 2, 10, 3, 4, 5]
+
 [case testTrue]
 def f() -> bool:
     return True
@@ -279,3 +293,44 @@ assert f(None) is None
 assert f(a) is a
 assert g(None) == 1
 assert g(a) == 2
+
+[case testUnicodeLiteral]
+def f() -> str:
+    return 'some string'
+def g() -> str:
+    return 'some\a \v \t \x7f " \n \0string 🐍'
+[file driver.py]
+from native import f, g
+assert f() == 'some string'
+assert g() == 'some\a \v \t \x7f " \n \0string 🐍'
+
+[case testDictUpdate]
+from typing import Dict
+def f(x: int) -> int:
+    dict1 = {} # type: Dict[int, int]
+    dict1[1] = 1
+    dict2 = {} # type: Dict[int, int]
+    dict2[x] = 2
+    dict1.update(dict2)
+    return dict1[1]
+[file driver.py]
+from native import f
+assert f(1) == 2
+assert f(2) == 1
+
+[case testPyMethodCall]
+from typing import List
+def f(x: List[int]) -> int:
+    return x.pop()
+def g(x: List[int], y: List[int]) -> None:
+    x.extend(y)
+[file driver.py]
+from native import f, g
+l = [1, 2]
+assert f(l) == 2
+g(l, [10])
+assert l == [1, 10]
+assert f(l) == 10
+assert f(l) == 1
+g(l, [11, 12])
+assert l == [11, 12]

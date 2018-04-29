@@ -5,7 +5,7 @@ from mypyc.emit import Emitter
 from mypyc.ops import (
     FuncIR, OpVisitor, Goto, Branch, Return, PrimitiveOp, Assign, LoadInt, LoadErrorValue, GetAttr,
     SetAttr, LoadStatic, TupleGet, Call, PyCall, PyGetAttr, IncRef, DecRef, Box, Cast, Unbox, Label,
-    Register, RType, OP_BINARY, TupleRType
+    Register, RType, OP_BINARY, TupleRType, PyMethodCall
 )
 
 
@@ -110,7 +110,8 @@ class FunctionEmitterVisitor(OpVisitor):
         dest = self.reg(op.dest) if op.dest is not None else None
 
         if op.desc.kind == OP_BINARY:
-            assert dest is not None
+            assert op.dest is not None
+
             left = self.reg(op.args[0])
             right = self.reg(op.args[1])
             if op.desc in FunctionEmitterVisitor.OP_MAP:
@@ -120,6 +121,11 @@ class FunctionEmitterVisitor(OpVisitor):
                 self.emit_lines('%s = CPyList_GetItem(%s, %s);' % (dest, left, right),
                                 'if (!%s)' % dest,
                                 '    abort();')
+            elif op.desc is PrimitiveOp.DICT_GET:
+                self.emit_lines('%s = PyDict_GetItem(%s, %s);' % (dest, left, right),
+                                'if (!%s)' % dest,
+                                '    abort();',
+                                'Py_INCREF(%s);' % dest)
             elif op.desc is PrimitiveOp.LIST_REPEAT:
                 temp = self.temp_name()
                 self.declarations.emit_line('long long %s;' % temp)
@@ -134,6 +140,12 @@ class FunctionEmitterVisitor(OpVisitor):
                 self.emit_lines('%s = CPySequenceTuple_GetItem(%s, %s);' % (dest, left, right),
                                 'if (!%s)' % dest,
                                 '    abort();')
+            elif op.desc is PrimitiveOp.DICT_CONTAINS:
+                temp = self.temp_name()
+                self.emit_lines('int %s = PyDict_Contains(%s, %s);' % (temp, right, left),
+                                'if (%s < 0)' % temp,
+                                '    abort();',
+                                '%s = %s;' % (dest, temp))
             else:
                 assert False, op.desc
 
@@ -142,6 +154,13 @@ class FunctionEmitterVisitor(OpVisitor):
             self.emit_lines('if (!CPyList_SetItem(%s, %s, %s))' % (self.reg(op.args[0]),
                                                                    self.reg(op.args[1]),
                                                                    self.reg(op.args[2])),
+                            '    abort();')
+
+        elif op.desc is PrimitiveOp.DICT_SET:
+            assert dest is None
+            self.emit_lines('if (PyDict_SetItem(%s, %s, %s) < 0)' % (self.reg(op.args[0]),
+                                                                     self.reg(op.args[1]),
+                                                                     self.reg(op.args[2])),
                             '    abort();')
 
         elif op.desc is PrimitiveOp.NONE:
@@ -171,10 +190,24 @@ class FunctionEmitterVisitor(OpVisitor):
                 self.emit_line('{}.f{} = {};'.format(dest, i, self.reg(arg)))
             self.emit_inc_ref(dest, tuple_type)
 
+        elif op.desc is PrimitiveOp.NEW_DICT:
+            self.emit_lines('%s = PyDict_New();' % dest,
+                            'if (!%s)' % dest,
+                            '    abort();')
+
         elif op.desc is PrimitiveOp.LIST_APPEND:
             self.emit_lines(
                 'if (PyList_Append(%s, %s) == -1)' % (self.reg(op.args[0]), self.reg(op.args[1])),
                 '    abort();')
+
+        elif op.desc is PrimitiveOp.DICT_UPDATE:
+            # NOTE: PyDict_Update is technically not equivalent to update, but the cases where it
+            # differs (when the second argument has no keys) should never typecheck for us, so the
+            # difference is irrelevant.
+            self.emit_lines(
+                'if (PyDict_Update(%s, %s) == -1)' % (self.reg(op.args[0]), self.reg(op.args[1])),
+                '    abort();')
+
         else:
             assert len(op.args) == 1
             assert dest is not None
@@ -261,7 +294,23 @@ class FunctionEmitterVisitor(OpVisitor):
 
         function = self.reg(op.function)
         args = ', '.join(self.reg(arg) for arg in op.args)
-        self.emit_line('{}PyObject_CallFunctionObjArgs({}, {}, NULL);'.format(dest, function, args))
+        if args:
+            args += ', '
+        self.emit_line('{}PyObject_CallFunctionObjArgs({}, {}NULL);'.format(dest, function, args))
+
+    def visit_py_method_call(self, op: PyMethodCall) -> None:
+        if op.dest is not None:
+            dest = self.reg(op.dest) + ' = '
+        else:
+            dest = ''
+
+        obj = self.reg(op.obj)
+        method = self.reg(op.method)
+        args = ', '.join(self.reg(arg) for arg in op.args)
+        if args:
+            args += ', '
+        self.emit_line('{}PyObject_CallMethodObjArgs({}, {}, {}NULL);'.format(
+            dest, obj, method, args))
 
     def visit_inc_ref(self, op: IncRef) -> None:
         dest = self.reg(op.dest)
