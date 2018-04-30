@@ -7,7 +7,7 @@ from mypyc.ops import (
 
 
 def insert_exception_handling(ir: FuncIR) -> None:
-    can_raise = False
+    error_label = None
     for block in ir.blocks:
         can_raise = any(op.can_raise() for op in block.ops)
         if can_raise:

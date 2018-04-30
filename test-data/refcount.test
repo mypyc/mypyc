@@ -591,8 +591,8 @@ def f(a: List[int], x: int) -> None:
 [out]
 L0:
     inc_ref x :: int
-    r0 = box(int, x)
-    a.append(r0)
-    dec_ref r0
-    r1 = None
-    return r1
+    r1 = box(int, x)
+    r0 = a.append(r1)
+    dec_ref r1
+    r2 = None
+    return r2

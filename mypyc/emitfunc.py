@@ -76,6 +76,11 @@ class FunctionEmitterVisitor(OpVisitor):
         elif op.op == Branch.IS_NONE:
             compare = '!=' if op.negated else '=='
             self.emit_line('if ({} {} Py_None)'.format(self.reg(op.left), compare))
+        elif op.op == Branch.IS_ERROR:
+            # TODO: Tuple error values
+            typ = self.env.types[op.left]
+            compare = '!=' if op.negated else '=='
+            self.emit_line('if ({} {} {})'.format(self.reg(op.left), compare, typ.c_error_value))
         else:
             left = self.reg(op.left)
             right = self.reg(op.right)
@@ -197,8 +202,9 @@ class FunctionEmitterVisitor(OpVisitor):
 
         elif op.desc is PrimitiveOp.LIST_APPEND:
             self.emit_lines(
-                'if (PyList_Append(%s, %s) == -1)' % (self.reg(op.args[0]), self.reg(op.args[1])),
-                '    abort();')
+                '%s = PyList_Append(%s, %s) != -1;' % (self.reg(op.dest),
+                                                       self.reg(op.args[0]),
+                                                       self.reg(op.args[1])))
 
         elif op.desc is PrimitiveOp.DICT_UPDATE:
             # NOTE: PyDict_Update is technically not equivalent to update, but the cases where it

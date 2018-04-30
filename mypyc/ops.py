@@ -575,6 +575,7 @@ class IncRef(RegisterOp):
     error_kind = ERR_NEVER
 
     def __init__(self, dest: Register, typ: RType, line: int = -1) -> None:
+        assert typ.is_refcounted
         super().__init__(dest, line)
         self.target_type = typ
 
@@ -597,6 +598,7 @@ class DecRef(RegisterOp):
     error_kind = ERR_NEVER
 
     def __init__(self, dest: Register, typ: RType, line: int = -1) -> None:
+        assert typ.is_refcounted
         super().__init__(dest, line)
         self.target_type = typ
 
