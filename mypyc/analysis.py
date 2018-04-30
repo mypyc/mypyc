@@ -26,6 +26,13 @@ class CFG:
         self.pred = pred
         self.exits = exits
 
+    def __str__(self) -> str:
+        lines = []
+        lines.append('exits: %s' % sorted(self.exits))
+        lines.append('succ: %s' % self.succ)
+        lines.append('pred: %s' % self.pred)
+        return '\n'.join(lines)
+
 
 def get_cfg(blocks: List[BasicBlock]) -> CFG:
     """Calculate basic block control-flow graph.
