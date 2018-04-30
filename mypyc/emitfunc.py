@@ -239,8 +239,14 @@ class FunctionEmitterVisitor(OpVisitor):
         self.emit_line('%s = %d;' % (dest, op.value * 2))
 
     def visit_load_error_value(self, op: LoadErrorValue) -> None:
-        self.emit_line('%s = %s;' % (self.reg(op.dest),
-                                     op.rtype.c_error_value))
+        if isinstance(op.rtype, TupleRType):
+            values = [item.c_undefined_value for item in op.rtype.types]
+            tmp = self.temp_name()
+            self.emit_line('%s %s = { %s };' % (op.rtype.ctype, tmp, ', '.join(values)))
+            self.emit_line('%s = %s;' % (self.reg(op.dest), tmp))
+        else:
+            self.emit_line('%s = %s;' % (self.reg(op.dest),
+                                         op.rtype.c_error_value))
 
     def visit_get_attr(self, op: GetAttr) -> None:
         dest = self.reg(op.dest)

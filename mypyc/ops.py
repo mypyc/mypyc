@@ -145,8 +145,11 @@ class TupleRType(RType):
 
     @property
     def c_undefined_value(self) -> str:
-        # TODO: Implement this
-        raise RuntimeError('Not implemented yet')
+        # This doesn't work since this is expected to return a C expression, but
+        # defining an undefined tuple requires declaring a temp variable, such as:
+        #
+        #    struct foo _tmp = { <item0-undefined>, <item1-undefined>, ... };
+        assert False, "Tuple undefined value can't be represented as a C expression"
 
     @property
     def ctype(self) -> str:
@@ -1095,6 +1098,9 @@ class FuncIR:
         self.blocks = blocks
         self.env = env
 
+    def __str__(self) -> str:
+        return '\n'.join(format_func(self))
+
 
 class ClassIR:
     """Intermediate representation of a class.
@@ -1219,7 +1225,7 @@ def format_blocks(blocks: List[BasicBlock], env: Environment) -> List[str]:
         for op in ops:
             line = '    ' + op.to_str(env)
             if op.error_label is not None:
-                line += env.format(' [error %l]', op.error_label)
+                line += env.format(' <err %l>', op.error_label)
             lines.append(line)
 
         if not isinstance(block.ops[-1], (Goto, Branch, Return, Unreachable)):
