@@ -376,20 +376,25 @@ class Environment:
         return result
 
 
+ERR_NEVER = 0  # Never generates an exception
+ERR_MAGIC = 1  # Generates magic value (c_error_value) based on target RType on exception
+ERR_FALSE = 2  # Generates false (bool) on exception
+
+
 class Op:
     # Source line number
     line = -1
-    # Where to go to on an exception?
-    error_label = None  # type: Optional[Label]
-    # Where to go when there's no exception? (Only used in error_label is defined.)
-    ok_label = None  # type: Optional[Label]
+
+    def __init__(self, line: int) -> None:
+        self.line = line
+
+    def can_raise(self) -> bool:
+        # Override this is if Op may raise an exception. Note that currently the fact that
+        # only RegisterOps may raise an exception in hard coded in some places.
+        return False
 
     @abstractmethod
     def to_str(self, env: Environment) -> str:
-        raise NotImplementedError
-
-    @abstractmethod
-    def can_raise(self) -> bool:
         raise NotImplementedError
 
     @abstractmethod
@@ -400,15 +405,14 @@ class Op:
 class Goto(Op):
     """Unconditional jump."""
 
+    error_kind = ERR_NEVER
+
     def __init__(self, label: Label, line: int = -1) -> None:
+        super().__init__(line)
         self.label = label
-        self.line = line
 
     def to_str(self, env: Environment) -> str:
         return env.format('goto %l', self.label)
-
-    def can_raise(self) -> bool:
-        return False
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_goto(self)
@@ -416,6 +420,10 @@ class Goto(Op):
 
 class Branch(Op):
     """if [not] r1 op r2 goto 1 else goto 2"""
+
+    # Branch ops must *not* raise an exception. If a comparison, for example, can raise an
+    # exception, it needs to split into two opcodes and only the first one may fail.
+    error_kind = ERR_NEVER
 
     INT_EQ = 10
     INT_NE = 11
@@ -428,6 +436,7 @@ class Branch(Op):
     # ("right" should be INVALID_REGISTER).
     BOOL_EXPR = 100
     IS_NONE = 101
+    IS_ERROR = 102  # Check for magic c_error_value (works for arbitary types)
 
     op_names = {
         INT_EQ:  ('==', 'int'),
@@ -441,17 +450,20 @@ class Branch(Op):
     unary_op_names = {
         BOOL_EXPR: ('%r', 'bool'),
         IS_NONE: ('%r is None', 'object'),
+        IS_ERROR: ('is_error(%r)', ''),
     }
 
     def __init__(self, left: Register, right: Register, true_label: Label,
                  false_label: Label, op: int, line: int = -1) -> None:
+        super().__init__(line)
         self.left = left
         self.right = right
         self.true = true_label
         self.false = false_label
         self.op = op
         self.negated = False
-        self.line = line
+        # If not None, the true label should generate a traceback entry (func name, line number)
+        self.traceback_entry = None  # type: Optional[Tuple[str, int]]
 
     def sources(self) -> List[Register]:
         if self.right != INVALID_REGISTER:
@@ -474,31 +486,32 @@ class Branch(Op):
                 fmt = 'not {}'.format(fmt)
 
         cond = env.format(fmt, self.left, self.right)
-        fmt = 'if {} goto %l else goto %l :: {}'.format(cond, typ)
+        tb = ''
+        if self.traceback_entry:
+            tb = ' (error at %s:%d)' % self.traceback_entry
+        fmt = 'if {} goto %l{} else goto %l'.format(cond, tb)
+        if typ:
+             fmt += ' :: {}'.format(typ)
         return env.format(fmt, self.true, self.false)
 
     def invert(self) -> None:
         self.true, self.false = self.false, self.true
         self.negated = not self.negated
 
-    def can_raise(self) -> bool:
-        return False
-
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_branch(self)
 
 
 class Return(Op):
+    error_kind = ERR_NEVER
+
     def __init__(self, reg: Register, line: int = -1) -> None:
+        super().__init__(line)
         assert isinstance(reg, int), 'Invalid register: %r' % reg
         self.reg = reg
-        self.line = line
 
     def to_str(self, env: Environment) -> str:
         return env.format('return %r', self.reg)
-
-    def can_raise(self) -> bool:
-        return False
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_return(self)
@@ -513,14 +526,14 @@ class Unreachable(Op):
     This prevents the block formatter from being confused due to lack of a leave
     and also leaves a nifty note in the IR. It is not generally processed by visitors.
     """
-    def __init__(self) -> None:
-        pass
+
+    error_kind = ERR_NEVER
+
+    def __init__(self, line: int = -1) -> None:
+        super().__init__(line)
 
     def to_str(self, env: Environment) -> str:
         return "unreachable"
-
-    def can_raise(self) -> bool:
-        return False
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_unreachable(self)
@@ -533,14 +546,20 @@ class RegisterOp(Op):
     The output register can be None for no output.
     """
 
+    error_kind = -1  # Can this raise exception and how is it signalled; one of ERR_*
+
     def __init__(self, dest: Optional[Register], line: int) -> None:
+        super().__init__(line)
         assert dest != INVALID_REGISTER
+        assert self.error_kind != -1, 'error_kind not defined'
         self.dest = dest
-        self.line = line
 
     @abstractmethod
     def sources(self) -> List[Register]:
         pass
+
+    def can_raise(self) -> bool:
+        return self.error_kind != ERR_NEVER
 
     def unique_sources(self) -> List[Register]:
         result = []  # type: List[Register]
@@ -553,6 +572,8 @@ class RegisterOp(Op):
 class IncRef(RegisterOp):
     """inc_ref r"""
 
+    error_kind = ERR_NEVER
+
     def __init__(self, dest: Register, typ: RType, line: int = -1) -> None:
         super().__init__(dest, line)
         self.target_type = typ
@@ -562,9 +583,6 @@ class IncRef(RegisterOp):
         if self.target_type.name in ['bool', 'int']:
             s += ' :: {}'.format(self.target_type.name)
         return s
-
-    def can_raise(self) -> bool:
-        return False
 
     def sources(self) -> List[Register]:
         return [self.dest]
@@ -576,6 +594,8 @@ class IncRef(RegisterOp):
 class DecRef(RegisterOp):
     """dec_ref r"""
 
+    error_kind = ERR_NEVER
+
     def __init__(self, dest: Register, typ: RType, line: int = -1) -> None:
         super().__init__(dest, line)
         self.target_type = typ
@@ -585,9 +605,6 @@ class DecRef(RegisterOp):
         if self.target_type.name in ['bool', 'int']:
             s += ' :: {}'.format(self.target_type.name)
         return s
-
-    def can_raise(self) -> bool:
-        return False
 
     def sources(self) -> List[Register]:
         return [self.dest]
@@ -602,6 +619,8 @@ class Call(RegisterOp):
     The call target can be a module-level function or a class.
     """
 
+    error_kind = ERR_MAGIC
+
     def __init__(self, dest: Optional[Register], fn: str, args: List[Register], line: int) -> None:
         super().__init__(dest, line)
         self.fn = fn
@@ -613,9 +632,6 @@ class Call(RegisterOp):
         if self.dest is not None:
             s = env.format('%r = ', self.dest) + s
         return s
-
-    def can_raise(self) -> bool:
-        return True
 
     def sources(self) -> List[Register]:
         return self.args[:]
@@ -634,6 +650,9 @@ class PyCall(RegisterOp):
 
     All registers must be unboxed. Corresponds to PyObject_CallFunctionObjArgs in C.
     """
+
+    error_kind = ERR_MAGIC
+
     def __init__(self, dest: Optional[Register], function: Register, args: List[Register],
                  line: int) -> None:
         super().__init__(dest, line)
@@ -647,9 +666,6 @@ class PyCall(RegisterOp):
             s = env.format('%r = ', self.dest) + s
         return s + ' :: py'
 
-    def can_raise(self) -> bool:
-        return True
-
     def sources(self) -> List[Register]:
         return self.args[:] + [self.function]
 
@@ -662,12 +678,16 @@ class PyMethodCall(RegisterOp):
 
     All registers must be unboxed. Corresponds to PyObject_CallMethodObjArgs in C.
     """
+
+    error_kind = ERR_MAGIC
+
     def __init__(self,
             dest: Optional[Register],
             obj: Register,
             method: Register,
-            args: List[Register]) -> None:
-        self.dest = dest
+            args: List[Register],
+            line: int = -1) -> None:
+        super().__init__(dest, line)
         self.obj = obj
         self.method = method
         self.args = args
@@ -679,9 +699,6 @@ class PyMethodCall(RegisterOp):
             s = env.format('%r = ', self.dest) + s
         return s + ' :: py'
 
-    def can_raise(self) -> bool:
-        return True
-
     def sources(self) -> List[Register]:
         return self.args[:] + [self.obj, self.method]
 
@@ -691,6 +708,8 @@ class PyMethodCall(RegisterOp):
 
 class PyGetAttr(RegisterOp):
     """dest = left.right :: py"""
+
+    error_kind = ERR_MAGIC
 
     def __init__(self, dest: Register, left: Register, right: str, line: int) -> None:
         super().__init__(dest, line)
@@ -723,18 +742,21 @@ OpDesc = NamedTuple('OpDesc', [('name', str),        # Symbolic name of the oper
                                ('format_str', str),  # Format string for pretty printing
                                ('is_void', bool),    # Is this a void op (no value produced)?
                                ('kind', int),
-                               ('can_raise', bool)])
+                               ('error_kind', int)])
 
 
 def make_op(name: str, num_args: int, typ: str, format_str: str = None,
-            is_void: bool = False, kind: int = OP_MISC, can_raise: bool = True) -> OpDesc:
+            is_void: bool = False, kind: int = OP_MISC, error_kind: int = ERR_NEVER) -> OpDesc:
     if format_str is None:
         # Default format strings for some common things.
         if name == '[]':
             format_str = '{dest} = {args[0]}[{args[1]}] :: %s' % typ
         elif name == '[]=':
-            assert is_void
-            format_str = '{args[0]}[{args[1]}] = {args[2]} :: %s' % typ
+            if not is_void:
+                assert error_kind == ERR_FALSE
+                format_str = '{dest} = ({args[0]}[{args[1]}] = {args[2]}) :: %s' % typ
+            else:
+                format_str = '{args[0]}[{args[1]}] = {args[2]} :: %s' % typ
         elif kind == OP_BINARY:
             assert not is_void
             format_str = '{dest} = {args[0]} %s {args[1]} :: %s' % (name, typ)
@@ -750,7 +772,7 @@ def make_op(name: str, num_args: int, typ: str, format_str: str = None,
             format_str = '{dest} = %s{args[0]} :: %s' % (name, typ)
         else:
             assert False, 'format_str must be defined; no default format available'
-    return OpDesc(name, num_args, typ, format_str, is_void, kind, can_raise)
+    return OpDesc(name, num_args, typ, format_str, is_void, kind, error_kind)
 
 
 class PrimitiveOp(RegisterOp):
@@ -761,49 +783,51 @@ class PrimitiveOp(RegisterOp):
     """
 
     # Binary
-    INT_ADD = make_op('+', 2, 'int', kind=OP_BINARY, can_raise=False)
-    INT_SUB = make_op('-', 2, 'int', kind=OP_BINARY, can_raise=False)
-    INT_MUL = make_op('*', 2, 'int', kind=OP_BINARY, can_raise=False)
-    INT_DIV = make_op('//', 2, 'int', kind=OP_BINARY, can_raise=True)
-    INT_MOD = make_op('%', 2, 'int', kind=OP_BINARY, can_raise=True)
-    INT_AND = make_op('&', 2, 'int', kind=OP_BINARY, can_raise=False)
-    INT_OR =  make_op('|', 2, 'int', kind=OP_BINARY, can_raise=False)
-    INT_XOR = make_op('^', 2, 'int', kind=OP_BINARY, can_raise=False)
-    INT_SHL = make_op('<<', 2, 'int', kind=OP_BINARY, can_raise=False)
-    INT_SHR = make_op('>>', 2, 'int', kind=OP_BINARY, can_raise=False)
+    INT_ADD = make_op('+', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
+    INT_SUB = make_op('-', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
+    INT_MUL = make_op('*', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
+    INT_DIV = make_op('//', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
+    INT_MOD = make_op('%', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
+    INT_AND = make_op('&', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
+    INT_OR =  make_op('|', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
+    INT_XOR = make_op('^', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
+    INT_SHL = make_op('<<', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
+    INT_SHR = make_op('>>', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
 
     # Unary
-    INT_NEG = make_op('-', 1, 'int', can_raise=False)
-    LIST_LEN = make_op('len', 1, 'list', can_raise=False)
-    HOMOGENOUS_TUPLE_LEN = make_op('len', 1, 'sequence_tuple', can_raise=False)
-    LIST_TO_HOMOGENOUS_TUPLE = make_op('tuple', 1, 'list', can_raise=True)
+    INT_NEG = make_op('-', 1, 'int', error_kind=ERR_NEVER)
+    LIST_LEN = make_op('len', 1, 'list', error_kind=ERR_NEVER)
+    HOMOGENOUS_TUPLE_LEN = make_op('len', 1, 'sequence_tuple', error_kind=ERR_NEVER)
+    LIST_TO_HOMOGENOUS_TUPLE = make_op('tuple', 1, 'list', error_kind=ERR_NEVER)
 
     # Other
-    NONE = make_op('None', 0, 'None', format_str='{dest} = None', can_raise=False)
-    TRUE = make_op('True', 0, 'True', format_str='{dest} = True', can_raise=False)
-    FALSE = make_op('False', 0, 'False', format_str='{dest} = False', can_raise=False)
+    NONE = make_op('None', 0, 'None', format_str='{dest} = None', error_kind=ERR_NEVER)
+    TRUE = make_op('True', 0, 'True', format_str='{dest} = True', error_kind=ERR_NEVER)
+    FALSE = make_op('False', 0, 'False', format_str='{dest} = False', error_kind=ERR_NEVER)
 
     # List
-    LIST_GET = make_op('[]', 2, 'list', kind=OP_BINARY, can_raise=True)
-    LIST_REPEAT = make_op('*', 2, 'list', kind=OP_BINARY, can_raise=True)
-    LIST_SET = make_op('[]=', 3, 'list', is_void=True, can_raise=True)
-    NEW_LIST = make_op('new', VAR_ARG, 'list', format_str='{dest} = [{comma_args}]', can_raise=True)
-    LIST_APPEND = make_op('append', 2, 'list',
-                          is_void=True, format_str='{args[0]}.append({args[1]})', can_raise=True)
+    LIST_GET = make_op('[]', 2, 'list', kind=OP_BINARY, error_kind=ERR_MAGIC)
+    LIST_REPEAT = make_op('*', 2, 'list', kind=OP_BINARY, error_kind=ERR_MAGIC)
+    LIST_SET = make_op('[]=', 3, 'list', error_kind=ERR_FALSE)
+    NEW_LIST = make_op('new', VAR_ARG, 'list', format_str='{dest} = [{comma_args}]',
+                       error_kind=ERR_MAGIC)
+    LIST_APPEND = make_op('append', 2, 'list', format_str='{dest} = {args[0]}.append({args[1]})',
+                          error_kind=ERR_FALSE)
 
     # Dict
-    DICT_GET = make_op('[]', 2, 'dict', kind=OP_BINARY)
-    DICT_SET = make_op('[]=', 3, 'dict', is_void=True)
-    NEW_DICT = make_op('new', 0, 'dict', format_str='{dest} = {{}}')
-    DICT_CONTAINS = make_op('in', 2, 'dict', kind=OP_BINARY)
-    DICT_UPDATE = make_op('update', 2, 'dict', kind=OP_SPECIAL_METHOD_CALL, is_void=True)
+    DICT_GET = make_op('[]', 2, 'dict', kind=OP_BINARY, error_kind=ERR_MAGIC)
+    DICT_SET = make_op('[]=', 3, 'dict', is_void=True, error_kind=ERR_FALSE)
+    NEW_DICT = make_op('new', 0, 'dict', format_str='{dest} = {{}}', error_kind=ERR_MAGIC)
+    DICT_CONTAINS = make_op('in', 2, 'dict', kind=OP_BINARY, error_kind=ERR_MAGIC)
+    DICT_UPDATE = make_op('update', 2, 'dict', kind=OP_SPECIAL_METHOD_CALL, is_void=True,
+                          error_kind=ERR_FALSE)
 
     # Sequence Tuple
-    HOMOGENOUS_TUPLE_GET = make_op('[]', 2, 'sequence_tuple', kind=OP_BINARY, can_raise=True)
+    HOMOGENOUS_TUPLE_GET = make_op('[]', 2, 'sequence_tuple', kind=OP_BINARY, error_kind=ERR_MAGIC)
 
     # Tuple
     NEW_TUPLE = make_op('new', VAR_ARG, 'tuple', format_str='{dest} = ({comma_args})',
-                        can_raise=True)
+                        error_kind=ERR_MAGIC)
 
     def __init__(self, dest: Optional[Register], desc: OpDesc, args: List[Register],
                  line: int) -> None:
@@ -811,6 +835,7 @@ class PrimitiveOp(RegisterOp):
 
         If desc.is_void is true, dest should be None.
         """
+        self.error_kind = desc.error_kind
         super().__init__(dest, line)
         if desc.num_args != VAR_ARG:
             assert len(args) == desc.num_args
@@ -829,15 +854,14 @@ class PrimitiveOp(RegisterOp):
         params['comma_args'] = ', '.join(args)
         return self.desc.format_str.format(**params)
 
-    def can_raise(self) -> bool:
-        return self.desc.can_raise
-
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_primitive_op(self)
 
 
 class Assign(RegisterOp):
     """dest = int"""
+
+    error_kind = ERR_NEVER
 
     def __init__(self, dest: Register, src: Register, line: int = -1) -> None:
         super().__init__(dest, line)
@@ -849,15 +873,14 @@ class Assign(RegisterOp):
     def to_str(self, env: Environment) -> str:
         return env.format('%r = %r', self.dest, self.src)
 
-    def can_raise(self) -> bool:
-        return False
-
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_assign(self)
 
 
 class LoadInt(RegisterOp):
     """dest = int"""
+
+    error_kind = ERR_NEVER
 
     def __init__(self, dest: Register, value: int, line: int = -1) -> None:
         super().__init__(dest, line)
@@ -869,9 +892,6 @@ class LoadInt(RegisterOp):
     def to_str(self, env: Environment) -> str:
         return env.format('%r = %d', self.dest, self.value)
 
-    def can_raise(self) -> bool:
-        return False
-
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_load_int(self)
 
@@ -879,8 +899,10 @@ class LoadInt(RegisterOp):
 class LoadErrorValue(RegisterOp):
     """dest = <error value for type>"""
 
-    def __init__(self, dest: Register, rtype: RType) -> None:
-        self.dest = dest
+    error_kind = ERR_NEVER
+
+    def __init__(self, dest: Register, rtype: RType, line: int = -1) -> None:
+        super().__init__(dest, line)
         self.rtype = rtype
 
     def sources(self) -> List[Register]:
@@ -889,15 +911,14 @@ class LoadErrorValue(RegisterOp):
     def to_str(self, env: Environment) -> str:
         return env.format('%r = <error> :: %s', self.dest, self.rtype)
 
-    def can_raise(self) -> bool:
-        return False
-
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_load_error_value(self)
 
 
 class GetAttr(RegisterOp):
     """dest = obj.attr (for a native object)"""
+
+    error_kind = ERR_MAGIC
 
     def __init__(self, dest: Register, obj: Register, attr: str, rtype: UserRType,
                  line: int) -> None:
@@ -912,15 +933,14 @@ class GetAttr(RegisterOp):
     def to_str(self, env: Environment) -> str:
         return env.format('%r = %r.%s', self.dest, self.obj, self.attr)
 
-    def can_raise(self) -> bool:
-        return True
-
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_get_attr(self)
 
 
 class SetAttr(RegisterOp):
     """obj.attr = src (for a native object)"""
+
+    error_kind = ERR_FALSE
 
     def __init__(self, obj: Register, attr: str, src: Register, rtype: UserRType,
                  line: int) -> None:
@@ -936,15 +956,14 @@ class SetAttr(RegisterOp):
     def to_str(self, env: Environment) -> str:
         return env.format('%r.%s = %r', self.obj, self.attr, self.src)
 
-    def can_raise(self) -> bool:
-        return True
-
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_set_attr(self)
 
 
 class LoadStatic(RegisterOp):
     """dest = name :: static"""
+
+    error_kind = ERR_NEVER
 
     def __init__(self, dest: Register, identifier: str, line: int = -1) -> None:
         super().__init__(dest, line)
@@ -956,15 +975,14 @@ class LoadStatic(RegisterOp):
     def to_str(self, env: Environment) -> str:
         return env.format('%r = %s :: static', self.dest, self.identifier)
 
-    def can_raise(self) -> bool:
-        return False
-
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_load_static(self)
 
 
 class TupleGet(RegisterOp):
-    """dest = src[n]"""
+    """dest = src[n] (for fixed-length tuple)"""
+
+    error_kind = ERR_NEVER
 
     def __init__(self, dest: Register, src: Register, index: int, target_type: RType,
                  line: int) -> None:
@@ -979,9 +997,6 @@ class TupleGet(RegisterOp):
     def to_str(self, env: Environment) -> str:
         return env.format('%r = %r[%d]', self.dest, self.src, self.index)
 
-    def can_raise(self) -> bool:
-        return False
-
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_tuple_get(self)
 
@@ -993,7 +1008,8 @@ class Cast(RegisterOp):
 
     DO NOT increment reference counts."
     """
-    # TODO: Error checking
+
+    error_kind = ERR_MAGIC
 
     def __init__(self, dest: Register, src: Register, typ: RType, line: int) -> None:
         super().__init__(dest, line)
@@ -1006,9 +1022,6 @@ class Cast(RegisterOp):
     def to_str(self, env: Environment) -> str:
         return env.format('%r = cast(%s, %r)', self.dest, self.typ.name, self.src)
 
-    def can_raise(self) -> bool:
-        return True
-
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_cast(self)
 
@@ -1019,6 +1032,8 @@ class Box(RegisterOp):
     This converts from a potentially unboxed representation to a straight Python object.
     Only supported for types with an unboxed representation.
     """
+
+    error_kind = ERR_NEVER
 
     def __init__(self, dest: Register, src: Register, typ: RType, line: int = -1) -> None:
         super().__init__(dest, line)
@@ -1031,9 +1046,6 @@ class Box(RegisterOp):
     def to_str(self, env: Environment) -> str:
         return env.format('%r = box(%s, %r)', self.dest, self.type, self.src)
 
-    def can_raise(self) -> bool:
-        return False
-
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_box(self)
 
@@ -1044,7 +1056,8 @@ class Unbox(RegisterOp):
     This is similar to a cast, but it also changes to a (potentially) unboxed runtime
     representation. Only supported for types with an unboxed representation.
     """
-    # TODO: Error checking
+
+    error_kind = ERR_MAGIC
 
     def __init__(self, dest: Register, src: Register, typ: RType, line: int) -> None:
         super().__init__(dest, line)
@@ -1057,9 +1070,6 @@ class Unbox(RegisterOp):
     def to_str(self, env: Environment) -> str:
         return env.format('%r = unbox(%s, %r)', self.dest, self.type, self.src)
 
-    def can_raise(self) -> bool:
-        return True
-
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_unbox(self)
 
@@ -1067,14 +1077,15 @@ class Unbox(RegisterOp):
 class BasicBlock:
     """Basic IR block.
 
-    Ends with a jump, branch, return or an op that can raise an
-    exception.
+    Ends with a jump, branch, or return.
 
     When building the IR, ops that raise exceptions can be included in
-    the middle of a basic block, but afterwards we perform a transform
-    that splits basic blocks so that each block may exit only at the
-    end. A jump, branch or return can only ever appear as the final
-    op in a block.
+    the middle of a basic block, but the exceptions aren't checked.
+    Afterwards we perform a transform that inserts explicit checks for
+    all error conditions and splits basic blocks accordingly to preserve
+    the invariant that only a jump, branch or return can only ever appear
+    as the final op in a block. The motivation is that manually inserting
+    error checking ops is error-prone and is better automated.
 
     Ops that may terminate the program aren't treated as exits.
     """
@@ -1234,8 +1245,6 @@ def format_blocks(blocks: List[BasicBlock], env: Environment) -> List[str]:
             ops = ops[:-1]
         for op in ops:
             line = '    ' + op.to_str(env)
-            if op.error_label is not None:
-                line += env.format('; err %l', op.error_label)
             lines.append(line)
 
         if not isinstance(block.ops[-1], (Goto, Branch, Return, Unreachable)):

@@ -55,10 +55,6 @@ def get_cfg(blocks: List[BasicBlock]) -> CFG:
         else:
             succ = []
             exits.add(label)
-        for op in block.ops:
-            err = op.error_label
-            if err is not None and err not in succ:
-                succ.append(err)
         succ_map[label] = succ
         pred_map[label] = []
     for prev, nxt in succ_map.items():

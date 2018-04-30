@@ -348,9 +348,10 @@ class IRBuilder(NodeVisitor[Register]):
                 op = PrimitiveOp.DICT_SET
             else:
                 assert False, target.rtype
-            self.add(PrimitiveOp(None, op,
+            target_reg = self.alloc_temp(BoolRType())
+            self.add(PrimitiveOp(target_reg, op,
                                  [target.base_reg, target.index_reg, boxed_item_reg], rvalue.line))
-            return INVALID_REGISTER
+            return target_reg
 
         assert False, 'Unsupported assignment target'
 
@@ -829,9 +830,9 @@ class IRBuilder(NodeVisitor[Register]):
         result_type = self.node_type(expr)
         base = self.accept(callee.expr)
         if callee.name == 'append' and base_type.name == 'list':
-            target = INVALID_REGISTER  # TODO: Do we sometimes need to allocate a register?
+            target = self.alloc_target(BoolRType())
             arg = self.box_expr(expr.args[0])
-            self.add(PrimitiveOp(None, PrimitiveOp.LIST_APPEND, [base, arg], expr.line))
+            self.add(PrimitiveOp(target, PrimitiveOp.LIST_APPEND, [base, arg], expr.line))
         elif callee.name == 'update' and base_type.name == 'dict':
             target = INVALID_REGISTER
             other_list_reg = self.accept(expr.args[0])

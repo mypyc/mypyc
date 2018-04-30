@@ -3,4 +3,48 @@ from typing import List
 def f(x: List[int]) -> int:
     return x[0]
 [out]
-TODO: Output missing
+L0:
+    r0 = 0
+    r1 = x[r0] :: list
+    dec_ref r0 :: int
+    if is_error(r1) goto L4 (error at f:3) else goto L1
+L1:
+    r2 = unbox(int, r1)
+    dec_ref r1
+    if is_error(r2) goto L5 (error at f:3) else goto L2
+L2:
+    return r2
+L3:
+    r3 = <error> :: int
+    return r3
+L4:
+    dec_ref r1
+    goto L3
+L5:
+    dec_ref r2 :: int
+    goto L3
+
+[case testListAppendAndSetItemError]
+from typing import List
+def f(x: List[int], y: int, z: int) -> None:
+    x.append(y)
+    x[y] = z
+[out]
+L0:
+    inc_ref y :: int
+    r1 = box(int, y)
+    r0 = x.append(r1)
+    dec_ref r1
+    if not r0 goto L3 (error at f:3) else goto L1 :: bool
+L1:
+    inc_ref z :: int
+    r2 = box(int, z)
+    r3 = (x[y] = r2) :: list
+    dec_ref r2
+    if not r3 goto L3 (error at f:4) else goto L2 :: bool
+L2:
+    r4 = None
+    return r4
+L3:
+    r5 = <error> :: None
+    return r5
