@@ -381,6 +381,8 @@ class Op:
     line = -1
     # Where to go to on an exception?
     error_label = None  # type: Optional[Label]
+    # Where to go when there's no exception? (Only used in error_label is defined.)
+    ok_label = None  # type: Optional[Label]
 
     @abstractmethod
     def to_str(self, env: Environment) -> str:
@@ -885,7 +887,7 @@ class LoadErrorValue(RegisterOp):
         return []
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = ERROR :: %s', self.dest, self.rtype)
+        return env.format('%r = <error> :: %s', self.dest, self.rtype)
 
     def can_raise(self) -> bool:
         return False
@@ -1065,8 +1067,16 @@ class Unbox(RegisterOp):
 class BasicBlock:
     """Basic IR block.
 
-    Only the last instruction exists the block. Ends with a jump, branch or return.
-    Exceptions are not considered exits.
+    Ends with a jump, branch, return or an op that can raise an
+    exception.
+
+    When building the IR, ops that raise exceptions can be included in
+    the middle of a basic block, but afterwards we perform a transform
+    that splits basic blocks so that each block may exit only at the
+    end. A jump, branch or return can only ever appear as the final
+    op in a block.
+
+    Ops that may terminate the program aren't treated as exits.
     """
 
     def __init__(self, label: Label) -> None:
@@ -1225,7 +1235,7 @@ def format_blocks(blocks: List[BasicBlock], env: Environment) -> List[str]:
         for op in ops:
             line = '    ' + op.to_str(env)
             if op.error_label is not None:
-                line += env.format(' <err %l>', op.error_label)
+                line += env.format('; err %l', op.error_label)
             lines.append(line)
 
         if not isinstance(block.ops[-1], (Goto, Branch, Return, Unreachable)):

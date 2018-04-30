@@ -1,4 +1,4 @@
-[case testListGetAndUnboxError-skip]
+[case testListGetAndUnboxError]
 from typing import List
 def f(x: List[int]) -> int:
     return x[0]
