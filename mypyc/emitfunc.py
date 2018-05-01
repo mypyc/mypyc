@@ -196,12 +196,10 @@ class FunctionEmitterVisitor(OpVisitor):
             self.emit_inc_ref(dest, tuple_type)
 
         elif op.desc is PrimitiveOp.NEW_DICT:
-            self.emit_lines('%s = PyDict_New();' % dest,
-                            'if (!%s)' % dest,
-                            '    abort();')
+            self.emit_line('%s = PyDict_New();' % dest)
 
         elif op.desc is PrimitiveOp.LIST_APPEND:
-            self.emit_lines(
+            self.emit_line(
                 '%s = PyList_Append(%s, %s) != -1;' % (self.reg(op.dest),
                                                        self.reg(op.args[0]),
                                                        self.reg(op.args[1])))
@@ -210,9 +208,10 @@ class FunctionEmitterVisitor(OpVisitor):
             # NOTE: PyDict_Update is technically not equivalent to update, but the cases where it
             # differs (when the second argument has no keys) should never typecheck for us, so the
             # difference is irrelevant.
-            self.emit_lines(
-                'if (PyDict_Update(%s, %s) == -1)' % (self.reg(op.args[0]), self.reg(op.args[1])),
-                '    abort();')
+            self.emit_line(
+                '%s = PyDict_Update(%s, %s) != -1;' % (self.reg(op.dest),
+                                                       self.reg(op.args[0]),
+                                                       self.reg(op.args[1])))
 
         else:
             assert len(op.args) == 1
@@ -265,15 +264,18 @@ class FunctionEmitterVisitor(OpVisitor):
             rtype.attr_type(op.attr).ctype))
 
     def visit_set_attr(self, op: SetAttr) -> None:
+        dest = self.reg(op.dest)
         obj = self.reg(op.obj)
         src = self.reg(op.src)
         rtype = op.rtype
-        self.emit_line('CPY_SET_ATTR(%s, %d, %s, %s, %s);' % (
+        # TODO: Track errors
+        self.emit_line('CPY_SET_ATTR(%s, %d, %s, %s, %s), %s = 1;' % (
             obj,
             rtype.setter_index(op.attr),
             src,
             rtype.struct_name,
-            rtype.attr_type(op.attr).ctype))
+            rtype.attr_type(op.attr).ctype,
+            dest))
 
     def visit_load_static(self, op: LoadStatic) -> None:
         dest = self.reg(op.dest)
@@ -336,7 +338,7 @@ class FunctionEmitterVisitor(OpVisitor):
         self.emitter.emit_box(self.reg(op.src), self.reg(op.dest), op.type, 'abort();')
 
     def visit_cast(self, op: Cast) -> None:
-        self.emitter.emit_cast(self.reg(op.src), self.reg(op.dest), op.typ, 'abort();')
+        self.emitter.emit_cast(self.reg(op.src), self.reg(op.dest), op.typ)
 
     def visit_unbox(self, op: Unbox) -> None:
         self.emitter.emit_unbox(self.reg(op.src), self.reg(op.dest), op.type, 'abort();')

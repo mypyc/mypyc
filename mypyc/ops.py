@@ -756,7 +756,7 @@ def make_op(name: str, num_args: int, typ: str, format_str: str = None,
         elif name == '[]=':
             if not is_void:
                 assert error_kind == ERR_FALSE
-                format_str = '{dest} = ({args[0]}[{args[1]}] = {args[2]}) :: %s' % typ
+                format_str = '{args[0]}[{args[1]}] = {args[2]} :: %s; {dest} = is_error' % typ
             else:
                 format_str = '{args[0]}[{args[1]}] = {args[2]} :: %s' % typ
         elif kind == OP_BINARY:
@@ -818,11 +818,10 @@ class PrimitiveOp(RegisterOp):
 
     # Dict
     DICT_GET = make_op('[]', 2, 'dict', kind=OP_BINARY, error_kind=ERR_MAGIC)
-    DICT_SET = make_op('[]=', 3, 'dict', is_void=True, error_kind=ERR_FALSE)
+    DICT_SET = make_op('[]=', 3, 'dict', error_kind=ERR_FALSE)
     NEW_DICT = make_op('new', 0, 'dict', format_str='{dest} = {{}}', error_kind=ERR_MAGIC)
     DICT_CONTAINS = make_op('in', 2, 'dict', kind=OP_BINARY, error_kind=ERR_MAGIC)
-    DICT_UPDATE = make_op('update', 2, 'dict', kind=OP_SPECIAL_METHOD_CALL, is_void=True,
-                          error_kind=ERR_FALSE)
+    DICT_UPDATE = make_op('update', 2, 'dict', kind=OP_SPECIAL_METHOD_CALL, error_kind=ERR_FALSE)
 
     # Sequence Tuple
     HOMOGENOUS_TUPLE_GET = make_op('[]', 2, 'sequence_tuple', kind=OP_BINARY, error_kind=ERR_MAGIC)
@@ -944,9 +943,9 @@ class SetAttr(RegisterOp):
 
     error_kind = ERR_FALSE
 
-    def __init__(self, obj: Register, attr: str, src: Register, rtype: UserRType,
+    def __init__(self, dest: Register, obj: Register, attr: str, src: Register, rtype: UserRType,
                  line: int) -> None:
-        super().__init__(None, line)
+        super().__init__(dest, line)
         self.obj = obj
         self.attr = attr
         self.src = src
@@ -956,7 +955,7 @@ class SetAttr(RegisterOp):
         return [self.obj, self.src]
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r.%s = %r', self.obj, self.attr, self.src)
+        return env.format('%r.%s = %r; %r = is_error', self.obj, self.attr, self.src, self.dest)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_set_attr(self)
@@ -1008,7 +1007,7 @@ class Cast(RegisterOp):
 
     Perform a runtime type check (no representation or value conversion).
 
-    DO NOT increment reference counts."
+    DO NOT increment reference counts.
     """
 
     error_kind = ERR_MAGIC

@@ -18,5 +18,6 @@ class TestArgCheck(unittest.TestCase):
             'if (PyList_Check(obj_x))\n',
             '    arg_x = obj_x;\n',
             'else\n',
-            '    return NULL;\n',
+            '    arg_x = NULL;\n',
+            'if (arg_x == NULL) return NULL;\n',
         ]

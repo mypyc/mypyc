@@ -337,8 +337,10 @@ class IRBuilder(NodeVisitor[Register]):
             rvalue_reg = self.accept(rvalue)
             if needs_box:
                 rvalue_reg = self.box(rvalue_reg, rvalue_type)
-            self.add(SetAttr(target.obj_reg, target.attr, rvalue_reg, target.obj_type, rvalue.line))
-            return INVALID_REGISTER
+            target_reg = self.alloc_temp(BoolRType())
+            self.add(SetAttr(target_reg, target.obj_reg, target.attr, rvalue_reg, target.obj_type,
+                             rvalue.line))
+            return target_reg
         elif isinstance(target, AssignmentTargetIndex):
             item_reg = self.accept(rvalue)
             boxed_item_reg = self.box(item_reg, rvalue_type)
@@ -834,9 +836,10 @@ class IRBuilder(NodeVisitor[Register]):
             arg = self.box_expr(expr.args[0])
             self.add(PrimitiveOp(target, PrimitiveOp.LIST_APPEND, [base, arg], expr.line))
         elif callee.name == 'update' and base_type.name == 'dict':
-            target = INVALID_REGISTER
+            target = self.alloc_target(BoolRType())
             other_list_reg = self.accept(expr.args[0])
-            self.add(PrimitiveOp(None, PrimitiveOp.DICT_UPDATE, [base, other_list_reg], expr.line))
+            self.add(PrimitiveOp(target, PrimitiveOp.DICT_UPDATE, [base, other_list_reg],
+                                 expr.line))
         else:
             return None
         return target

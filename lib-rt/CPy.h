@@ -37,7 +37,7 @@ static void CPyDebug_Print(const char *msg) {
 // Set attribute value using vtable
 #define CPY_SET_ATTR(obj, vtable_index, value, object_type, attr_type) \
     ((void (*)(object_type *, attr_type))((object_type *)obj)->vtable[vtable_index])( \
-        (object_type *)obj, value);
+        (object_type *)obj, value)
 
 static void CPyError_OutOfMemory(void) {
     fprintf(stderr, "fatal: out of memory\n");

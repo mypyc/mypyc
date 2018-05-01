@@ -170,10 +170,8 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """)
 
     def test_list_append(self) -> None:
-        self.assert_emit(PrimitiveOp(None, PrimitiveOp.LIST_APPEND, [self.l, self.o], 1),
-                         """if (PyList_Append(cpy_r_l, cpy_r_o) == -1)
-                                abort();
-                         """)
+        self.assert_emit(PrimitiveOp(self.b, PrimitiveOp.LIST_APPEND, [self.l, self.o], 1),
+                         """cpy_r_b = PyList_Append(cpy_r_l, cpy_r_o) != -1;""")
 
     def test_get_attr(self) -> None:
         ir = ClassIR('A', [('x', BoolRType()),
@@ -186,8 +184,8 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         ir = ClassIR('A', [('x', BoolRType()),
                            ('y', IntRType())])
         rtype = UserRType(ir)
-        self.assert_emit(SetAttr(self.n, 'y', self.m, rtype, 1),
-                         """CPY_SET_ATTR(cpy_r_n, 3, cpy_r_m, AObject, CPyTagged);""")
+        self.assert_emit(SetAttr(self.b, self.n, 'y', self.m, rtype, 1),
+                         """CPY_SET_ATTR(cpy_r_n, 3, cpy_r_m, AObject, CPyTagged), cpy_r_b = 1;""")
 
     def test_dict_get_item(self) -> None:
         self.assert_emit(PrimitiveOp(self.o, PrimitiveOp.DICT_GET, [self.d, self.o2], 1),
@@ -204,17 +202,12 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """)
 
     def test_dict_update(self) -> None:
-        self.assert_emit(PrimitiveOp(None, PrimitiveOp.DICT_UPDATE, [self.d, self.o], 1),
-                        """if (PyDict_Update(cpy_r_d, cpy_r_o) == -1)
-                               abort();
-                        """)
+        self.assert_emit(PrimitiveOp(self.b, PrimitiveOp.DICT_UPDATE, [self.d, self.o], 1),
+                        """cpy_r_b = PyDict_Update(cpy_r_d, cpy_r_o) != -1;""")
 
     def test_new_dict(self) -> None:
         self.assert_emit(PrimitiveOp(self.d, PrimitiveOp.NEW_DICT, [], 1),
-                         """cpy_r_d = PyDict_New();
-                            if (!cpy_r_d)
-                                abort();
-                         """)
+                         """cpy_r_d = PyDict_New();""")
 
     def test_dict_contains(self) -> None:
         self.assert_emit(PrimitiveOp(self.b, PrimitiveOp.DICT_CONTAINS, [self.o, self.d], 1),

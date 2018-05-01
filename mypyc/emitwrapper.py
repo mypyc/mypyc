@@ -61,5 +61,6 @@ def generate_arg_check(name: str, typ: RType, emitter: Emitter) -> None:
         emitter.emit_unbox('obj_{}'.format(name), 'arg_{}'.format(name), typ,
                            'return NULL;', declare_dest=True, borrow=True)
     else:
-        emitter.emit_cast('obj_{}'.format(name), 'arg_{}'.format(name), typ, 'return NULL;',
+        emitter.emit_cast('obj_{}'.format(name), 'arg_{}'.format(name), typ,
                           declare_dest=True)
+        emitter.emit_line('if (arg_{} == NULL) return NULL;'.format(name))

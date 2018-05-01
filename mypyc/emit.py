@@ -124,11 +124,10 @@ class Emitter:
             self.emit_line('Py_DECREF(%s);' % dest)
         # Otherwise assume it's an unboxed, pointerless value and do nothing.
 
-    def emit_cast(self, src: str, dest: str, typ: RType, failure: str,
-                  declare_dest: bool = False) -> None:
+    def emit_cast(self, src: str, dest: str, typ: RType, declare_dest: bool = False) -> None:
         """Emit code for casting a value of given type (works for boxed types only).
 
-        Evaluate C code in 'failure' if the value has an incompatible type.
+        Assign NULL (error value) to dest if the value has an incompatible type.
 
         Always copy/steal the reference in src.
 
@@ -136,11 +135,9 @@ class Emitter:
             src: Name of source C variable
             dest: Name of target C variable
             typ: Type of value
-            failure: What happens on error
             declare_dest: If True, also declare the variable 'dest'
         """
         # TODO: Verify refcount handling.
-        failure = '    ' + failure
         if typ.name in ('list', 'dict'):
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
@@ -154,15 +151,15 @@ class Emitter:
                 'if ({}_Check({}))'.format(prefix, src),
                 '    {} = {};'.format(dest, src),
                 'else',
-                failure)
+                '    {} = NULL;'.format(dest))
         elif typ.name == 'sequence_tuple':
-            self.emit_lines(
-                'if (!PyTuple_Check({}))'.format(src),
-                failure)
             if declare_dest:
-                self.emit_line('{} {} = {};'.format(typ.ctype, dest, src))
-            else:
-                self.emit_line('{} = {};'.format(dest, src))
+                self.emit_line('{} {};'.format(typ.ctype, dest))
+            self.emit_lines(
+                'if (PyTuple_Check({}))'.format(src),
+                '    {} = {};'.format(dest, src),
+                'else',
+                '    {} = NULL;'.format(dest))
         elif isinstance(typ, UserRType):
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
@@ -170,7 +167,7 @@ class Emitter:
                 'if (PyObject_TypeCheck({}, &{}))'.format(src, type_struct_name(typ.name)),
                 '    {} = {};'.format(dest, src),
                 'else',
-                failure)
+                '    {} = NULL;'.format(dest))
         elif typ.name == 'None':
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
@@ -178,7 +175,7 @@ class Emitter:
                 'if ({} == Py_None)'.format(src),
                 '    {} = {};'.format(dest, src),
                 'else',
-                failure)
+                '    {} = NULL;'.format(dest))
         elif isinstance(typ, OptionalRType):
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
@@ -186,7 +183,7 @@ class Emitter:
                 'if ({} == Py_None)'.format(src),
                 '    {} = {};'.format(dest, src),
                 'else {')
-            self.emit_cast(src, dest, typ.value_type, failure.lstrip())
+            self.emit_cast(src, dest, typ.value_type)
             self.emit_line('}')
         else:
             assert False, 'Cast not implemented: %s' % typ
@@ -207,6 +204,7 @@ class Emitter:
             declare_dest: If True, also declare the variable 'dest'
             borrow: If True, create a borrowed reference
         """
+        # TODO: Raise exception on failure.
         # TODO: Verify refcount handling.
         failure = '    ' + failure
         if typ.name == 'int':
@@ -248,7 +246,7 @@ class Emitter:
                 else:
                     if not borrow:
                         self.emit_inc_ref(temp, ObjectRType())
-                    self.emit_cast(temp, temp2, item_type, failure, declare_dest=True)
+                    self.emit_cast(temp, temp2, item_type, declare_dest=True)
                 self.emit_line('{}.f{} = {};'.format(dest, i, temp2))
         else:
             assert False, 'Unboxing not implemented: %s' % typ

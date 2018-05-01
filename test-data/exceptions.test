@@ -39,7 +39,7 @@ L0:
 L1:
     inc_ref z :: int
     r2 = box(int, z)
-    r3 = (x[y] = r2) :: list
+    x[y] = r2 :: list; r3 = is_error
     dec_ref r2
     if not r3 goto L3 (error at f:4) else goto L2 :: bool
 L2:
