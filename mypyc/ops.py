@@ -411,6 +411,9 @@ class Goto(Op):
         super().__init__(line)
         self.label = label
 
+    def __repr__(self) -> str:
+        return '<Goto %d>' % self.label
+
     def to_str(self, env: Environment) -> str:
         return env.format('goto %l', self.label)
 
@@ -601,6 +604,9 @@ class DecRef(RegisterOp):
         assert typ.is_refcounted
         super().__init__(dest, line)
         self.target_type = typ
+
+    def __repr__(self) -> str:
+        return '<DecRef %d>' % self.dest
 
     def to_str(self, env: Environment) -> str:
         s = env.format('dec_ref %r', self.dest)
@@ -846,7 +852,7 @@ class PrimitiveOp(RegisterOp):
     def sources(self) -> List[Register]:
         return list(self.args)
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         return '<PrimiveOp name=%r type=%s dest=%d args=%s>' % (self.desc.name,
                                                                 self.desc.type,
                                                                 self.dest,
