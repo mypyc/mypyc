@@ -1096,9 +1096,9 @@ class BasicBlock:
     the middle of a basic block, but the exceptions aren't checked.
     Afterwards we perform a transform that inserts explicit checks for
     all error conditions and splits basic blocks accordingly to preserve
-    the invariant that only a jump, branch or return can only ever appear
-    as the final op in a block. The motivation is that manually inserting
-    error checking ops is error-prone and is better automated.
+    the invariant that a jump, branch or return can only ever appear
+    as the final op in a block. Manually inserting error checking ops
+    would be boring and error-prone.
 
     Ops that may terminate the program aren't treated as exits.
     """

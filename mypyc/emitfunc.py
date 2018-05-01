@@ -77,7 +77,6 @@ class FunctionEmitterVisitor(OpVisitor):
             compare = '!=' if op.negated else '=='
             self.emit_line('if ({} {} Py_None)'.format(self.reg(op.left), compare))
         elif op.op == Branch.IS_ERROR:
-            # TODO: Tuple error values
             typ = self.env.types[op.left]
             compare = '!=' if op.negated else '=='
             if isinstance(typ, TupleRType):
