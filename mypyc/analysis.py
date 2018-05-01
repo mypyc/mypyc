@@ -72,6 +72,9 @@ class AnalysisResult(Generic[T]):
         self.before = before
         self.after = after
 
+    def __str__(self) -> str:
+        return 'before: %s\nafter: %s\n' % (self.before, self.after)
+
 GenAndKill = Tuple[Set[Register], Set[Register]]
 
 
@@ -389,7 +392,7 @@ def run_analysis(blocks: List[BasicBlock],
         else:
             new_before = set(initial)
         before[label] = new_before
-        new_after = (new_before | block_gen[label]) - block_kill[label]
+        new_after = (new_before - block_kill[label]) | block_gen[label]
         if new_after != after[label]:
             for succ in succ_map[label]:
                 if succ not in workset:
