@@ -66,9 +66,10 @@ def split_blocks_at_errors(blocks: List[BasicBlock],
                                 op=variant)
                 branch.negated = negated
                 branch.traceback_entry = (func, op.line)
-                partial_ops.add(branch)  # Only tweak false of these
+                partial_ops.add(branch)  # Only tweak true label of these
                 new_block.ops.append(branch)
-                mapping[block.label] = new_block.label
+                if i0 == 0:
+                    mapping[block.label] = new_block.label
                 new_blocks.append(new_block)
                 i += 1
                 i0 = i
@@ -76,7 +77,8 @@ def split_blocks_at_errors(blocks: List[BasicBlock],
                 i += 1
         new_block = BasicBlock(Label(len(new_blocks)))
         new_block.ops.extend(ops[i0:i + 1])
-        mapping[block.label] = new_block.label
+        if i0 == 0:
+            mapping[block.label] = new_block.label
         new_blocks.append(new_block)
     # Adjust all labels to reflect the new blocks.
     for block in new_blocks:

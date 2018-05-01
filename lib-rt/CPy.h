@@ -394,19 +394,22 @@ static bool CPyList_SetItem(PyObject *list, CPyTagged index, PyObject *value) {
         Py_ssize_t size = PyList_GET_SIZE(list);
         if (n >= 0) {
             if (n >= size) {
-                abort();
+                // TODO: Exception
+                return false;
             }
         } else {
             n += size;
             if (n < 0) {
-                abort();
+                // TODO: Exception
+                return false;
             }
         }
         Py_INCREF(value); // TODO: Move this outside the function to allow optimizing it away
         PyList_SET_ITEM(list, n, value);
         return true;
     } else {
-        abort(); // TODO: Generate exception
+        // TODO: Exception
+        return false;
     }
 }
 

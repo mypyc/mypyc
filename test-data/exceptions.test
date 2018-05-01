@@ -1,3 +1,7 @@
+-- Test cases for exception handling insertion transform.
+--
+-- The result includes refcount handling since these two transforms interact.
+
 [case testListGetAndUnboxError]
 from typing import List
 def f(x: List[int]) -> int:
@@ -48,3 +52,45 @@ L2:
 L3:
     r5 = <error> :: None
     return r5
+
+[case testOptionalHandling]
+from typing import Optional
+
+class A: pass
+
+def f(x: Optional[A]) -> int:
+    if x is None:
+        return 1
+    if x is not None:
+        return 2
+    return 3
+[out]
+L0:
+    if x is None goto L1 else goto L2 :: object
+L1:
+    r0 = 1
+    return r0
+L2:
+    inc_ref x
+    r1 = cast(A, x)
+    if is_error(r1) goto L7 (error at f:8) else goto L3
+L3:
+    if not r1 is None goto L8 else goto L9 :: object
+L4:
+    r2 = 2
+    return r2
+L5:
+    r3 = 3
+    return r3
+L6:
+    r4 = <error> :: int
+    return r4
+L7:
+    dec_ref r1
+    goto L6
+L8:
+    dec_ref r1
+    goto L4
+L9:
+    dec_ref r1
+    goto L5

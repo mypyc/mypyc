@@ -846,6 +846,12 @@ class PrimitiveOp(RegisterOp):
     def sources(self) -> List[Register]:
         return list(self.args)
 
+    def __str__(self) -> str:
+        return '<PrimiveOp name=%r type=%s dest=%d args=%s>' % (self.desc.name,
+                                                                self.desc.type,
+                                                                self.dest,
+                                                                self.args)
+
     def to_str(self, env: Environment) -> str:
         params = {}  # type: Dict[str, Any]
         if self.dest is not None and self.dest != INVALID_REGISTER:

@@ -80,7 +80,16 @@ class FunctionEmitterVisitor(OpVisitor):
             # TODO: Tuple error values
             typ = self.env.types[op.left]
             compare = '!=' if op.negated else '=='
-            self.emit_line('if ({} {} {})'.format(self.reg(op.left), compare, typ.c_error_value))
+            if isinstance(typ, TupleRType):
+                # TODO: What about empty tuple?
+                item_type = typ.types[0]
+                self.emit_line('if ({}.f0 {} {})'.format(self.reg(op.left),
+                                                         compare,
+                                                         item_type.c_error_value))
+            else:
+                self.emit_line('if ({} {} {})'.format(self.reg(op.left),
+                                                      compare,
+                                                      typ.c_error_value))
         else:
             left = self.reg(op.left)
             right = self.reg(op.right)
@@ -155,18 +164,16 @@ class FunctionEmitterVisitor(OpVisitor):
                 assert False, op.desc
 
         elif op.desc is PrimitiveOp.LIST_SET:
-            assert dest is None
-            self.emit_lines('if (!CPyList_SetItem(%s, %s, %s))' % (self.reg(op.args[0]),
-                                                                   self.reg(op.args[1]),
-                                                                   self.reg(op.args[2])),
-                            '    abort();')
+            self.emit_line('%s = CPyList_SetItem(%s, %s, %s) != 0;' % (dest,
+                                                                       self.reg(op.args[0]),
+                                                                       self.reg(op.args[1]),
+                                                                       self.reg(op.args[2])))
 
         elif op.desc is PrimitiveOp.DICT_SET:
-            assert dest is None
-            self.emit_lines('if (PyDict_SetItem(%s, %s, %s) < 0)' % (self.reg(op.args[0]),
-                                                                     self.reg(op.args[1]),
-                                                                     self.reg(op.args[2])),
-                            '    abort();')
+            self.emit_line('%s = PyDict_SetItem(%s, %s, %s) >= 0;' % (dest,
+                                                                      self.reg(op.args[0]),
+                                                                      self.reg(op.args[1]),
+                                                                      self.reg(op.args[2])))
 
         elif op.desc is PrimitiveOp.NONE:
             self.emit_lines(
