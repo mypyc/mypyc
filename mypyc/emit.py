@@ -1,6 +1,6 @@
 """Utilities for emitting C code."""
 
-from typing import List, Set, Dict
+from typing import List, Set, Dict, Optional
 
 from mypyc.common import REG_PREFIX
 from mypyc.ops import (
@@ -124,7 +124,16 @@ class Emitter:
             self.emit_line('Py_DECREF(%s);' % dest)
         # Otherwise assume it's an unboxed, pointerless value and do nothing.
 
-    def emit_cast(self, src: str, dest: str, typ: RType, declare_dest: bool = False) -> None:
+    def pretty_name(self, typ: RType) -> str:
+        pretty_name = typ.name
+        if pretty_name == 'sequence_tuple':
+            pretty_name = 'tuple'
+        elif isinstance(typ, OptionalRType):
+            pretty_name = '%s or None' % self.pretty_name(typ.value_type)
+        return pretty_name
+
+    def emit_cast(self, src: str, dest: str, typ: RType, declare_dest: bool = False,
+                  custom_message: Optional[str] = None) -> None:
         """Emit code for casting a value of given type (works for boxed types only).
 
         Assign NULL (error value) to dest if the value has an incompatible type.
@@ -137,6 +146,11 @@ class Emitter:
             typ: Type of value
             declare_dest: If True, also declare the variable 'dest'
         """
+        if custom_message is not None:
+            err = custom_message
+        else:
+            err = 'PyErr_SetString(PyExc_TypeError, "{} object expected");'.format(
+                self.pretty_name(typ))
         # TODO: Verify refcount handling.
         if typ.name in ('list', 'dict'):
             if declare_dest:
@@ -150,32 +164,40 @@ class Emitter:
             self.emit_lines(
                 'if ({}_Check({}))'.format(prefix, src),
                 '    {} = {};'.format(dest, src),
-                'else',
-                '    {} = NULL;'.format(dest))
+                'else {',
+                err,
+                '{} = NULL;'.format(dest),
+                '}')
         elif typ.name == 'sequence_tuple':
             if declare_dest:
                 self.emit_line('{} {};'.format(typ.ctype, dest))
             self.emit_lines(
                 'if (PyTuple_Check({}))'.format(src),
                 '    {} = {};'.format(dest, src),
-                'else',
-                '    {} = NULL;'.format(dest))
+                'else {',
+                err,
+                '{} = NULL;'.format(dest),
+                '}')
         elif isinstance(typ, UserRType):
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
             self.emit_lines(
                 'if (PyObject_TypeCheck({}, &{}))'.format(src, type_struct_name(typ.name)),
                 '    {} = {};'.format(dest, src),
-                'else',
-                '    {} = NULL;'.format(dest))
+                'else {',
+                err,
+                '{} = NULL;'.format(dest),
+                '}')
         elif typ.name == 'None':
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
             self.emit_lines(
                 'if ({} == Py_None)'.format(src),
                 '    {} = {};'.format(dest, src),
-                'else',
-                '    {} = NULL;'.format(dest))
+                'else {',
+                err,
+                '{} = NULL;'.format(dest),
+                '}')
         elif isinstance(typ, OptionalRType):
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
@@ -183,7 +205,7 @@ class Emitter:
                 'if ({} == Py_None)'.format(src),
                 '    {} = {};'.format(dest, src),
                 'else {')
-            self.emit_cast(src, dest, typ.value_type)
+            self.emit_cast(src, dest, typ.value_type, custom_message=err)
             self.emit_line('}')
         else:
             assert False, 'Cast not implemented: %s' % typ
