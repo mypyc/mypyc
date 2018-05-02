@@ -210,7 +210,7 @@ class Emitter:
         else:
             assert False, 'Cast not implemented: %s' % typ
 
-    def emit_unbox(self, src: str, dest: str, typ: RType, failure: str,
+    def emit_unbox(self, src: str, dest: str, typ: RType, custom_failure: Optional[str] = None,
                    declare_dest: bool = False, borrow: bool = False) -> None:
         """Emit code for unboxing a value of given type (from PyObject *).
 
@@ -228,7 +228,14 @@ class Emitter:
         """
         # TODO: Raise exception on failure.
         # TODO: Verify refcount handling.
-        failure = '    ' + failure
+        raise_exc = 'PyErr_SetString(PyExc_TypeError, "%s object expected");' % (
+            self.pretty_name(typ))
+        if custom_failure is not None:
+            failure = [raise_exc,
+                       custom_failure]
+        else:
+            failure = [raise_exc,
+                       '%s = %s;' % (dest, typ.c_error_value)]
         if typ.name == 'int':
             if declare_dest:
                 self.emit_line('CPyTagged {};'.format(dest))
@@ -237,39 +244,41 @@ class Emitter:
                 self.emit_line('    {} = CPyTagged_BorrowFromObject({});'.format(dest, src))
             else:
                 self.emit_line('    {} = CPyTagged_FromObject({});'.format(dest, src))
-            self.emit_lines('else',
-                            failure)
+            self.emit_line('else {')
+            self.emit_lines(*failure)
+            self.emit_line('}')
         elif typ.name == 'bool':
             # Whether we are borrowing or not makes no difference.
-            self.emit_lines(
-                'if (!PyBool_Check({}))'.format(src),
-                failure)
-            conversion = 'PyObject_IsTrue({})'.format(src)
             if declare_dest:
-                self.emit_line('char {} = {};'.format(dest, conversion))
-            else:
-                self.emit_line('{} = {};'.format(dest, conversion))
+                self.emit_line('char {};'.format(dest))
+            self.emit_line('if (!PyBool_Check(%s)) {' % src)
+            self.emit_lines(*failure)
+            self.emit_line('} else')
+            conversion = 'PyObject_IsTrue({})'.format(src)
+            self.emit_line('    {} = {};'.format(dest, conversion))
         elif isinstance(typ, TupleRType):
             self.declare_tuple_struct(typ)
-            self.emit_lines(
-                'if (!PyTuple_Check({}) || PyTuple_Size({}) != {})'.format(src, src,
-                                                                           len(typ.types)),
-                failure)  # TODO: Decrease refcount?
             if declare_dest:
                 self.emit_line('{} {};'.format(typ.ctype, dest))
+            self.emit_line(
+                'if (!PyTuple_Check({}) || PyTuple_Size({}) != {}) {{'.format(src, src,
+                                                                              len(typ.types)))
+            self.emit_lines(*failure)  # TODO: Decrease refcount?
+            self.emit_line('} else {')
             for i, item_type in enumerate(typ.types):
                 temp = self.temp_name()
                 self.emit_line('PyObject *{} = PyTuple_GetItem({}, {});'.format(temp, src, i))
                 temp2 = self.temp_name()
                 # Unbox or check the item.
                 if item_type.supports_unbox:
-                    self.emit_unbox(temp, temp2, item_type, failure, declare_dest=True,
+                    self.emit_unbox(temp, temp2, item_type, custom_failure, declare_dest=True,
                                     borrow=borrow)
                 else:
                     if not borrow:
                         self.emit_inc_ref(temp, ObjectRType())
                     self.emit_cast(temp, temp2, item_type, declare_dest=True)
                 self.emit_line('{}.f{} = {};'.format(dest, i, temp2))
+            self.emit_line('}')
         else:
             assert False, 'Unboxing not implemented: %s' % typ
 

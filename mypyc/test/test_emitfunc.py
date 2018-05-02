@@ -154,8 +154,10 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.assert_emit(Unbox(self.n, self.m, IntRType(), 55),
                          """if (PyLong_Check(cpy_r_m))
                                 cpy_r_n = CPyTagged_FromObject(cpy_r_m);
-                            else
+                            else {
+                                PyErr_SetString(PyExc_TypeError, "int object expected");
                                 abort();
+                            }
                          """)
 
     def test_new_list(self) -> None:
