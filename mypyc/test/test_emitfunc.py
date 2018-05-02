@@ -28,7 +28,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.context = EmitterContext()
         self.emitter = Emitter(self.context, self.env)
         self.declarations = Emitter(self.context, self.env)
-        self.visitor = FunctionEmitterVisitor(self.emitter, self.declarations)
+        self.visitor = FunctionEmitterVisitor(self.emitter, self.declarations, 'func', 'prog.py')
 
     def test_goto(self) -> None:
         self.assert_emit(Goto(Label(2)),
@@ -93,17 +93,17 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
 
     def test_branch_eq(self) -> None:
         self.assert_emit(Branch(self.n, self.m, Label(8), Label(9), Branch.INT_EQ),
-                         """if (CPyTagged_IsEq(cpy_r_n, cpy_r_m))
+                         """if (CPyTagged_IsEq(cpy_r_n, cpy_r_m)) {
                                 goto CPyL8;
-                            else
+                            } else
                                 goto CPyL9;
                          """)
         b = Branch(self.n, self.m, Label(8), Label(9), Branch.INT_LT)
         b.negated = True
         self.assert_emit(b,
-                         """if (!CPyTagged_IsLt(cpy_r_n, cpy_r_m))
+                         """if (!CPyTagged_IsLt(cpy_r_n, cpy_r_m)) {
                                 goto CPyL8;
-                            else
+                            } else
                                 goto CPyL9;
                          """)
 
@@ -239,7 +239,7 @@ class TestGenerateFunction(unittest.TestCase):
         self.block.ops.append(Return(self.reg))
         fn = FuncIR('myfunc', [self.arg], IntRType(), [self.block], self.env)
         emitter = Emitter(EmitterContext())
-        generate_native_function(fn, emitter)
+        generate_native_function(fn, emitter, 'prog.py')
         result = emitter.fragments
         assert_string_arrays_equal(
             [
@@ -255,7 +255,7 @@ class TestGenerateFunction(unittest.TestCase):
         self.block.ops.append(LoadInt(self.temp, 5))
         fn = FuncIR('myfunc', [self.arg], ListRType(), [self.block], self.env)
         emitter = Emitter(EmitterContext())
-        generate_native_function(fn, emitter)
+        generate_native_function(fn, emitter, 'prog.py')
         result = emitter.fragments
         assert_string_arrays_equal(
             [

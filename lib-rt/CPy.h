@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <Python.h>
+#include <frameobject.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -394,13 +395,13 @@ static bool CPyList_SetItem(PyObject *list, CPyTagged index, PyObject *value) {
         Py_ssize_t size = PyList_GET_SIZE(list);
         if (n >= 0) {
             if (n >= size) {
-                // TODO: Exception
+                PyErr_SetString(PyExc_IndexError, "list assignment index out of range");
                 return false;
             }
         } else {
             n += size;
             if (n < 0) {
-                // TODO: Exception
+                PyErr_SetString(PyExc_IndexError, "list assignment index out of range");
                 return false;
             }
         }
@@ -408,7 +409,7 @@ static bool CPyList_SetItem(PyObject *list, CPyTagged index, PyObject *value) {
         PyList_SET_ITEM(list, n, value);
         return true;
     } else {
-        // TODO: Exception
+        PyErr_SetString(PyExc_IndexError, "list assignment index out of range");
         return false;
     }
 }
@@ -441,6 +442,53 @@ static inline PyObject *CPyObject_GetAttrString(PyObject *obj, const char *attr_
         abort();
     }
     return result;
+}
+
+static PyCodeObject *CPy_CreateCodeObject(const char *filename, const char *funcname, int line) {
+    PyObject *filename_obj = PyUnicode_FromString(filename);
+    PyObject *funcname_obj = PyUnicode_FromString(funcname);
+    PyObject *empty_bytes = PyBytes_FromStringAndSize("", 0);
+    PyObject *empty_tuple = PyTuple_New(0);
+    PyCodeObject *code_obj = NULL;
+    if (filename_obj == NULL || funcname_obj == NULL || empty_bytes == NULL
+        || empty_tuple == NULL) {
+        goto Error;
+    }
+    code_obj = PyCode_New(0, 0, 0, 0, 0,
+                          empty_bytes,
+                          empty_tuple,
+                          empty_tuple,
+                          empty_tuple,
+                          empty_tuple,
+                          empty_tuple,
+                          filename_obj,
+                          funcname_obj,
+                          line,
+                          empty_bytes);
+  Error:
+    Py_XDECREF(empty_bytes);
+    Py_XDECREF(empty_tuple);
+    Py_XDECREF(filename_obj);
+    Py_XDECREF(funcname_obj);
+    return code_obj;
+}
+
+static void CPy_AddTraceback(const char *filename, const char *funcname, int line,
+                             PyObject *globals) {
+    PyCodeObject *code_obj = CPy_CreateCodeObject(filename, funcname, line);
+    if (code_obj == NULL) {
+        return;
+    }
+    PyThreadState *thread_state = PyThreadState_GET();
+    PyFrameObject *frame_obj = PyFrame_New(thread_state, code_obj, globals, 0);
+    if (frame_obj == NULL) {
+        Py_DECREF(code_obj);
+        return;
+    }
+    frame_obj->f_lineno = line;
+    PyTraceBack_Here(frame_obj);
+    Py_DECREF(code_obj);
+    Py_DECREF(frame_obj);
 }
 
 #ifdef __cplusplus

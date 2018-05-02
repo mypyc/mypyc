@@ -43,7 +43,8 @@ def compile_module_to_c(sources: List[BuildSource], module_name: str, options: O
     for fn in module.functions:
         insert_ref_count_opcodes(fn)
     # Generate C code.
-    generator = ModuleGenerator(module_name, module)
+    source_path = result.files[module_name].path
+    generator = ModuleGenerator(module_name, module, source_path)
     return generator.generate_c_module()
 
 
@@ -52,6 +53,7 @@ def generate_function_declaration(fn: FuncIR, emitter: Emitter) -> None:
         '{};'.format(native_function_header(fn)),
         '{};'.format(wrapper_function_header(fn)))
 
+
 def encode_as_c_string(s: str) -> Tuple[str, int]:
     """Produce a utf-8 encoded, escaped, quoted C string and its size from a string"""
     # This is a kind of abusive way to do this...
@@ -59,14 +61,18 @@ def encode_as_c_string(s: str) -> Tuple[str, int]:
     escaped = str(b)[2:-1].replace('"', '\\"')
     return '"{}"'.format(escaped), len(b)
 
+
 class ModuleGenerator:
-    def __init__(self, module_name: str, module: ModuleIR) -> None:
+    def __init__(self, module_name: str, module: ModuleIR, source_path: str) -> None:
         self.module_name = module_name
         self.module = module
+        self.source_path = source_path
         self.context = EmitterContext()
 
     def generate_c_module(self) -> str:
         emitter = Emitter(self.context)
+
+        self.declare_internal_globals()
 
         self.declare_imports(self.module.imports)
 
@@ -85,7 +91,7 @@ class ModuleGenerator:
 
         for fn in self.module.functions:
             emitter.emit_line()
-            generate_native_function(fn, emitter)
+            generate_native_function(fn, emitter, self.source_path)
             emitter.emit_line()
             generate_wrapper_function(fn, emitter)
 
@@ -100,6 +106,7 @@ class ModuleGenerator:
         return ''.join(declarations.fragments + emitter.fragments)
 
     def generate_module_def(self, emitter: Emitter) -> None:
+        # Emit module methods
         emitter.emit_line('static PyMethodDef module_methods[] = {')
         for fn in self.module.functions:
             emitter.emit_line(
@@ -111,6 +118,7 @@ class ModuleGenerator:
         emitter.emit_line('};')
         emitter.emit_line()
 
+        # Emit module definition struct
         emitter.emit_lines('static struct PyModuleDef module = {',
                            'PyModuleDef_HEAD_INIT,',
                            '"{}",'.format(self.module_name),
@@ -120,6 +128,8 @@ class ModuleGenerator:
                            'module_methods',
                            '};')
         emitter.emit_line()
+
+        # Emit module init function
         emitter.emit_lines('PyMODINIT_FUNC PyInit_{}(void)'.format(self.module_name),
                            '{',
                            'PyObject *m;')
@@ -129,6 +139,9 @@ class ModuleGenerator:
                                 '    return NULL;')
         emitter.emit_lines('m = PyModule_Create(&module);',
                            'if (m == NULL)',
+                           '    return NULL;')
+        emitter.emit_lines('_globals = PyModule_GetDict(m);',
+                           'if (_globals == NULL)',
                            '    return NULL;')
         self.generate_imports_init_section(self.module.imports, emitter)
 
@@ -185,6 +198,9 @@ class ModuleGenerator:
                 set(),
                 ['{}{}{};'.format(static_str, type_spaced, name)],
             )
+
+    def declare_internal_globals(self) -> None:
+        self.declare_global('PyObject *', '_globals')
 
     def declare_import(self, imp: str) -> None:
         self.declare_global('CPyModule *', c_module_name(imp))

@@ -21,10 +21,10 @@ def native_function_header(fn: FuncIR) -> str:
         args=', '.join(args) or 'void')
 
 
-def generate_native_function(fn: FuncIR, emitter: Emitter) -> None:
+def generate_native_function(fn: FuncIR, emitter: Emitter, source_path: str) -> None:
     declarations = Emitter(emitter.context, fn.env)
     body = Emitter(emitter.context, fn.env)
-    visitor = FunctionEmitterVisitor(body, declarations)
+    visitor = FunctionEmitterVisitor(body, declarations, fn.name, source_path)
 
     declarations.emit_line('{} {{'.format(native_function_header(fn)))
     body.indent()
@@ -47,10 +47,16 @@ def generate_native_function(fn: FuncIR, emitter: Emitter) -> None:
 
 
 class FunctionEmitterVisitor(OpVisitor):
-    def __init__(self, emitter: Emitter, declarations: Emitter) -> None:
+    def __init__(self,
+                 emitter: Emitter,
+                 declarations: Emitter,
+                 func_name: str,
+                 source_path: str) -> None:
         self.emitter = emitter
         self.declarations = declarations
         self.env = self.emitter.env
+        self.func_name = func_name
+        self.source_path = source_path
 
     def temp_name(self) -> str:
         return self.emitter.temp_name()
@@ -72,33 +78,37 @@ class FunctionEmitterVisitor(OpVisitor):
 
         if op.op == Branch.BOOL_EXPR:
             expr_result = self.reg(op.left) # right isn't used
-            self.emit_line('if ({}({}))'.format(neg, expr_result))
+            self.emit_line('if ({}({})) {{'.format(neg, expr_result))
         elif op.op == Branch.IS_NONE:
             compare = '!=' if op.negated else '=='
-            self.emit_line('if ({} {} Py_None)'.format(self.reg(op.left), compare))
+            self.emit_line('if ({} {} Py_None) {{'.format(self.reg(op.left), compare))
         elif op.op == Branch.IS_ERROR:
             typ = self.env.types[op.left]
             compare = '!=' if op.negated else '=='
             if isinstance(typ, TupleRType):
                 # TODO: What about empty tuple?
                 item_type = typ.types[0]
-                self.emit_line('if ({}.f0 {} {})'.format(self.reg(op.left),
+                self.emit_line('if ({}.f0 {} {}) {{'.format(self.reg(op.left),
                                                          compare,
                                                          item_type.c_error_value))
             else:
-                self.emit_line('if ({} {} {})'.format(self.reg(op.left),
+                self.emit_line('if ({} {} {}) {{'.format(self.reg(op.left),
                                                       compare,
                                                       typ.c_error_value))
         else:
             left = self.reg(op.left)
             right = self.reg(op.right)
             fn = FunctionEmitterVisitor.BRANCH_OP_MAP[op.op]
-            self.emit_line('if (%s%s(%s, %s))' % (neg, fn, left, right))
+            self.emit_line('if (%s%s(%s, %s)) {' % (neg, fn, left, right))
 
+        if op.traceback_entry is not None:
+            self.emit_line('CPy_AddTraceback("%s", "%s", %d, _globals);' % (self.source_path,
+                                                                            self.func_name,
+                                                                            op.line))
         self.emit_lines(
-            '    goto %s;' % self.label(op.true),
-            'else',
-            '    goto %s;' % self.label(op.false),
+            'goto %s;' % self.label(op.true),
+            '} else',
+            '    goto %s;' % self.label(op.false)
         )
 
     def visit_return(self, op: Return) -> None:

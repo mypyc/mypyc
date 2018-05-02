@@ -77,7 +77,8 @@ def split_blocks_at_errors(blocks: List[BasicBlock],
                 branch = Branch(op.dest, INVALID_REGISTER,
                                 true_label=error_label,
                                 false_label=Label(new_block.label + 1),
-                                op=variant)
+                                op=variant,
+                                line=op.line)
                 branch.negated = negated
                 branch.traceback_entry = (func, op.line)
                 partial_ops.add(branch)  # Only tweak true label of these
