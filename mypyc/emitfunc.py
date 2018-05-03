@@ -350,7 +350,7 @@ class FunctionEmitterVisitor(OpVisitor):
         self.emit_dec_ref(dest, op.target_type)
 
     def visit_box(self, op: Box) -> None:
-        self.emitter.emit_box(self.reg(op.src), self.reg(op.dest), op.type, 'abort();')
+        self.emitter.emit_box(self.reg(op.src), self.reg(op.dest), op.type)
 
     def visit_cast(self, op: Cast) -> None:
         self.emitter.emit_cast(self.reg(op.src), self.reg(op.dest), op.typ)

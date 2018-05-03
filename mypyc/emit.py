@@ -282,14 +282,14 @@ class Emitter:
         else:
             assert False, 'Unboxing not implemented: %s' % typ
 
-    def emit_box(self, src: str, dest: str, typ: RType, failure: str,
-                 declare_dest: bool = False) -> None:
+    def emit_box(self, src: str, dest: str, typ: RType, declare_dest: bool = False) -> None:
         """Emit code for boxing a value of give type.
 
         Generate a simple assignment if no boxing is needed.
 
         The source reference count is stolen for the result (no need to decref afterwards).
         """
+        # TODO: Always generate a new reference (if a reference type)
         if declare_dest:
             declaration = 'PyObject *'
         else:
@@ -304,16 +304,15 @@ class Emitter:
         elif isinstance(typ, TupleRType):
             self.declare_tuple_struct(typ)
             self.emit_line('{}{} = PyTuple_New({});'.format(declaration, dest, len(typ.types)))
-            self.emit_line('if ({} == NULL) {{'.format(dest))
-            self.emit_line('{}'.format(failure)) # TODO: Decrease refcounts?
-            self.emit_line('}')
+            self.emit_line('if ({} == NULL)'.format(dest))
+            self.emit_line('    CPyError_OutOfMemory();')
             # TODO: Fail if dest is None
             for i in range(0, len(typ.types)):
                 if not typ.supports_unbox:
                     self.emit_line('PyTuple_SetItem({}, {}, {}.f{}'.format(dest, i, src, i))
                 else:
                     inner_name = self.temp_name()
-                    self.emit_box('{}.f{}'.format(src, i), inner_name, typ.types[i], failure,
+                    self.emit_box('{}.f{}'.format(src, i), inner_name, typ.types[i],
                                   declare_dest=True)
                     self.emit_line('PyTuple_SetItem({}, {}, {});'.format(dest, i, inner_name, i))
         else:

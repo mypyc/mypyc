@@ -288,7 +288,7 @@ def generate_getter(cl: ClassIR,
     emitter.emit_line('return NULL;')
     emitter.emit_line('}')
     emitter.emit_inc_ref('self->{}'.format(attr), rtype)
-    emitter.emit_box('self->{}'.format(attr), 'retval', rtype, 'abort();', declare_dest=True)
+    emitter.emit_box('self->{}'.format(attr), 'retval', rtype, declare_dest=True)
     emitter.emit_line('return retval;')
     emitter.emit_line('}')
 
