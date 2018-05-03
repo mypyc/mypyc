@@ -131,17 +131,24 @@ def generate_object_struct(cl: ClassIR, emitter: Emitter) -> None:
 def generate_native_getters_and_setters(cl: ClassIR,
                                         emitter: Emitter) -> None:
     for attr, rtype in cl.attributes:
+        # Native getter
         emitter.emit_line('{}{}({} *self)'.format(rtype.ctype_spaced,
                                                native_getter_name(cl.name, attr),
                                                cl.struct_name))
         emitter.emit_line('{')
         if rtype.is_refcounted:
-            emitter.emit_line('if (self->{} != {}) {{'.format(attr, rtype.c_undefined_value))
+            emitter.emit_lines(
+                'if (self->{} == {}) {{'.format(attr, rtype.c_undefined_value),
+                'PyErr_SetString(PyExc_AttributeError, "attribute {} of {} undefined");'.format(
+                    repr(attr), repr(cl.name)),
+                '} else {')
             emitter.emit_inc_ref('self->{}'.format(attr), rtype)
             emitter.emit_line('}')
         emitter.emit_line('return self->{};'.format(attr))
         emitter.emit_line('}')
         emitter.emit_line()
+
+        # Native setter
         emitter.emit_line('void {}({} *self, {}value)'.format(native_setter_name(cl.name, attr),
                                                           cl.struct_name,
                                                           rtype.ctype_spaced))
@@ -308,10 +315,11 @@ def generate_setter(cl: ClassIR,
         emitter.emit_line('}')
     emitter.emit_line('if (value != NULL) {')
     if rtype.supports_unbox:
-        emitter.emit_unbox('value', 'tmp', rtype, 'abort();',declare_dest=True)
+        emitter.emit_unbox('value', 'tmp', rtype, custom_failure='return -1;', declare_dest=True)
     else:
         emitter.emit_cast('value', 'tmp', rtype, declare_dest=True)
-        # TODO: Handle error (tmp == NULL)
+        emitter.emit_lines('if (!tmp)',
+                           '    return -1;')
         emitter.emit_inc_ref('tmp', rtype)
     emitter.emit_line('self->{} = tmp;'.format(attr))
     emitter.emit_line('} else')

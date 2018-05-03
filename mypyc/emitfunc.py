@@ -284,13 +284,13 @@ class FunctionEmitterVisitor(OpVisitor):
         src = self.reg(op.src)
         rtype = op.rtype
         # TODO: Track errors
-        self.emit_line('CPY_SET_ATTR(%s, %d, %s, %s, %s), %s = 1;' % (
+        self.emit_line('%s = CPY_SET_ATTR(%s, %d, %s, %s, %s);' % (
+            dest,
             obj,
             rtype.setter_index(op.attr),
             src,
             rtype.struct_name,
-            rtype.attr_type(op.attr).ctype,
-            dest))
+            rtype.attr_type(op.attr).ctype))
 
     def visit_load_static(self, op: LoadStatic) -> None:
         dest = self.reg(op.dest)
