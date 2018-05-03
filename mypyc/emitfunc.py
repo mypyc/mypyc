@@ -143,10 +143,11 @@ class FunctionEmitterVisitor(OpVisitor):
             elif op.desc is PrimitiveOp.LIST_GET:
                 self.emit_line('%s = CPyList_GetItem(%s, %s);' % (dest, left, right))
             elif op.desc is PrimitiveOp.DICT_GET:
-                self.emit_lines('%s = PyDict_GetItem(%s, %s);' % (dest, left, right),
+                self.emit_lines('%s = PyDict_GetItemWithError(%s, %s);' % (dest, left, right),
                                 'if (!%s)' % dest,
-                                '    abort();',
-                                'Py_INCREF(%s);' % dest)
+                                '    PyErr_SetObject(PyExc_KeyError, %s);' % right,
+                                'else',
+                                '    Py_INCREF(%s);' % dest)
             elif op.desc is PrimitiveOp.LIST_REPEAT:
                 temp = self.temp_name()
                 self.declarations.emit_line('long long %s;' % temp)
