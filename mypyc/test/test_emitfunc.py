@@ -161,9 +161,11 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.assert_emit(PrimitiveOp(self.l, PrimitiveOp.NEW_LIST, [self.n, self.m], 55),
                          """cpy_r_l = PyList_New(2);
                             Py_INCREF(cpy_r_n);
-                            PyList_SET_ITEM(cpy_r_l, 0, cpy_r_n);
                             Py_INCREF(cpy_r_m);
-                            PyList_SET_ITEM(cpy_r_l, 1, cpy_r_m);
+                            if (cpy_r_l != NULL) {
+                                PyList_SET_ITEM(cpy_r_l, 0, cpy_r_n);
+                                PyList_SET_ITEM(cpy_r_l, 1, cpy_r_m);
+                            }
                          """)
 
     def test_list_append(self) -> None:
@@ -186,10 +188,11 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
 
     def test_dict_get_item(self) -> None:
         self.assert_emit(PrimitiveOp(self.o, PrimitiveOp.DICT_GET, [self.d, self.o2], 1),
-                         """cpy_r_o = PyDict_GetItem(cpy_r_d, cpy_r_o2);
+                         """cpy_r_o = PyDict_GetItemWithError(cpy_r_d, cpy_r_o2);
                             if (!cpy_r_o)
-                                abort();
-                            Py_INCREF(cpy_r_o);
+                                PyErr_SetObject(PyExc_KeyError, cpy_r_o2);
+                            else
+                                Py_INCREF(cpy_r_o);
                          """)
 
     def test_dict_set_item(self) -> None:
