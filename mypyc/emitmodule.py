@@ -1,6 +1,7 @@
 """Generate C code for a Python C extension module from Python source code."""
 
-from typing import List, Tuple
+from collections import OrderedDict
+from typing import List, Tuple, Dict
 
 from mypy.build import BuildSource, build
 from mypy.errors import CompileError
@@ -172,8 +173,9 @@ class ModuleGenerator:
         This runs in O(V + E).
         """
         result = []
-        marked_declarations = {k: MarkedDeclaration(v, False)
-                               for k, v in self.context.declarations.items()}
+        marked_declarations = OrderedDict()  # type: Dict[str, MarkedDeclaration]
+        for k, v in self.context.declarations.items():
+            marked_declarations[k] = MarkedDeclaration(v, False)
 
         def _toposort_visit(name):
             decl = marked_declarations[name]

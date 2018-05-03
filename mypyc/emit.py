@@ -1,5 +1,6 @@
 """Utilities for emitting C code."""
 
+from collections import OrderedDict
 from typing import List, Set, Dict, Optional
 
 from mypyc.common import REG_PREFIX
@@ -24,7 +25,7 @@ class EmitterContext:
         # A map of a C identifier to whatever the C identifier declares. Currently this is
         # used for declaring structs and the key corresponds to the name of the struct.
         # The declaration contains the body of the struct.
-        self.declarations = {} # type: Dict[str, HeaderDeclaration]
+        self.declarations = OrderedDict()  # type: Dict[str, HeaderDeclaration]
 
 
 class Emitter:
