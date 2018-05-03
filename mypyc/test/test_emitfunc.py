@@ -151,7 +151,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                                 cpy_r_n = CPyTagged_FromObject(cpy_r_m);
                             else {
                                 PyErr_SetString(PyExc_TypeError, "int object expected");
-                                abort();
+                                cpy_r_n = CPY_INT_TAG;
                             }
                          """)
 

@@ -179,7 +179,7 @@ def generate_constructor_for_class(cl: ClassIR,
                                                                  cl.type_struct,
                                                                  cl.type_struct))
     emitter.emit_line('if (self == NULL)')
-    emitter.emit_line('    abort(); // TODO')
+    emitter.emit_line('    return NULL;')
     emitter.emit_line('self->vtable = {};'.format(vtable_name))
     for attr, rtype in cl.attributes:
         emitter.emit_line('self->{} = {};'.format(attr, rtype.c_undefined_value))

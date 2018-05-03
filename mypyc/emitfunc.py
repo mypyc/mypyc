@@ -162,7 +162,7 @@ class FunctionEmitterVisitor(OpVisitor):
                 temp = self.temp_name()
                 self.emit_lines('int %s = PyDict_Contains(%s, %s);' % (temp, right, left),
                                 'if (%s < 0)' % temp,
-                                '    abort();',
+                                '    abort();',  # TODO: Error handling
                                 '%s = %s;' % (dest, temp))
             else:
                 assert False, op.desc
@@ -356,7 +356,7 @@ class FunctionEmitterVisitor(OpVisitor):
         self.emitter.emit_cast(self.reg(op.src), self.reg(op.dest), op.typ)
 
     def visit_unbox(self, op: Unbox) -> None:
-        self.emitter.emit_unbox(self.reg(op.src), self.reg(op.dest), op.type, 'abort();')
+        self.emitter.emit_unbox(self.reg(op.src), self.reg(op.dest), op.type)
 
     # Helpers
 
