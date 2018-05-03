@@ -260,7 +260,9 @@ def analyze_undefined_regs(blocks: List[BasicBlock],
     A register is undefined if there is some path from initial block
     where it has an undefined value.
     """
-    initial_undefined = {Register(reg) for reg in range(len(env.names)) if Register(reg) not in initial_defined}
+    initial_undefined = {Register(reg)
+                         for reg in range(len(env.names))
+                         if Register(reg) not in initial_defined}
     return run_analysis(blocks=blocks,
                         cfg=cfg,
                         gen_and_kill=UndefinedVisitor(),

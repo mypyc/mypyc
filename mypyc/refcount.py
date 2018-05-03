@@ -143,10 +143,17 @@ def insert_branch_inc_and_decrefs(
     source_borrowed = post_borrow[prev_key]
     if isinstance(block.ops[-1], Branch):
         branch = block.ops[-1]
-
+        # HAX: After we've checked against an error value the value we must not touch the
+        #      refcount since it will be a null pointer. The correct way to do this would be
+        #      to perform data flow analysis on whether a value can be null (or is always
+        #      null).
+        if branch.op == Branch.IS_ERROR:
+            omitted = {branch.left}
+        else:
+            omitted = set()
         true_opcodes = (
             after_branch_decrefs(
-                branch.true, pre_live, source_borrowed, source_live_regs, env) +
+                branch.true, pre_live, source_borrowed, source_live_regs, env, omitted) +
             after_branch_increfs(
                 branch.true, pre_borrow, source_borrowed, env))
         if true_opcodes:
@@ -171,13 +178,14 @@ def after_branch_decrefs(label: Label,
                          pre_live: AnalysisDict,
                          source_borrowed: Set[Register],
                          source_live_regs: Set[Register],
-                         env: Environment) -> List[Op]:
+                         env: Environment,
+                         omitted: Iterable[Register] = ()) -> List[Op]:
     target_pre_live = pre_live[label, 0]
     decref = source_live_regs - target_pre_live - source_borrowed
     if decref:
         return [DecRef(reg, env.types[reg])
                 for reg in sorted(decref)
-                if env.types[reg].is_refcounted]
+                if env.types[reg].is_refcounted and reg not in omitted]
     return []
 
 

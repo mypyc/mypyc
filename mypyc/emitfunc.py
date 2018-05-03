@@ -141,9 +141,7 @@ class FunctionEmitterVisitor(OpVisitor):
                 fn = FunctionEmitterVisitor.OP_MAP[op.desc]
                 self.emit_line('%s = %s(%s, %s);' % (dest, fn, left, right))
             elif op.desc is PrimitiveOp.LIST_GET:
-                self.emit_lines('%s = CPyList_GetItem(%s, %s);' % (dest, left, right),
-                                'if (!%s)' % dest,
-                                '    abort();')
+                self.emit_line('%s = CPyList_GetItem(%s, %s);' % (dest, left, right))
             elif op.desc is PrimitiveOp.DICT_GET:
                 self.emit_lines('%s = PyDict_GetItem(%s, %s);' % (dest, left, right),
                                 'if (!%s)' % dest,
@@ -197,11 +195,15 @@ class FunctionEmitterVisitor(OpVisitor):
             self.emit_line('{} = 0;'.format(dest))
 
         elif op.desc is PrimitiveOp.NEW_LIST:
+            # TODO: This would be better split into multiple smaller ops.
             self.emit_line('%s = PyList_New(%d); ' % (dest, len(op.args)))
+            for arg in op.args:
+                self.emit_line('Py_INCREF(%s);' % self.reg(arg))
+            self.emit_line('if (%s != NULL) {' % dest)
             for i, arg in enumerate(op.args):
                 reg = self.reg(arg)
-                self.emit_line('Py_INCREF(%s);' % reg)
                 self.emit_line('PyList_SET_ITEM(%s, %s, %s);' % (dest, i, reg))
+            self.emit_line('}')
 
         elif op.desc is PrimitiveOp.NEW_TUPLE:
             tuple_type = self.env.types[op.dest]

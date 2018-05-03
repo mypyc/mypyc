@@ -11,22 +11,16 @@ L0:
     r0 = 0
     r1 = x[r0] :: list
     dec_ref r0 :: int
-    if is_error(r1) goto L4 (error at f:3) else goto L1
+    if is_error(r1) goto L3 (error at f:3) else goto L1
 L1:
     r2 = unbox(int, r1)
     dec_ref r1
-    if is_error(r2) goto L5 (error at f:3) else goto L2
+    if is_error(r2) goto L3 (error at f:3) else goto L2
 L2:
     return r2
 L3:
     r3 = <error> :: int
     return r3
-L4:
-    dec_ref r1
-    goto L3
-L5:
-    dec_ref r2 :: int
-    goto L3
 
 [case testListAppendAndSetItemError]
 from typing import List
@@ -73,9 +67,9 @@ L1:
 L2:
     inc_ref x
     r1 = cast(A, x)
-    if is_error(r1) goto L7 (error at f:8) else goto L3
+    if is_error(r1) goto L6 (error at f:8) else goto L3
 L3:
-    if not r1 is None goto L8 else goto L9 :: object
+    if not r1 is None goto L7 else goto L8 :: object
 L4:
     r2 = 2
     return r2
@@ -87,11 +81,8 @@ L6:
     return r4
 L7:
     dec_ref r1
-    goto L6
-L8:
-    dec_ref r1
     goto L4
-L9:
+L8:
     dec_ref r1
     goto L5
 
@@ -139,10 +130,8 @@ L7:
 L8:
     dec_ref sum :: int
     dec_ref i :: int
-    dec_ref r0
     goto L6
 L9:
     dec_ref sum :: int
     dec_ref i :: int
-    dec_ref r1 :: int
     goto L6
