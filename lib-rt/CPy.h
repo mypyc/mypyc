@@ -423,19 +423,22 @@ static PyObject *CPySequenceTuple_GetItem(PyObject *tuple, CPyTagged index) {
         Py_ssize_t size = PyTuple_GET_SIZE(tuple);
         if (n >= 0) {
             if (n >= size) {
-                abort();
+                PyErr_SetString(PyExc_IndexError, "tuple index out of range");
+                return NULL;
             }
         } else {
             n += size;
             if (n < 0) {
-                abort();
+                PyErr_SetString(PyExc_IndexError, "tuple index out of range");
+                return NULL;
             }
         }
         PyObject *result = PyTuple_GET_ITEM(tuple, n);
         Py_INCREF(result);
         return result;
     } else {
-        abort(); // TODO: Generate exception
+        PyErr_SetString(PyExc_IndexError, "tuple index out of range");
+        return NULL;
     }
 }
 

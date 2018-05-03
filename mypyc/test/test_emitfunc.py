@@ -74,10 +74,8 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """long long __tmp1;
                             __tmp1 = CPyTagged_AsLongLong(cpy_r_n);
                             if (__tmp1 == -1 && PyErr_Occurred())
-                                abort();
+                                CPyError_OutOfMemory();
                             cpy_r_ll = PySequence_Repeat(cpy_r_l, __tmp1);
-                            if (!cpy_r_ll)
-                                abort();
                          """)
 
     def test_int_neg(self) -> None:

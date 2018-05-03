@@ -154,14 +154,10 @@ class FunctionEmitterVisitor(OpVisitor):
                 self.emit_lines(
                     '%s = CPyTagged_AsLongLong(%s);' % (temp, right),
                     'if (%s == -1 && PyErr_Occurred())' % temp,
-                    '    abort();',
-                    '%s = PySequence_Repeat(%s, %s);' % (dest, left, temp),
-                    'if (!%s)' % dest,
-                    '    abort();')
+                    '    CPyError_OutOfMemory();',
+                    '%s = PySequence_Repeat(%s, %s);' % (dest, left, temp))
             elif op.desc is PrimitiveOp.HOMOGENOUS_TUPLE_GET:
-                self.emit_lines('%s = CPySequenceTuple_GetItem(%s, %s);' % (dest, left, right),
-                                'if (!%s)' % dest,
-                                '    abort();')
+                self.emit_line('%s = CPySequenceTuple_GetItem(%s, %s);' % (dest, left, right))
             elif op.desc is PrimitiveOp.DICT_CONTAINS:
                 temp = self.temp_name()
                 self.emit_lines('int %s = PyDict_Contains(%s, %s);' % (temp, right, left),
