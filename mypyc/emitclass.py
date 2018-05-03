@@ -149,7 +149,7 @@ def generate_native_getters_and_setters(cl: ClassIR,
         emitter.emit_line()
 
         # Native setter
-        emitter.emit_line('void {}({} *self, {}value)'.format(native_setter_name(cl.name, attr),
+        emitter.emit_line('bool {}({} *self, {}value)'.format(native_setter_name(cl.name, attr),
                                                           cl.struct_name,
                                                           rtype.ctype_spaced))
         emitter.emit_line('{')
@@ -158,8 +158,9 @@ def generate_native_getters_and_setters(cl: ClassIR,
             emitter.emit_dec_ref('self->{}'.format(attr), rtype)
             emitter.emit_line('}')
         emitter.emit_inc_ref('value'.format(attr), rtype)
-        emitter.emit_line('self->{} = value;'.format(attr))
-        emitter.emit_line('}')
+        emitter.emit_lines('self->{} = value;'.format(attr),
+                           'return 1;',
+                           '}')
         emitter.emit_line()
 
 
