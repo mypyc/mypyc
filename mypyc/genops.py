@@ -66,6 +66,8 @@ class Mapper:
                 return DictRType()
             elif typ.type.fullname() == 'builtins.tuple':
                 return SequenceTupleRType()
+            elif typ.type.fullname() == 'builtins.object':
+                return ObjectRType()
             elif typ.type in self.type_to_ir:
                 return UserRType(self.type_to_ir[typ.type])
         elif isinstance(typ, TupleType):
@@ -209,10 +211,10 @@ class IRBuilder(NodeVisitor[Register]):
         for arg in fdef.arguments:
             assert arg.variable.type, "Function argument missing type"
             self.environment.add_local(arg.variable, self.type_to_rtype(arg.variable.type))
+        self.ret_type = self.convert_return_type(fdef)
         fdef.body.accept(self)
 
-        ret_type = self.convert_return_type(fdef)
-        if ret_type.name == 'None':
+        if self.ret_type.name == 'None':
             self.add_implicit_return()
         else:
             self.add_implicit_unreachable()
@@ -259,6 +261,7 @@ class IRBuilder(NodeVisitor[Register]):
     def visit_return_stmt(self, stmt: ReturnStmt) -> Register:
         if stmt.expr:
             retval = self.accept(stmt.expr)
+            retval = self.coerce(retval, self.node_type(stmt.expr), self.ret_type)
         else:
             retval = self.environment.add_temp(NoneRType())
             self.add(PrimitiveOp(retval, PrimitiveOp.NONE, [], line=-1))
@@ -804,12 +807,22 @@ class IRBuilder(NodeVisitor[Register]):
             self.add(PrimitiveOp(target, PrimitiveOp.LIST_TO_HOMOGENOUS_TUPLE, [arg], expr.line))
         else:
             target_type = self.node_type(expr)
-            if not(self.is_native_name_expr(expr.callee)):
+            if not self.is_native_name_expr(expr.callee):
                 function = self.accept(expr.callee)
                 return self.py_call(function, expr.args, target_type, expr.line)
 
             target = self.alloc_target(target_type)
-            args = [self.accept(arg) for arg in expr.args]
+            callee_type = self.types[expr.callee]
+            assert isinstance(callee_type, CallableType)
+            # TODO: Argument kinds
+            formal_arg_types = [self.type_to_rtype(t) for t in callee_type.arg_types]
+            print(callee_type, formal_arg_types)
+            args = []
+            for arg_expr, arg_type in zip(expr.args, formal_arg_types):
+                reg = self.accept(arg_expr)
+                typ = self.environment.types[reg]
+                reg = self.coerce(reg, typ, arg_type)
+                args.append(reg)
             self.add(Call(target, fn, args, expr.line))
         return target
 
@@ -1066,3 +1079,16 @@ class IRBuilder(NodeVisitor[Register]):
         target = self.alloc_target(UnicodeRType())
         self.add(LoadStatic(target, static_symbol))
         return target
+
+    def coerce(self, src: Register, src_type: RType, target_type: RType) -> Register:
+        """Generate a trivial conversion from one type to other (only if needed).
+
+        For example, int -> object boxes the source int; int -> int emits nothing.
+        All conversions preserve object value.
+
+        Returns the register with the converted value (may be same as src).
+        """
+        # TODO: Also handle object -> int and similar (unbox/cast).
+        if src_type.supports_unbox and not target_type.supports_unbox:
+            return self.box(src, src_type)
+        return src
