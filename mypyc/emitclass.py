@@ -27,7 +27,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
         emitter.emit_line()
 
     # Use dummy empty __init__ for now.
-    # TODO: Use UserRType
+    # TODO: Use RInstance
     init = FuncIR(cl.name, None, [], object_rprimitive, [], Environment())
     emitter.emit_line(native_function_header(init) + ';')
     emit_line()

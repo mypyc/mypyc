@@ -5,7 +5,7 @@ from typing import List, Set, Dict, Optional
 
 from mypyc.common import REG_PREFIX
 from mypyc.ops import (
-    Environment, Label, Register, RType, RTuple, UserRType, ROptional,
+    Environment, Label, Register, RType, RTuple, RInstance, ROptional,
     RPrimitive, type_struct_name, is_int_rprimitive, is_bool_rprimitive, short_name,
     is_list_rprimitive, is_dict_rprimitive, is_tuple_rprimitive, is_none_rprimitive,
     object_rprimitive
@@ -179,7 +179,7 @@ class Emitter:
                 err,
                 '{} = NULL;'.format(dest),
                 '}')
-        elif isinstance(typ, UserRType):
+        elif isinstance(typ, RInstance):
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
             self.emit_lines(

@@ -255,8 +255,8 @@ class RTuple(RType):
         return result
 
 
-class UserRType(RType):
-    """Instance of user-defined class."""
+class RInstance(RType):
+    """Instance of user-defined class (compiled to C extension class)."""
 
     def __init__(self, class_ir: 'ClassIR') -> None:
         self.name = class_ir.name
@@ -264,7 +264,7 @@ class UserRType(RType):
         self.ctype = 'PyObject *'
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
-        return visitor.visit_user_rtype(self)
+        return visitor.visit_rinstance(self)
 
     @property
     def supports_unbox(self) -> bool:
@@ -294,7 +294,7 @@ class UserRType(RType):
         assert False, '%r has no attribute %r' % (self.name, name)
 
     def __repr__(self) -> str:
-        return '<UserRType %s>' % self.name
+        return '<RInstance %s>' % self.name
 
 
 class ROptional(RType):
@@ -981,7 +981,7 @@ class GetAttr(StrictRegisterOp):
 
     error_kind = ERR_MAGIC
 
-    def __init__(self, dest: Register, obj: Register, attr: str, rtype: UserRType,
+    def __init__(self, dest: Register, obj: Register, attr: str, rtype: RInstance,
                  line: int) -> None:
         super().__init__(dest, line)
         self.obj = obj
@@ -1003,7 +1003,7 @@ class SetAttr(StrictRegisterOp):
 
     error_kind = ERR_FALSE
 
-    def __init__(self, dest: Register, obj: Register, attr: str, src: Register, rtype: UserRType,
+    def __init__(self, dest: Register, obj: Register, attr: str, src: Register, rtype: RInstance,
                  line: int) -> None:
         super().__init__(dest, line)
         self.obj = obj
@@ -1336,7 +1336,7 @@ class RTypeVisitor(Generic[T]):
         raise NotImplementedError
 
     @abstractmethod
-    def visit_user_rtype(self, typ: UserRType) -> T:
+    def visit_rinstance(self, typ: RInstance) -> T:
         raise NotImplementedError
 
     @abstractmethod

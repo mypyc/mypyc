@@ -30,7 +30,7 @@ from mypy.subtypes import is_named_instance
 from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Register, Label, Return, FuncIR, Assign,
     PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple,
-    Unreachable, TupleGet, ClassIR, UserRType, ModuleIR, GetAttr, SetAttr, LoadStatic,
+    Unreachable, TupleGet, ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic,
     PyGetAttr, PyCall, ROptional, c_module_name, PyMethodCall, INVALID_REGISTER,
     INVALID_LABEL, int_rprimitive, is_int_rprimitive, bool_rprimitive, list_rprimitive,
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
@@ -72,7 +72,7 @@ class Mapper:
             elif typ.type.fullname() == 'builtins.object':
                 return object_rprimitive
             elif typ.type in self.type_to_ir:
-                return UserRType(self.type_to_ir[typ.type])
+                return RInstance(self.type_to_ir[typ.type])
         elif isinstance(typ, TupleType):
             return RTuple([self.type_to_rtype(t) for t in typ.items])
         elif isinstance(typ, CallableType):
@@ -106,7 +106,7 @@ class AssignmentTargetIndex(AssignmentTarget):
 
 
 class AssignmentTargetAttr(AssignmentTarget):
-    def __init__(self, obj_reg: Register, attr: str, obj_type: UserRType) -> None:
+    def __init__(self, obj_reg: Register, attr: str, obj_type: RInstance) -> None:
         self.obj_reg = obj_reg
         self.attr = attr
         self.obj_type = obj_type
@@ -336,7 +336,7 @@ class IRBuilder(NodeVisitor[Register]):
         elif isinstance(lvalue, MemberExpr):
             # Attribute assignment x.y = e
             obj_type = self.node_type(lvalue.expr)
-            assert isinstance(obj_type, UserRType), 'Attribute set only supported for user types'
+            assert isinstance(obj_type, RInstance), 'Attribute set only supported for user types'
             obj_reg = self.accept(lvalue.expr)
             return AssignmentTargetAttr(obj_reg, lvalue.name, obj_type)
 
@@ -732,8 +732,7 @@ class IRBuilder(NodeVisitor[Register]):
             attr_type = self.node_type(expr)
             target = self.alloc_target(attr_type)
             obj_type = self.node_type(expr.expr)
-            assert isinstance(obj_type,
-                              UserRType), 'Attribute access not supported: %s' % obj_type
+            assert isinstance(obj_type, RInstance), 'Attribute access not supported: %s' % obj_type
             self.add(GetAttr(target, obj_reg, expr.name, obj_type, expr.line))
             return target
 

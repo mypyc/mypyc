@@ -6,7 +6,7 @@ from mypy.test.helpers import assert_string_arrays_equal
 from mypyc.ops import (
     Environment, BasicBlock, FuncIR, RuntimeArg, RType, Goto, Return, LoadInt, Assign,
     PrimitiveOp, IncRef, DecRef, Branch, Call, Unbox, Box, RTuple, TupleGet, GetAttr,
-    ClassIR, UserRType, SetAttr, Op, Label, int_rprimitive, bool_rprimitive, list_rprimitive,
+    ClassIR, RInstance, SetAttr, Op, Label, int_rprimitive, bool_rprimitive, list_rprimitive,
     dict_rprimitive, object_rprimitive
 )
 from mypyc.emit import Emitter, EmitterContext
@@ -173,14 +173,14 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
     def test_get_attr(self) -> None:
         ir = ClassIR('A', [('x', bool_rprimitive),
                            ('y', int_rprimitive)])
-        rtype = UserRType(ir)
+        rtype = RInstance(ir)
         self.assert_emit(GetAttr(self.n, self.m, 'y', rtype, 1),
                          """cpy_r_n = CPY_GET_ATTR(cpy_r_m, 2, AObject, CPyTagged);""")
 
     def test_set_attr(self) -> None:
         ir = ClassIR('A', [('x', bool_rprimitive),
                            ('y', int_rprimitive)])
-        rtype = UserRType(ir)
+        rtype = RInstance(ir)
         self.assert_emit(SetAttr(self.b, self.n, 'y', self.m, rtype, 1),
                          """cpy_r_b = CPY_SET_ATTR(cpy_r_n, 3, cpy_r_m, AObject, CPyTagged);""")
 
