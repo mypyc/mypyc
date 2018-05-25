@@ -188,7 +188,7 @@ def is_tuple_rinstance(rtype: RType) -> bool:
     return isinstance(rtype, RInstance) and rtype.name == 'builtins.tuple'
 
 
-class TupleRType(RType):
+class RTuple(RType):
     """Fixed-length tuple."""
 
     def __init__(self, types: List[RType]) -> None:
@@ -197,7 +197,7 @@ class TupleRType(RType):
         self.ctype = 'struct {}'.format(self.struct_name)
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
-        return visitor.visit_tuple_rtype(self)
+        return visitor.visit_rtuple(self)
 
     @property
     def supports_unbox(self) -> bool:
@@ -235,10 +235,10 @@ class TupleRType(RType):
         return 'tuple[%s]' % ', '.join(str(typ) for typ in self.types)
 
     def __repr__(self) -> str:
-        return '<TupleRType %s>' % ', '.join(repr(typ) for typ in self.types)
+        return '<RTuple %s>' % ', '.join(repr(typ) for typ in self.types)
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, TupleRType) and self.types == other.types
+        return isinstance(other, RTuple) and self.types == other.types
 
     def __hash__(self) -> int:
         return hash((self.name, self.types))
@@ -1331,14 +1331,18 @@ def format_func(fn: FuncIR) -> List[str]:
 
 
 class RTypeVisitor(Generic[T]):
+    @abstractmethod
     def visit_rinstance(self, typ: RInstance) -> T:
-        pass
+        raise NotImplementedError
 
+    @abstractmethod
     def visit_user_rtype(self, typ: UserRType) -> T:
-        pass
+        raise NotImplementedError
 
+    @abstractmethod
     def visit_optional_rtype(self, typ: OptionalRType) -> T:
-        pass
+        raise NotImplementedError
 
-    def visit_tuple_rtype(self, typ: TupleRType) -> T:
-        pass
+    @abstractmethod
+    def visit_rtuple(self, typ: RTuple) -> T:
+        raise NotImplementedError

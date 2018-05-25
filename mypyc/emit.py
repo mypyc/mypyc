@@ -5,7 +5,7 @@ from typing import List, Set, Dict, Optional
 
 from mypyc.common import REG_PREFIX
 from mypyc.ops import (
-    Environment, Label, Register, RType, TupleRType, UserRType, OptionalRType,
+    Environment, Label, Register, RType, RTuple, UserRType, OptionalRType,
     RInstance, type_struct_name, is_int_rinstance, is_bool_rinstance, short_name, is_list_rinstance,
     is_dict_rinstance, is_tuple_rinstance, is_none_rinstance, object_rinstance
 )
@@ -83,12 +83,12 @@ class Emitter:
 
     # Higher-level operations
 
-    def declare_tuple_struct(self, tuple_type: TupleRType) -> None:
+    def declare_tuple_struct(self, tuple_type: RTuple) -> None:
         if tuple_type.struct_name not in self.context.declarations:
             dependencies = set()
             for typ in tuple_type.types:
                 # XXX other types might eventually need similar behavior
-                if isinstance(typ, TupleRType):
+                if isinstance(typ, RTuple):
                     dependencies.add(typ.struct_name)
 
             self.context.declarations[tuple_type.struct_name] = HeaderDeclaration(
@@ -104,7 +104,7 @@ class Emitter:
         """
         if is_int_rinstance(rtype):
             self.emit_line('CPyTagged_IncRef(%s);' % dest)
-        elif isinstance(rtype, TupleRType):
+        elif isinstance(rtype, RTuple):
             for i, item_type in enumerate(rtype.types):
                 self.emit_inc_ref('{}.f{}'.format(dest, i), item_type)
         elif not rtype.supports_unbox:
@@ -119,7 +119,7 @@ class Emitter:
         """
         if is_int_rinstance(rtype):
             self.emit_line('CPyTagged_DecRef(%s);' % dest)
-        elif isinstance(rtype, TupleRType):
+        elif isinstance(rtype, RTuple):
             for i, item_type in enumerate(rtype.types):
                 self.emit_dec_ref('{}.f{}'.format(dest, i), item_type)
         elif not rtype.supports_unbox:
@@ -256,7 +256,7 @@ class Emitter:
             self.emit_line('} else')
             conversion = 'PyObject_IsTrue({})'.format(src)
             self.emit_line('    {} = {};'.format(dest, conversion))
-        elif isinstance(typ, TupleRType):
+        elif isinstance(typ, RTuple):
             self.declare_tuple_struct(typ)
             if declare_dest:
                 self.emit_line('{} {};'.format(typ.ctype, dest))
@@ -301,7 +301,7 @@ class Emitter:
             # TODO: The Py_RETURN macros return the correct PyObject * with reference count
             #       handling. Relevant here?
             self.emit_lines('{}{} = PyBool_FromLong({});'.format(declaration, dest, src))
-        elif isinstance(typ, TupleRType):
+        elif isinstance(typ, RTuple):
             self.declare_tuple_struct(typ)
             self.emit_line('{}{} = PyTuple_New({});'.format(declaration, dest, len(typ.types)))
             self.emit_line('if ({} == NULL)'.format(dest))
@@ -322,7 +322,7 @@ class Emitter:
 
     def emit_error_check(self, value: str, rtype: RType, failure: str) -> None:
         """Emit code for checking a native function return value for uncaught exception."""
-        if not isinstance(rtype, TupleRType):
+        if not isinstance(rtype, RTuple):
             self.emit_line('if ({} == {}) {{'.format(value, rtype.c_error_value))
         else:
             self.emit_line('if ({}.f0 == {}) {{'.format(value, rtype.types[0].c_error_value))
@@ -341,7 +341,7 @@ class Emitter:
             self.emit_line('if (CPyTagged_CheckLong({})) {{'.format(target))
             self.emit_line('Py_VISIT(CPyTagged_LongAsObject({}));'.format(target))
             self.emit_line('}')
-        elif isinstance(rtype, TupleRType):
+        elif isinstance(rtype, RTuple):
             for i, item_type in enumerate(rtype.types):
                 self.emit_gc_visit('{}.f{}'.format(target, i), item_type)
         elif rtype.ctype == 'PyObject *':
@@ -365,7 +365,7 @@ class Emitter:
             self.emit_line('{} = {};'.format(target, rtype.c_undefined_value))
             self.emit_line('Py_XDECREF(CPyTagged_LongAsObject(__tmp));')
             self.emit_line('}')
-        elif isinstance(rtype, TupleRType):
+        elif isinstance(rtype, RTuple):
             for i, item_type in enumerate(rtype.types):
                 self.emit_gc_clear('{}.f{}'.format(target, i), item_type)
         elif rtype.ctype == 'PyObject *' and rtype.c_undefined_value == 'NULL':

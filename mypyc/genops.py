@@ -29,7 +29,7 @@ from mypy.subtypes import is_named_instance
 
 from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Register, Label, Return, FuncIR, Assign,
-    PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, TupleRType,
+    PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple,
     Unreachable, TupleGet, ClassIR, UserRType, ModuleIR, GetAttr, SetAttr, LoadStatic,
     PyGetAttr, PyCall, RInstance, OptionalRType, c_module_name, PyMethodCall, INVALID_REGISTER,
     INVALID_LABEL, int_rinstance, is_int_rinstance, bool_rinstance, list_rinstance,
@@ -74,7 +74,7 @@ class Mapper:
             elif typ.type in self.type_to_ir:
                 return UserRType(self.type_to_ir[typ.type])
         elif isinstance(typ, TupleType):
-            return TupleRType([self.type_to_rtype(t) for t in typ.items])
+            return RTuple([self.type_to_rtype(t) for t in typ.items])
         elif isinstance(typ, CallableType):
             return object_rinstance
         elif isinstance(typ, NoneTyp):
@@ -653,7 +653,7 @@ class IRBuilder(NodeVisitor[Register]):
             self.add(PrimitiveOp(tmp, op, [base_reg, index_reg], expr.line))
             target = self.alloc_target(target_type)
             return self.unbox_or_cast(tmp, target_type, expr.line, target)
-        elif isinstance(base_rtype, TupleRType):
+        elif isinstance(base_rtype, RTuple):
             assert isinstance(expr.index, IntExpr)  # TODO
             target = self.alloc_target(target_type)
             self.add(TupleGet(target, base_reg, expr.index.value,
@@ -808,7 +808,7 @@ class IRBuilder(NodeVisitor[Register]):
                 self.add(PrimitiveOp(target, PrimitiveOp.LIST_LEN, [arg], expr.line))
             elif is_tuple_rinstance(expr_rtype):
                 self.add(PrimitiveOp(target, PrimitiveOp.HOMOGENOUS_TUPLE_LEN, [arg], expr.line))
-            elif isinstance(expr_rtype, TupleRType):
+            elif isinstance(expr_rtype, RTuple):
                 self.add(LoadInt(target, len(expr_rtype.types)))
             else:
                 assert False, "unsupported use of len"

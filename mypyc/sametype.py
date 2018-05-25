@@ -1,7 +1,7 @@
 """Same type check for RTypes."""
 
 from mypyc.ops import (
-    RType, RTypeVisitor, UserRType, OptionalRType, RInstance, TupleRType
+    RType, RTypeVisitor, UserRType, OptionalRType, RInstance, RTuple
 )
 
 
@@ -23,7 +23,7 @@ class SameTypeVisitor(RTypeVisitor[bool]):
     def visit_rinstance(self, left: RInstance) -> bool:
         return isinstance(self.right, RInstance) and left.name == self.right.name
 
-    def visit_tuple_rtype(self, left: TupleRType) -> bool:
-        return (isinstance(self.right, TupleRType)
+    def visit_rtuple(self, left: RTuple) -> bool:
+        return (isinstance(self.right, RTuple)
             and len(self.right.types) == len(left.types)
             and all(is_same_type(t1, t2) for t1, t2 in zip(left.types, self.right.types)))

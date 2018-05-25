@@ -5,7 +5,7 @@ from mypyc.emit import Emitter
 from mypyc.ops import (
     FuncIR, OpVisitor, Goto, Branch, Return, PrimitiveOp, Assign, LoadInt, LoadErrorValue, GetAttr,
     SetAttr, LoadStatic, TupleGet, Call, PyCall, PyGetAttr, IncRef, DecRef, Box, Cast, Unbox, Label,
-    Register, RType, OP_BINARY, TupleRType, PyMethodCall
+    Register, RType, OP_BINARY, RTuple, PyMethodCall
 )
 
 
@@ -85,7 +85,7 @@ class FunctionEmitterVisitor(OpVisitor[None]):
         elif op.op == Branch.IS_ERROR:
             typ = self.env.types[op.left]
             compare = '!=' if op.negated else '=='
-            if isinstance(typ, TupleRType):
+            if isinstance(typ, RTuple):
                 # TODO: What about empty tuple?
                 item_type = typ.types[0]
                 self.emit_line('if ({}.f0 {} {}) {{'.format(self.reg(op.left),
@@ -209,7 +209,7 @@ class FunctionEmitterVisitor(OpVisitor[None]):
 
         elif op.desc is PrimitiveOp.NEW_TUPLE:
             tuple_type = self.env.types[op.dest]
-            assert isinstance(tuple_type, TupleRType)
+            assert isinstance(tuple_type, RTuple)
             self.emitter.declare_tuple_struct(tuple_type)
             for i, arg in enumerate(op.args):
                 self.emit_line('{}.f{} = {};'.format(dest, i, self.reg(arg)))
@@ -263,7 +263,7 @@ class FunctionEmitterVisitor(OpVisitor[None]):
         self.emit_line('%s = %d;' % (dest, op.value * 2))
 
     def visit_load_error_value(self, op: LoadErrorValue) -> None:
-        if isinstance(op.rtype, TupleRType):
+        if isinstance(op.rtype, RTuple):
             values = [item.c_undefined_value for item in op.rtype.types]
             tmp = self.temp_name()
             self.emit_line('%s %s = { %s };' % (op.rtype.ctype, tmp, ', '.join(values)))
