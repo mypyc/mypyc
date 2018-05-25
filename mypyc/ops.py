@@ -297,7 +297,7 @@ class UserRType(RType):
         return '<UserRType %s>' % self.name
 
 
-class OptionalRType(RType):
+class ROptional(RType):
     """Optional[x]"""
 
     def __init__(self, value_type: RType) -> None:
@@ -306,7 +306,7 @@ class OptionalRType(RType):
         self.ctype = 'PyObject *'
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
-        return visitor.visit_optional_rtype(self)
+        return visitor.visit_roptional(self)
 
     @property
     def supports_unbox(self) -> bool:
@@ -317,13 +317,13 @@ class OptionalRType(RType):
         return 'NULL'
 
     def __repr__(self) -> str:
-        return '<OptionalRType %s>' % self.value_type
+        return '<ROptional %s>' % self.value_type
 
     def __str__(self) -> str:
         return 'optional[%s]' % self.value_type
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, OptionalRType) and other.value_type == self.value_type
+        return isinstance(other, ROptional) and other.value_type == self.value_type
 
     def __hash__(self) -> int:
         return hash(('optional', self.value_type))
@@ -1340,7 +1340,7 @@ class RTypeVisitor(Generic[T]):
         raise NotImplementedError
 
     @abstractmethod
-    def visit_optional_rtype(self, typ: OptionalRType) -> T:
+    def visit_roptional(self, typ: ROptional) -> T:
         raise NotImplementedError
 
     @abstractmethod

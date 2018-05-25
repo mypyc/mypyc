@@ -31,7 +31,7 @@ from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Register, Label, Return, FuncIR, Assign,
     PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple,
     Unreachable, TupleGet, ClassIR, UserRType, ModuleIR, GetAttr, SetAttr, LoadStatic,
-    PyGetAttr, PyCall, RInstance, OptionalRType, c_module_name, PyMethodCall, INVALID_REGISTER,
+    PyGetAttr, PyCall, RInstance, ROptional, c_module_name, PyMethodCall, INVALID_REGISTER,
     INVALID_LABEL, int_rinstance, is_int_rinstance, bool_rinstance, list_rinstance,
     is_list_rinstance, dict_rinstance, is_dict_rinstance, str_rinstance, is_tuple_rinstance,
     tuple_rinstance, none_rinstance, is_none_rinstance, object_rinstance
@@ -85,7 +85,7 @@ class Mapper:
                 value_type = typ.items[1]
             else:
                 value_type = typ.items[0]
-            return OptionalRType(self.type_to_rtype(value_type))
+            return ROptional(self.type_to_rtype(value_type))
         assert False, '%s unsupported' % type(typ)
 
 

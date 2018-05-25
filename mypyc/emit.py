@@ -5,7 +5,7 @@ from typing import List, Set, Dict, Optional
 
 from mypyc.common import REG_PREFIX
 from mypyc.ops import (
-    Environment, Label, Register, RType, RTuple, UserRType, OptionalRType,
+    Environment, Label, Register, RType, RTuple, UserRType, ROptional,
     RInstance, type_struct_name, is_int_rinstance, is_bool_rinstance, short_name, is_list_rinstance,
     is_dict_rinstance, is_tuple_rinstance, is_none_rinstance, object_rinstance
 )
@@ -128,7 +128,7 @@ class Emitter:
 
     def pretty_name(self, typ: RType) -> str:
         pretty_name = typ.name
-        if isinstance(typ, OptionalRType):
+        if isinstance(typ, ROptional):
             pretty_name = '%s or None' % self.pretty_name(typ.value_type)
         return short_name(pretty_name)
 
@@ -198,7 +198,7 @@ class Emitter:
                 err,
                 '{} = NULL;'.format(dest),
                 '}')
-        elif isinstance(typ, OptionalRType):
+        elif isinstance(typ, ROptional):
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
             self.emit_lines(
