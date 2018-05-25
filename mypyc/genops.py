@@ -32,9 +32,9 @@ from mypyc.ops import (
     PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, TupleRType,
     Unreachable, TupleGet, ClassIR, UserRType, ModuleIR, GetAttr, SetAttr, LoadStatic,
     PyGetAttr, PyCall, RInstance, SequenceTupleRType, ObjectRType, NoneRType,
-    OptionalRType, DictRType, UnicodeRType, c_module_name, PyMethodCall,
+    OptionalRType, UnicodeRType, c_module_name, PyMethodCall,
     INVALID_REGISTER, INVALID_LABEL, int_rinstance, is_int_rinstance, bool_rinstance,
-    list_rinstance, is_list_rinstance
+    list_rinstance, is_list_rinstance, dict_rinstance, is_dict_rinstance
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
@@ -66,7 +66,7 @@ class Mapper:
             elif typ.type.fullname() == 'builtins.list':
                 return list_rinstance
             elif typ.type.fullname() == 'builtins.dict':
-                return DictRType()
+                return dict_rinstance
             elif typ.type.fullname() == 'builtins.tuple':
                 return SequenceTupleRType()
             elif typ.type.fullname() == 'builtins.object':
@@ -329,7 +329,7 @@ class IRBuilder(NodeVisitor[Register]):
             if is_list_rinstance(base_type) and is_int_rinstance(index_type):
                 # Indexed list set
                 return AssignmentTargetIndex(base_reg, index_reg, base_type)
-            elif isinstance(base_type, DictRType):
+            elif is_dict_rinstance(base_type):
                 # Indexed dict set
                 boxed_index = self.box(index_reg, index_type)
                 return AssignmentTargetIndex(base_reg, boxed_index, base_type)
@@ -368,7 +368,7 @@ class IRBuilder(NodeVisitor[Register]):
             boxed_item_reg = self.box(item_reg, rvalue_type)
             if is_list_rinstance(target.rtype):
                 op = PrimitiveOp.LIST_SET
-            elif isinstance(target.rtype, DictRType):
+            elif is_dict_rinstance(target.rtype):
                 op = PrimitiveOp.DICT_SET
             else:
                 assert False, target.rtype
@@ -616,7 +616,7 @@ class IRBuilder(NodeVisitor[Register]):
             if target is None:
                 target = self.alloc_target(list_rinstance)
             op = PrimitiveOp.LIST_REPEAT
-        elif isinstance(rtype, DictRType):
+        elif is_dict_rinstance(rtype):
             if expr_op == 'in':
                 if target is None:
                     target = self.alloc_target(bool_rinstance)
@@ -634,18 +634,20 @@ class IRBuilder(NodeVisitor[Register]):
         base_reg = self.accept(expr.base)
         target_type = self.node_type(expr)
 
-        if is_list_rinstance(base_rtype) or isinstance(base_rtype, (SequenceTupleRType, DictRType)):
+        if (is_list_rinstance(base_rtype)
+                or is_dict_rinstance(base_rtype)
+                or isinstance(base_rtype, SequenceTupleRType)):
             index_type = self.node_type(expr.index)
-            if not isinstance(base_rtype, DictRType):
+            if not is_dict_rinstance(base_rtype):
                 assert is_int_rinstance(index_type), 'Unsupported indexing operation'  # TODO
             if is_list_rinstance(base_rtype):
                 op = PrimitiveOp.LIST_GET
-            elif isinstance(base_rtype, DictRType):
+            elif is_dict_rinstance(base_rtype):
                 op = PrimitiveOp.DICT_GET
             else:
                 op = PrimitiveOp.HOMOGENOUS_TUPLE_GET
             index_reg = self.accept(expr.index)
-            if isinstance(base_rtype, DictRType):
+            if is_dict_rinstance(base_rtype):
                 index_reg = self.box(index_reg, index_type)
             tmp = self.alloc_temp(ObjectRType())
             self.add(PrimitiveOp(tmp, op, [base_reg, index_reg], expr.line))
@@ -881,7 +883,7 @@ class IRBuilder(NodeVisitor[Register]):
             target = self.alloc_target(bool_rinstance)
             arg = self.box_expr(expr.args[0])
             self.add(PrimitiveOp(target, PrimitiveOp.LIST_APPEND, [base, arg], expr.line))
-        elif callee.name == 'update' and base_type.name == 'dict':
+        elif callee.name == 'update' and is_dict_rinstance(base_type):
             target = self.alloc_target(bool_rinstance)
             other_list_reg = self.accept(expr.args[0])
             self.add(PrimitiveOp(target, PrimitiveOp.DICT_UPDATE, [base, other_list_reg],
@@ -914,7 +916,7 @@ class IRBuilder(NodeVisitor[Register]):
 
     def visit_dict_expr(self, expr: DictExpr) -> Register:
         assert not expr.items  # TODO
-        target = self.alloc_target(DictRType())
+        target = self.alloc_target(dict_rinstance)
         self.add(PrimitiveOp(target, PrimitiveOp.NEW_DICT, [], expr.line))
         return target
 

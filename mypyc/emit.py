@@ -6,7 +6,8 @@ from typing import List, Set, Dict, Optional
 from mypyc.common import REG_PREFIX
 from mypyc.ops import (
     Environment, Label, Register, RType, ObjectRType, TupleRType, UserRType, OptionalRType,
-    RInstance, type_struct_name, is_int_rinstance, is_bool_rinstance, short_name, is_list_rinstance
+    RInstance, type_struct_name, is_int_rinstance, is_bool_rinstance, short_name, is_list_rinstance,
+    is_dict_rinstance
 )
 
 
@@ -153,12 +154,12 @@ class Emitter:
             err = 'PyErr_SetString(PyExc_TypeError, "{} object expected");'.format(
                 self.pretty_name(typ))
         # TODO: Verify refcount handling.
-        if is_list_rinstance(typ) or typ.name == 'dict':
+        if is_list_rinstance(typ) or is_dict_rinstance(typ):
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
             if is_list_rinstance(typ):
                 prefix = 'PyList'
-            elif typ.name == 'dict':
+            elif is_dict_rinstance(typ):
                 prefix = 'PyDict'
             else:
                 assert False, prefix

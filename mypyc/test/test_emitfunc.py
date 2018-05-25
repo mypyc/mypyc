@@ -6,8 +6,8 @@ from mypy.test.helpers import assert_string_arrays_equal
 from mypyc.ops import (
     Environment, BasicBlock, FuncIR, RuntimeArg, RType, Goto, Return, LoadInt, Assign,
     PrimitiveOp, IncRef, DecRef, Branch, Call, Unbox, Box, TupleRType, TupleGet, GetAttr,
-    ClassIR, UserRType, SetAttr, Op, Label, ObjectRType, DictRType,
-    int_rinstance, bool_rinstance, list_rinstance
+    ClassIR, UserRType, SetAttr, Op, Label, ObjectRType, int_rinstance, bool_rinstance,
+    list_rinstance, dict_rinstance
 )
 from mypyc.emit import Emitter, EmitterContext
 from mypyc.emitfunc import generate_native_function, FunctionEmitterVisitor
@@ -23,7 +23,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.ll = self.env.add_local(Var('ll'), list_rinstance)
         self.o = self.env.add_local(Var('o'), ObjectRType())
         self.o2 = self.env.add_local(Var('o2'), ObjectRType())
-        self.d = self.env.add_local(Var('d'), DictRType())
+        self.d = self.env.add_local(Var('d'), dict_rinstance)
         self.b = self.env.add_local(Var('b'), bool_rinstance)
         self.context = EmitterContext()
         self.emitter = Emitter(self.context, self.env)
