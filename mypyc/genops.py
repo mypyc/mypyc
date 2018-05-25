@@ -816,7 +816,6 @@ class IRBuilder(NodeVisitor[Register]):
             assert isinstance(callee_type, CallableType)
             # TODO: Argument kinds
             formal_arg_types = [self.type_to_rtype(t) for t in callee_type.arg_types]
-            print(callee_type, formal_arg_types)
             args = []
             for arg_expr, arg_type in zip(expr.args, formal_arg_types):
                 reg = self.accept(arg_expr)
