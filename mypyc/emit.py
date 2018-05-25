@@ -236,7 +236,7 @@ class Emitter:
                        custom_failure]
         else:
             failure = [raise_exc,
-                       '%s = %s;' % (dest, typ.c_error_value)]
+                       '%s = %s;' % (dest, typ.c_error_value())]
         if is_int_rprimitive(typ):
             if declare_dest:
                 self.emit_line('CPyTagged {};'.format(dest))
@@ -324,9 +324,9 @@ class Emitter:
     def emit_error_check(self, value: str, rtype: RType, failure: str) -> None:
         """Emit code for checking a native function return value for uncaught exception."""
         if not isinstance(rtype, RTuple):
-            self.emit_line('if ({} == {}) {{'.format(value, rtype.c_error_value))
+            self.emit_line('if ({} == {}) {{'.format(value, rtype.c_error_value()))
         else:
-            self.emit_line('if ({}.f0 == {}) {{'.format(value, rtype.types[0].c_error_value))
+            self.emit_line('if ({}.f0 == {}) {{'.format(value, rtype.types[0].c_error_value()))
         self.emit_lines(failure, '}')
 
     def emit_gc_visit(self, target: str, rtype: RType) -> None:
@@ -363,13 +363,13 @@ class Emitter:
         elif isinstance(rtype, RPrimitive) and rtype.name == 'builtins.int':
             self.emit_line('if (CPyTagged_CheckLong({})) {{'.format(target))
             self.emit_line('CPyTagged __tmp = {};'.format(target))
-            self.emit_line('{} = {};'.format(target, rtype.c_undefined_value))
+            self.emit_line('{} = {};'.format(target, rtype.c_undefined_value()))
             self.emit_line('Py_XDECREF(CPyTagged_LongAsObject(__tmp));')
             self.emit_line('}')
         elif isinstance(rtype, RTuple):
             for i, item_type in enumerate(rtype.types):
                 self.emit_gc_clear('{}.f{}'.format(target, i), item_type)
-        elif rtype.ctype == 'PyObject *' and rtype.c_undefined_value == 'NULL':
+        elif rtype.ctype == 'PyObject *' and rtype.c_undefined_value() == 'NULL':
             # The simplest case.
             self.emit_line('Py_CLEAR({});'.format(target))
         else:

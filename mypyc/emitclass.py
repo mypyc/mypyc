@@ -142,7 +142,7 @@ def generate_native_getters_and_setters(cl: ClassIR,
         emitter.emit_line('{')
         if rtype.is_refcounted:
             emitter.emit_lines(
-                'if (self->{} == {}) {{'.format(attr, rtype.c_undefined_value),
+                'if (self->{} == {}) {{'.format(attr, rtype.c_undefined_value()),
                 'PyErr_SetString(PyExc_AttributeError, "attribute {} of {} undefined");'.format(
                     repr(attr), repr(cl.name)),
                 '} else {')
@@ -158,7 +158,7 @@ def generate_native_getters_and_setters(cl: ClassIR,
                                                           rtype.ctype_spaced))
         emitter.emit_line('{')
         if rtype.is_refcounted:
-            emitter.emit_line('if (self->{} != {}) {{'.format(attr, rtype.c_undefined_value))
+            emitter.emit_line('if (self->{} != {}) {{'.format(attr, rtype.c_undefined_value()))
             emitter.emit_dec_ref('self->{}'.format(attr), rtype)
             emitter.emit_line('}')
         emitter.emit_inc_ref('value'.format(attr), rtype)
@@ -194,7 +194,7 @@ def generate_constructor_for_class(cl: ClassIR,
     emitter.emit_line('    return NULL;')
     emitter.emit_line('self->vtable = {};'.format(vtable_name))
     for attr, rtype in cl.attributes:
-        emitter.emit_line('self->{} = {};'.format(attr, rtype.c_undefined_value))
+        emitter.emit_line('self->{} = {};'.format(attr, rtype.c_undefined_value()))
     emitter.emit_line('return (PyObject *)self;')
     emitter.emit_line('}')
 
@@ -305,7 +305,7 @@ def generate_getter(cl: ClassIR,
     emitter.emit_line('{}({} *self, void *closure)'.format(getter_name(cl.name, attr),
                                                                         cl.struct_name))
     emitter.emit_line('{')
-    emitter.emit_line('if (self->{} == {}) {{'.format(attr, rtype.c_undefined_value))
+    emitter.emit_line('if (self->{} == {}) {{'.format(attr, rtype.c_undefined_value()))
     emitter.emit_line('PyErr_SetString(PyExc_AttributeError,')
     emitter.emit_line('    "attribute {} of {} undefined");'.format(repr(attr),
                                                                         repr(cl.name)))
@@ -327,7 +327,7 @@ def generate_setter(cl: ClassIR,
         cl.struct_name))
     emitter.emit_line('{')
     if rtype.is_refcounted:
-        emitter.emit_line('if (self->{} != {}) {{'.format(attr, rtype.c_undefined_value))
+        emitter.emit_line('if (self->{} != {}) {{'.format(attr, rtype.c_undefined_value()))
         emitter.emit_dec_ref('self->{}'.format(attr), rtype)
         emitter.emit_line('}')
     emitter.emit_line('if (value != NULL) {')
@@ -340,6 +340,6 @@ def generate_setter(cl: ClassIR,
         emitter.emit_inc_ref('tmp', rtype)
     emitter.emit_line('self->{} = tmp;'.format(attr))
     emitter.emit_line('} else')
-    emitter.emit_line('    self->{} = {};'.format(attr, rtype.c_undefined_value))
+    emitter.emit_line('    self->{} = {};'.format(attr, rtype.c_undefined_value()))
     emitter.emit_line('return 0;')
     emitter.emit_line('}')

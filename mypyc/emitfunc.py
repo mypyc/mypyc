@@ -90,11 +90,11 @@ class FunctionEmitterVisitor(OpVisitor[None]):
                 item_type = typ.types[0]
                 self.emit_line('if ({}.f0 {} {}) {{'.format(self.reg(op.left),
                                                          compare,
-                                                         item_type.c_error_value))
+                                                         item_type.c_error_value()))
             else:
                 self.emit_line('if ({} {} {}) {{'.format(self.reg(op.left),
                                                       compare,
-                                                      typ.c_error_value))
+                                                      typ.c_error_value()))
         else:
             left = self.reg(op.left)
             right = self.reg(op.right)
@@ -264,13 +264,13 @@ class FunctionEmitterVisitor(OpVisitor[None]):
 
     def visit_load_error_value(self, op: LoadErrorValue) -> None:
         if isinstance(op.rtype, RTuple):
-            values = [item.c_undefined_value for item in op.rtype.types]
+            values = [item.c_undefined_value() for item in op.rtype.types]
             tmp = self.temp_name()
             self.emit_line('%s %s = { %s };' % (op.rtype.ctype, tmp, ', '.join(values)))
             self.emit_line('%s = %s;' % (self.reg(op.dest), tmp))
         else:
             self.emit_line('%s = %s;' % (self.reg(op.dest),
-                                         op.rtype.c_error_value))
+                                         op.rtype.c_error_value()))
 
     def visit_get_attr(self, op: GetAttr) -> None:
         dest = self.reg(op.dest)

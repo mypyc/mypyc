@@ -54,9 +54,14 @@ class RType:
     name = None  # type: str
     ctype = None  # type: str
     is_unboxed = False
+    c_undefined = None  # type: str
 
     @abstractmethod
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
+        raise NotImplementedError
+
+    @abstractmethod
+    def c_undefined_value(self) -> str:
         raise NotImplementedError
 
     @property
@@ -67,13 +72,8 @@ class RType:
         else:
             return self.ctype + ' '
 
-    @property
-    def c_undefined_value(self) -> str:
-        raise NotImplementedError
-
-    @property
     def c_error_value(self) -> str:
-        return self.c_undefined_value
+        return self.c_undefined_value()
 
     @property
     def is_refcounted(self) -> bool:
@@ -120,7 +120,6 @@ class RPrimitive(RType):
         else:
             assert False, 'Uncognized ctype: %r' % ctype
 
-    @property
     def c_undefined_value(self) -> str:
         return self.c_undefined
 
@@ -200,7 +199,6 @@ class RTuple(RType):
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_rtuple(self)
 
-    @property
     def c_undefined_value(self) -> str:
         # This doesn't work since this is expected to return a C expression, but
         # defining an undefined tuple requires declaring a temp variable, such as:
@@ -265,7 +263,6 @@ class RInstance(RType):
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_rinstance(self)
 
-    @property
     def c_undefined_value(self) -> str:
         return 'NULL'
 
@@ -305,7 +302,6 @@ class ROptional(RType):
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_roptional(self)
 
-    @property
     def c_undefined_value(self) -> str:
         return 'NULL'
 
