@@ -6,8 +6,9 @@ from typing import List, Set, Dict, Optional
 from mypyc.common import REG_PREFIX
 from mypyc.ops import (
     Environment, Label, Register, RType, RTuple, UserRType, ROptional,
-    RInstance, type_struct_name, is_int_rinstance, is_bool_rinstance, short_name, is_list_rinstance,
-    is_dict_rinstance, is_tuple_rinstance, is_none_rinstance, object_rinstance
+    RPrimitive, type_struct_name, is_int_rprimitive, is_bool_rprimitive, short_name,
+    is_list_rprimitive, is_dict_rprimitive, is_tuple_rprimitive, is_none_rprimitive,
+    object_rprimitive
 )
 
 
@@ -102,7 +103,7 @@ class Emitter:
         For composite unboxed structures (e.g. tuples) recursively
         increment reference counts for each component.
         """
-        if is_int_rinstance(rtype):
+        if is_int_rprimitive(rtype):
             self.emit_line('CPyTagged_IncRef(%s);' % dest)
         elif isinstance(rtype, RTuple):
             for i, item_type in enumerate(rtype.types):
@@ -117,7 +118,7 @@ class Emitter:
         For composite unboxed structures (e.g. tuples) recursively
         decrement reference counts for each component.
         """
-        if is_int_rinstance(rtype):
+        if is_int_rprimitive(rtype):
             self.emit_line('CPyTagged_DecRef(%s);' % dest)
         elif isinstance(rtype, RTuple):
             for i, item_type in enumerate(rtype.types):
@@ -152,12 +153,12 @@ class Emitter:
             err = 'PyErr_SetString(PyExc_TypeError, "{} object expected");'.format(
                 self.pretty_name(typ))
         # TODO: Verify refcount handling.
-        if is_list_rinstance(typ) or is_dict_rinstance(typ):
+        if is_list_rprimitive(typ) or is_dict_rprimitive(typ):
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
-            if is_list_rinstance(typ):
+            if is_list_rprimitive(typ):
                 prefix = 'PyList'
-            elif is_dict_rinstance(typ):
+            elif is_dict_rprimitive(typ):
                 prefix = 'PyDict'
             else:
                 assert False, prefix
@@ -168,7 +169,7 @@ class Emitter:
                 err,
                 '{} = NULL;'.format(dest),
                 '}')
-        elif is_tuple_rinstance(typ):
+        elif is_tuple_rprimitive(typ):
             if declare_dest:
                 self.emit_line('{} {};'.format(typ.ctype, dest))
             self.emit_lines(
@@ -188,7 +189,7 @@ class Emitter:
                 err,
                 '{} = NULL;'.format(dest),
                 '}')
-        elif is_none_rinstance(typ):
+        elif is_none_rprimitive(typ):
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
             self.emit_lines(
@@ -236,7 +237,7 @@ class Emitter:
         else:
             failure = [raise_exc,
                        '%s = %s;' % (dest, typ.c_error_value)]
-        if is_int_rinstance(typ):
+        if is_int_rprimitive(typ):
             if declare_dest:
                 self.emit_line('CPyTagged {};'.format(dest))
             self.emit_line('if (PyLong_Check({}))'.format(src))
@@ -247,7 +248,7 @@ class Emitter:
             self.emit_line('else {')
             self.emit_lines(*failure)
             self.emit_line('}')
-        elif is_bool_rinstance(typ):
+        elif is_bool_rprimitive(typ):
             # Whether we are borrowing or not makes no difference.
             if declare_dest:
                 self.emit_line('char {};'.format(dest))
@@ -275,7 +276,7 @@ class Emitter:
                                     borrow=borrow)
                 else:
                     if not borrow:
-                        self.emit_inc_ref(temp, object_rinstance)
+                        self.emit_inc_ref(temp, object_rprimitive)
                     self.emit_cast(temp, temp2, item_type, declare_dest=True)
                 self.emit_line('{}.f{} = {};'.format(dest, i, temp2))
             self.emit_line('}')
@@ -294,10 +295,10 @@ class Emitter:
             declaration = 'PyObject *'
         else:
             declaration = ''
-        if is_int_rinstance(typ):
+        if is_int_rprimitive(typ):
             # Steal the existing reference if it exists.
             self.emit_line('{}{} = CPyTagged_StealAsObject({});'.format(declaration, dest, src))
-        elif is_bool_rinstance(typ):
+        elif is_bool_rprimitive(typ):
             # TODO: The Py_RETURN macros return the correct PyObject * with reference count
             #       handling. Relevant here?
             self.emit_lines('{}{} = PyBool_FromLong({});'.format(declaration, dest, src))
@@ -337,7 +338,7 @@ class Emitter:
         if not rtype.is_refcounted:
             # Not refcounted -> no pointers -> no GC interaction.
             return
-        elif isinstance(rtype, RInstance) and rtype.name == 'builtins.int':
+        elif isinstance(rtype, RPrimitive) and rtype.name == 'builtins.int':
             self.emit_line('if (CPyTagged_CheckLong({})) {{'.format(target))
             self.emit_line('Py_VISIT(CPyTagged_LongAsObject({}));'.format(target))
             self.emit_line('}')
@@ -359,7 +360,7 @@ class Emitter:
         if not rtype.is_refcounted:
             # Not refcounted -> no pointers -> no GC interaction.
             return
-        elif isinstance(rtype, RInstance) and rtype.name == 'builtins.int':
+        elif isinstance(rtype, RPrimitive) and rtype.name == 'builtins.int':
             self.emit_line('if (CPyTagged_CheckLong({})) {{'.format(target))
             self.emit_line('CPyTagged __tmp = {};'.format(target))
             self.emit_line('{} = {};'.format(target, rtype.c_undefined_value))

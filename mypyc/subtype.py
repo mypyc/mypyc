@@ -1,16 +1,16 @@
 """Subtype check for RTypes."""
 
 from mypyc.ops import (
-    RType, ROptional, UserRType, RInstance, RTuple, RTypeVisitor,
-    is_bool_rinstance, is_int_rinstance, is_tuple_rinstance, none_rinstance, is_object_rinstance
+    RType, ROptional, UserRType, RPrimitive, RTuple, RTypeVisitor,
+    is_bool_rprimitive, is_int_rprimitive, is_tuple_rprimitive, none_rprimitive, is_object_rprimitive
 )
 
 
 def is_subtype(left: RType, right: RType) -> bool:
-    if is_object_rinstance(right):
+    if is_object_rprimitive(right):
         return True
     elif isinstance(right, ROptional):
-        if is_subtype(left, none_rinstance) or is_subtype(left, right.value_type):
+        if is_subtype(left, none_rprimitive) or is_subtype(left, right.value_type):
             return True
     return left.accept(SubtypeVisitor(right))
 
@@ -33,13 +33,13 @@ class SubtypeVisitor(RTypeVisitor[bool]):
         return isinstance(self.right, ROptional) and is_subtype(left.value_type,
                                                                 self.right.value_type)
 
-    def visit_rinstance(self, left: RInstance) -> bool:
-        if is_bool_rinstance(left) and is_int_rinstance(self.right):
+    def visit_rprimitive(self, left: RPrimitive) -> bool:
+        if is_bool_rprimitive(left) and is_int_rprimitive(self.right):
             return True
-        return isinstance(self.right, RInstance) and left.name == self.right.name
+        return isinstance(self.right, RPrimitive) and left.name == self.right.name
 
     def visit_rtuple(self, left: RTuple) -> bool:
-        if is_tuple_rinstance(self.right):
+        if is_tuple_rprimitive(self.right):
             return True
         if isinstance(self.right, RTuple):
             return len(self.right.types) == len(left.types) and all(

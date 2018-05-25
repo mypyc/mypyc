@@ -5,7 +5,7 @@ import textwrap
 from mypyc.common import PREFIX, NATIVE_PREFIX
 from mypyc.emit import Emitter
 from mypyc.emitfunc import native_function_header
-from mypyc.ops import ClassIR, FuncIR, RType, Environment, type_struct_name, object_rinstance
+from mypyc.ops import ClassIR, FuncIR, RType, Environment, type_struct_name, object_rprimitive
 
 
 def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
@@ -28,7 +28,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
 
     # Use dummy empty __init__ for now.
     # TODO: Use UserRType
-    init = FuncIR(cl.name, None, [], object_rinstance, [], Environment())
+    init = FuncIR(cl.name, None, [], object_rprimitive, [], Environment())
     emitter.emit_line(native_function_header(init) + ';')
     emit_line()
     generate_object_struct(cl, emitter)

@@ -99,7 +99,7 @@ class RType:
         return hash(self.name)
 
 
-class RInstance(RType):
+class RPrimitive(RType):
     def __init__(self,
                  name: str,
                  is_unboxed: bool,
@@ -131,61 +131,61 @@ class RInstance(RType):
         return self._is_refcounted
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
-        return visitor.visit_rinstance(self)
+        return visitor.visit_rprimitive(self)
 
     def __repr__(self) -> str:
-        return '<RInstance %s>'% self.name
+        return '<RPrimitive %s>'% self.name
 
 
-int_rinstance = RInstance('builtins.int', is_unboxed=True, is_refcounted=True, ctype='CPyTagged')
+int_rprimitive = RPrimitive('builtins.int', is_unboxed=True, is_refcounted=True, ctype='CPyTagged')
 
-bool_rinstance = RInstance('builtins.bool', is_unboxed=True, is_refcounted=False, ctype='char')
+bool_rprimitive = RPrimitive('builtins.bool', is_unboxed=True, is_refcounted=False, ctype='char')
 
-object_rinstance = RInstance('builtins.object', is_unboxed=False, is_refcounted=True)
+object_rprimitive = RPrimitive('builtins.object', is_unboxed=False, is_refcounted=True)
 
-none_rinstance = RInstance('builtins.None', is_unboxed=False, is_refcounted=True)
+none_rprimitive = RPrimitive('builtins.None', is_unboxed=False, is_refcounted=True)
 
-list_rinstance = RInstance('builtins.list', is_unboxed=False, is_refcounted=True)
+list_rprimitive = RPrimitive('builtins.list', is_unboxed=False, is_refcounted=True)
 
-dict_rinstance = RInstance('builtins.dict', is_unboxed=False, is_refcounted=True)
+dict_rprimitive = RPrimitive('builtins.dict', is_unboxed=False, is_refcounted=True)
 
 # At the C layer, str is refered to as unicode (PyUnicode)
-str_rinstance = RInstance('builtins.str', is_unboxed=False, is_refcounted=True)
+str_rprimitive = RPrimitive('builtins.str', is_unboxed=False, is_refcounted=True)
 
 # Tuple of an arbitrary length (corresponds to Tuple[t, ...], with explicit '...')
-tuple_rinstance = RInstance('builtins.tuple', is_unboxed=False, is_refcounted=True)
+tuple_rprimitive = RPrimitive('builtins.tuple', is_unboxed=False, is_refcounted=True)
 
 
-def is_int_rinstance(rtype: RType) -> bool:
-    return isinstance(rtype, RInstance) and rtype.name == 'builtins.int'
+def is_int_rprimitive(rtype: RType) -> bool:
+    return isinstance(rtype, RPrimitive) and rtype.name == 'builtins.int'
 
 
-def is_bool_rinstance(rtype: RType) -> bool:
-    return isinstance(rtype, RInstance) and rtype.name == 'builtins.bool'
+def is_bool_rprimitive(rtype: RType) -> bool:
+    return isinstance(rtype, RPrimitive) and rtype.name == 'builtins.bool'
 
 
-def is_object_rinstance(rtype: RType) -> bool:
-    return isinstance(rtype, RInstance) and rtype.name == 'builtins.object'
+def is_object_rprimitive(rtype: RType) -> bool:
+    return isinstance(rtype, RPrimitive) and rtype.name == 'builtins.object'
 
 
-def is_none_rinstance(rtype: RType) -> bool:
-    return isinstance(rtype, RInstance) and rtype.name == 'builtins.None'
+def is_none_rprimitive(rtype: RType) -> bool:
+    return isinstance(rtype, RPrimitive) and rtype.name == 'builtins.None'
 
 
-def is_list_rinstance(rtype: RType) -> bool:
-    return isinstance(rtype, RInstance) and rtype.name == 'builtins.list'
+def is_list_rprimitive(rtype: RType) -> bool:
+    return isinstance(rtype, RPrimitive) and rtype.name == 'builtins.list'
 
 
-def is_dict_rinstance(rtype: RType) -> bool:
-    return isinstance(rtype, RInstance) and rtype.name == 'builtins.dict'
+def is_dict_rprimitive(rtype: RType) -> bool:
+    return isinstance(rtype, RPrimitive) and rtype.name == 'builtins.dict'
 
 
-def is_str_rinstance(rtype: RType) -> bool:
-    return isinstance(rtype, RInstance) and rtype.name == 'builtins.str'
+def is_str_rprimitive(rtype: RType) -> bool:
+    return isinstance(rtype, RPrimitive) and rtype.name == 'builtins.str'
 
 
-def is_tuple_rinstance(rtype: RType) -> bool:
-    return isinstance(rtype, RInstance) and rtype.name == 'builtins.tuple'
+def is_tuple_rprimitive(rtype: RType) -> bool:
+    return isinstance(rtype, RPrimitive) and rtype.name == 'builtins.tuple'
 
 
 class RTuple(RType):
@@ -632,7 +632,7 @@ class IncRef(StrictRegisterOp):
 
     def to_str(self, env: Environment) -> str:
         s = env.format('inc_ref %r', self.dest)
-        if is_bool_rinstance(self.target_type) or is_int_rinstance(self.target_type):
+        if is_bool_rprimitive(self.target_type) or is_int_rprimitive(self.target_type):
             s += ' :: {}'.format(short_name(self.target_type.name))
         return s
 
@@ -658,7 +658,7 @@ class DecRef(StrictRegisterOp):
 
     def to_str(self, env: Environment) -> str:
         s = env.format('dec_ref %r', self.dest)
-        if is_bool_rinstance(self.target_type) or is_int_rinstance(self.target_type):
+        if is_bool_rprimitive(self.target_type) or is_int_rprimitive(self.target_type):
             s += ' :: {}'.format(short_name(self.target_type.name))
         return s
 
@@ -1332,7 +1332,7 @@ def format_func(fn: FuncIR) -> List[str]:
 
 class RTypeVisitor(Generic[T]):
     @abstractmethod
-    def visit_rinstance(self, typ: RInstance) -> T:
+    def visit_rprimitive(self, typ: RPrimitive) -> T:
         raise NotImplementedError
 
     @abstractmethod
