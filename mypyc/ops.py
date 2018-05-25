@@ -100,6 +100,11 @@ class RType:
 
 
 class RPrimitive(RType):
+    """Primitive type such as 'object' or 'int'.
+
+    These often have custom ops associated with them.
+    """
+
     def __init__(self,
                  name: str,
                  is_unboxed: bool,
@@ -137,11 +142,12 @@ class RPrimitive(RType):
         return '<RPrimitive %s>'% self.name
 
 
+# Used to represent arbitrary objects and dynamically typed values
+object_rprimitive = RPrimitive('builtins.object', is_unboxed=False, is_refcounted=True)
+
 int_rprimitive = RPrimitive('builtins.int', is_unboxed=True, is_refcounted=True, ctype='CPyTagged')
 
 bool_rprimitive = RPrimitive('builtins.bool', is_unboxed=True, is_refcounted=False, ctype='char')
-
-object_rprimitive = RPrimitive('builtins.object', is_unboxed=False, is_refcounted=True)
 
 none_rprimitive = RPrimitive('builtins.None', is_unboxed=False, is_refcounted=True)
 
