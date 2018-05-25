@@ -44,7 +44,7 @@ def generate_wrapper_function(fn: FuncIR, emitter: Emitter) -> None:
         # TODO: The Py_RETURN macros return the correct PyObject * with reference count handling.
         #       Are they relevant?
         ret_type = fn.ret_type
-        emitter.emit_line('{}retval = {}{}({});'.format(ret_type.ctype_spaced,
+        emitter.emit_line('{}retval = {}{}({});'.format(ret_type.ctype_spaced(),
                                                         NATIVE_PREFIX, fn.cname,
                                                         native_args))
         emitter.emit_error_check('retval', ret_type, 'return NULL;')

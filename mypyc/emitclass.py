@@ -128,7 +128,7 @@ def generate_object_struct(cl: ClassIR, emitter: Emitter) -> None:
                        'PyObject_HEAD',
                        'CPyVTableItem *vtable;')
     for attr, rtype in cl.attributes:
-        emitter.emit_line('{}{};'.format(rtype.ctype_spaced, attr))
+        emitter.emit_line('{}{};'.format(rtype.ctype_spaced(), attr))
     emitter.emit_line('}} {};'.format(cl.struct_name))
 
 
@@ -136,7 +136,7 @@ def generate_native_getters_and_setters(cl: ClassIR,
                                         emitter: Emitter) -> None:
     for attr, rtype in cl.attributes:
         # Native getter
-        emitter.emit_line('{}{}({} *self)'.format(rtype.ctype_spaced,
+        emitter.emit_line('{}{}({} *self)'.format(rtype.ctype_spaced(),
                                                native_getter_name(cl.name, attr),
                                                cl.struct_name))
         emitter.emit_line('{')
@@ -155,7 +155,7 @@ def generate_native_getters_and_setters(cl: ClassIR,
         # Native setter
         emitter.emit_line('bool {}({} *self, {}value)'.format(native_setter_name(cl.name, attr),
                                                           cl.struct_name,
-                                                          rtype.ctype_spaced))
+                                                          rtype.ctype_spaced()))
         emitter.emit_line('{')
         if rtype.is_refcounted:
             emitter.emit_line('if (self->{} != {}) {{'.format(attr, rtype.c_undefined_value()))

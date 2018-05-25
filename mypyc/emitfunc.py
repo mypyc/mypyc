@@ -12,10 +12,10 @@ from mypyc.ops import (
 def native_function_header(fn: FuncIR) -> str:
     args = []
     for arg in fn.args:
-        args.append('{}{}{}'.format(arg.type.ctype_spaced, REG_PREFIX, arg.name))
+        args.append('{}{}{}'.format(arg.type.ctype_spaced(), REG_PREFIX, arg.name))
 
     return 'static {ret_type}{prefix}{name}({args})'.format(
-        ret_type=fn.ret_type.ctype_spaced,
+        ret_type=fn.ret_type.ctype_spaced(),
         prefix=NATIVE_PREFIX,
         name=fn.cname,
         args=', '.join(args) or 'void')

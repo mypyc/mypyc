@@ -64,7 +64,6 @@ class RType:
     def c_undefined_value(self) -> str:
         raise NotImplementedError
 
-    @property
     def ctype_spaced(self) -> str:
         """Adds a space after ctype for non-pointers."""
         if self.ctype[-1] == '*':
@@ -242,7 +241,7 @@ class RTuple(RType):
         result = ['struct {} {{'.format(self.struct_name)]
         i = 0
         for typ in self.types:
-            result.append('    {}f{};'.format(typ.ctype_spaced, i))
+            result.append('    {}f{};'.format(typ.ctype_spaced(), i))
             i += 1
         result.append('};')
         result.append('')
