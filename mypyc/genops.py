@@ -32,9 +32,9 @@ from mypyc.ops import (
     PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, TupleRType,
     Unreachable, TupleGet, ClassIR, UserRType, ModuleIR, GetAttr, SetAttr, LoadStatic,
     PyGetAttr, PyCall, RInstance, SequenceTupleRType, ObjectRType, NoneRType,
-    OptionalRType, UnicodeRType, c_module_name, PyMethodCall,
+    OptionalRType, c_module_name, PyMethodCall,
     INVALID_REGISTER, INVALID_LABEL, int_rinstance, is_int_rinstance, bool_rinstance,
-    list_rinstance, is_list_rinstance, dict_rinstance, is_dict_rinstance
+    list_rinstance, is_list_rinstance, dict_rinstance, is_dict_rinstance, str_rinstance
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
@@ -60,7 +60,7 @@ class Mapper:
             if typ.type.fullname() == 'builtins.int':
                 return int_rinstance
             elif typ.type.fullname() == 'builtins.str':
-                return UnicodeRType()
+                return str_rinstance
             elif typ.type.fullname() == 'builtins.bool':
                 return bool_rinstance
             elif typ.type.fullname() == 'builtins.list':
@@ -1100,7 +1100,7 @@ class IRBuilder(NodeVisitor[Register]):
         if value not in self.unicode_literals:
             self.unicode_literals[value] = '__unicode_' + str(len(self.unicode_literals))
         static_symbol = self.unicode_literals[value]
-        target = self.alloc_target(UnicodeRType())
+        target = self.alloc_target(str_rinstance)
         self.add(LoadStatic(target, static_symbol))
         return target
 

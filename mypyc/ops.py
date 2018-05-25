@@ -138,9 +138,15 @@ class RInstance(RType):
 
 
 int_rinstance = RInstance('builtins.int', is_unboxed=True, is_refcounted=True, ctype='CPyTagged')
+
 bool_rinstance = RInstance('builtins.bool', is_unboxed=True, is_refcounted=False, ctype='char')
+
 list_rinstance = RInstance('builtins.list', is_unboxed=False, is_refcounted=True)
+
 dict_rinstance = RInstance('builtins.dict', is_unboxed=False, is_refcounted=True)
+
+# At the C layer, str is refered to as unicode (PyUnicode)
+str_rinstance = RInstance('builtins.str', is_unboxed=False, is_refcounted=True)
 
 
 def is_int_rinstance(rtype: RType) -> bool:
@@ -157,6 +163,10 @@ def is_list_rinstance(rtype: RType) -> bool:
 
 def is_dict_rinstance(rtype: RType) -> bool:
     return isinstance(rtype, RInstance) and rtype.name == 'builtins.dict'
+
+
+def is_str_rinstance(rtype: RType) -> bool:
+    return isinstance(rtype, RInstance) and rtype.name == 'builtins.str'
 
 
 class TupleRType(RType):
@@ -266,18 +276,6 @@ class NoneRType(PyObjectRType):
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_none_rtype(self)
-
-
-class UnicodeRType(PyObjectRType):
-    """str in python 3; but at the c layer, its refered to as unicode (PyUnicode)
-
-    Referring to these as Unicode and as Bytes leaves zero room for confusion.
-    """
-    def __init__(self) -> None:
-        self.name = 'unicode'
-
-    def accept(self, visitor: 'RTypeVisitor[T]') -> T:
-        return visitor.visit_unicode_rtype(self)
 
 
 class UserRType(PyObjectRType):
@@ -1357,7 +1355,4 @@ class RTypeVisitor(Generic[T]):
         pass
 
     def visit_none_rtype(self, typ: NoneRType) -> T:
-        pass
-
-    def visit_unicode_rtype(self, typ: UnicodeRType) -> T:
         pass

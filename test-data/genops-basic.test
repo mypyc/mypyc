@@ -489,7 +489,7 @@ def f() -> str:
     return "some string"
 [out]
 def f():
-    r0 :: unicode
+    r0 :: str
 L0:
     r0 = __unicode_0 :: static
     return r0
@@ -501,7 +501,7 @@ def f(x: List[int]) -> int:
 [out]
 def f(x):
     x :: list
-    r0 :: unicode
+    r0 :: str
     r1 :: object
     r2 :: int
 L0:
