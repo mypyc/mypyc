@@ -85,14 +85,14 @@ class Emitter:
     # Higher-level operations
 
     def declare_tuple_struct(self, tuple_type: RTuple) -> None:
-        if tuple_type.struct_name not in self.context.declarations:
+        if tuple_type.struct_name() not in self.context.declarations:
             dependencies = set()
             for typ in tuple_type.types:
                 # XXX other types might eventually need similar behavior
                 if isinstance(typ, RTuple):
-                    dependencies.add(typ.struct_name)
+                    dependencies.add(typ.struct_name())
 
-            self.context.declarations[tuple_type.struct_name] = HeaderDeclaration(
+            self.context.declarations[tuple_type.struct_name()] = HeaderDeclaration(
                 dependencies,
                 tuple_type.get_c_declaration(),
             )

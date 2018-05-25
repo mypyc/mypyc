@@ -279,7 +279,7 @@ class FunctionEmitterVisitor(OpVisitor[None]):
         self.emit_line('%s = CPY_GET_ATTR(%s, %d, %s, %s);' % (
             dest, obj,
             rtype.getter_index(op.attr),
-            rtype.struct_name,
+            rtype.struct_name(),
             rtype.attr_type(op.attr).ctype))
 
     def visit_set_attr(self, op: SetAttr) -> None:
@@ -293,7 +293,7 @@ class FunctionEmitterVisitor(OpVisitor[None]):
             obj,
             rtype.setter_index(op.attr),
             src,
-            rtype.struct_name,
+            rtype.struct_name(),
             rtype.attr_type(op.attr).ctype))
 
     def visit_load_static(self, op: LoadStatic) -> None:

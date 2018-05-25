@@ -185,7 +185,7 @@ class RTuple(RType):
     def __init__(self, types: List[RType]) -> None:
         self.name = 'tuple'
         self.types = tuple(types)
-        self.ctype = 'struct {}'.format(self.struct_name)
+        self.ctype = 'struct {}'.format(self.struct_name())
         self.is_refcounted = any(t.is_refcounted for t in self.types)
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
@@ -209,7 +209,6 @@ class RTuple(RType):
         """
         return str(abs(hash(self)))[0:15]
 
-    @property
     def struct_name(self) -> str:
         # max c length is 31 charas, this should be enough entropy to be unique.
         return 'tuple_def_' + self.unique_id
@@ -227,7 +226,7 @@ class RTuple(RType):
         return hash((self.name, self.types))
 
     def get_c_declaration(self) -> List[str]:
-        result = ['struct {} {{'.format(self.struct_name)]
+        result = ['struct {} {{'.format(self.struct_name())]
         i = 0
         for typ in self.types:
             result.append('    {}f{};'.format(typ.ctype_spaced(), i))
@@ -254,9 +253,8 @@ class RInstance(RType):
     def c_undefined_value(self) -> str:
         return 'NULL'
 
-    @property
     def struct_name(self) -> str:
-        return self.class_ir.struct_name
+        return self.class_ir.struct_name()
 
     def getter_index(self, name: str) -> int:
         for i, (attr, _) in enumerate(self.class_ir.attributes):
@@ -1180,7 +1178,6 @@ class ClassIR:
         self.attributes = attributes
         self.methods = []  # type: List[FuncIR]
 
-    @property
     def struct_name(self) -> str:
         return '{}Object'.format(self.name)
 
