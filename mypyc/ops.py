@@ -141,6 +141,8 @@ int_rinstance = RInstance('builtins.int', is_unboxed=True, is_refcounted=True, c
 
 bool_rinstance = RInstance('builtins.bool', is_unboxed=True, is_refcounted=False, ctype='char')
 
+none_rinstance = RInstance('builtins.None', is_unboxed=False, is_refcounted=True)
+
 list_rinstance = RInstance('builtins.list', is_unboxed=False, is_refcounted=True)
 
 dict_rinstance = RInstance('builtins.dict', is_unboxed=False, is_refcounted=True)
@@ -158,6 +160,10 @@ def is_int_rinstance(rtype: RType) -> bool:
 
 def is_bool_rinstance(rtype: RType) -> bool:
     return isinstance(rtype, RInstance) and rtype.name == 'builtins.bool'
+
+
+def is_none_rinstance(rtype: RType) -> bool:
+    return isinstance(rtype, RInstance) and rtype.name == 'builtins.None'
 
 
 def is_list_rinstance(rtype: RType) -> bool:
@@ -265,14 +271,6 @@ class ObjectRType(PyObjectRType):
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_object_rtype(self)
-
-
-class NoneRType(PyObjectRType):
-    def __init__(self) -> None:
-        self.name = 'None'
-
-    def accept(self, visitor: 'RTypeVisitor[T]') -> T:
-        return visitor.visit_none_rtype(self)
 
 
 class UserRType(PyObjectRType):
@@ -1346,7 +1344,4 @@ class RTypeVisitor(Generic[T]):
         pass
 
     def visit_tuple_rtype(self, typ: TupleRType) -> T:
-        pass
-
-    def visit_none_rtype(self, typ: NoneRType) -> T:
         pass

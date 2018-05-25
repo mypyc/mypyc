@@ -7,7 +7,7 @@ from mypyc.common import REG_PREFIX
 from mypyc.ops import (
     Environment, Label, Register, RType, ObjectRType, TupleRType, UserRType, OptionalRType,
     RInstance, type_struct_name, is_int_rinstance, is_bool_rinstance, short_name, is_list_rinstance,
-    is_dict_rinstance, is_tuple_rinstance
+    is_dict_rinstance, is_tuple_rinstance, is_none_rinstance
 )
 
 
@@ -188,7 +188,7 @@ class Emitter:
                 err,
                 '{} = NULL;'.format(dest),
                 '}')
-        elif typ.name == 'None':
+        elif is_none_rinstance(typ):
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
             self.emit_lines(

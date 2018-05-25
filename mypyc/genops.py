@@ -31,10 +31,10 @@ from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Register, Label, Return, FuncIR, Assign,
     PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, TupleRType,
     Unreachable, TupleGet, ClassIR, UserRType, ModuleIR, GetAttr, SetAttr, LoadStatic,
-    PyGetAttr, PyCall, RInstance, ObjectRType, NoneRType, OptionalRType, c_module_name,
+    PyGetAttr, PyCall, RInstance, ObjectRType, OptionalRType, c_module_name,
     PyMethodCall, INVALID_REGISTER, INVALID_LABEL, int_rinstance, is_int_rinstance, bool_rinstance,
     list_rinstance, is_list_rinstance, dict_rinstance, is_dict_rinstance, str_rinstance,
-    is_tuple_rinstance, tuple_rinstance
+    is_tuple_rinstance, tuple_rinstance, none_rinstance, is_none_rinstance
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
@@ -78,7 +78,7 @@ class Mapper:
         elif isinstance(typ, CallableType):
             return ObjectRType()
         elif isinstance(typ, NoneTyp):
-            return NoneRType()
+            return none_rinstance
         elif isinstance(typ, UnionType):
             assert len(typ.items) == 2 and any(isinstance(it, NoneTyp) for it in typ.items)
             if isinstance(typ.items[0], NoneTyp):
@@ -217,7 +217,7 @@ class IRBuilder(NodeVisitor[Register]):
         self.ret_type = self.convert_return_type(fdef)
         fdef.body.accept(self)
 
-        if self.ret_type.name == 'None':
+        if is_none_rinstance(self.ret_type):
             self.add_implicit_return()
         else:
             self.add_implicit_unreachable()
@@ -243,7 +243,7 @@ class IRBuilder(NodeVisitor[Register]):
     def add_implicit_return(self) -> None:
         block = self.blocks[-1][-1]
         if not block.ops or not isinstance(block.ops[-1], Return):
-            retval = self.environment.add_temp(NoneRType())
+            retval = self.environment.add_temp(none_rinstance)
             self.add(PrimitiveOp(retval, PrimitiveOp.NONE, [], line=-1))
             self.add(Return(retval))
 
@@ -266,7 +266,7 @@ class IRBuilder(NodeVisitor[Register]):
             retval = self.accept(stmt.expr)
             retval = self.coerce(retval, self.node_type(stmt.expr), self.ret_type, stmt.line)
         else:
-            retval = self.environment.add_temp(NoneRType())
+            retval = self.environment.add_temp(none_rinstance)
             self.add(PrimitiveOp(retval, PrimitiveOp.NONE, [], line=-1))
         self.add(Return(retval))
         return INVALID_REGISTER
@@ -679,7 +679,7 @@ class IRBuilder(NodeVisitor[Register]):
     def visit_name_expr(self, expr: NameExpr) -> Register:
         assert expr.node, "RefExpr not resolved"
         if expr.node.fullname() == 'builtins.None':
-            target = self.alloc_target(NoneRType())
+            target = self.alloc_target(none_rinstance)
             self.add(PrimitiveOp(target, PrimitiveOp.NONE, [], expr.line))
             return target
         elif expr.node.fullname() == 'builtins.True':
