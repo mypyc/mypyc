@@ -386,7 +386,7 @@ class IRBuilder(NodeVisitor[Register]):
                lvalue_type: RType,
                declare_new: bool) -> Register:
         target = self.get_assignment_target(lvalue, declare_new)
-        needs_box = rvalue_type.supports_unbox and not lvalue_type.supports_unbox
+        needs_box = rvalue_type.is_unboxed and not lvalue_type.is_unboxed
         return self.assign_to_target(target, rvalue, rvalue_type, needs_box)
 
     def visit_if_stmt(self, stmt: IfStmt) -> Register:
@@ -1062,7 +1062,7 @@ class IRBuilder(NodeVisitor[Register]):
         return self.type_to_rtype(mypy_type)
 
     def box(self, src: Register, typ: RType, target: Optional[Register] = None) -> Register:
-        if typ.supports_unbox:
+        if typ.is_unboxed:
             if target is None:
                 target = self.alloc_temp(object_rprimitive)
             self.add(Box(target, src, typ))
@@ -1080,7 +1080,7 @@ class IRBuilder(NodeVisitor[Register]):
         if target is None:
             target = self.alloc_temp(target_type)
 
-        if target_type.supports_unbox:
+        if target_type.is_unboxed:
             self.add(Unbox(target, src, target_type, line))
         else:
             self.add(Cast(target, src, target_type, line))
@@ -1112,15 +1112,15 @@ class IRBuilder(NodeVisitor[Register]):
 
         Returns the register with the converted value (may be same as src).
         """
-        if src_type.supports_unbox and not target_type.supports_unbox:
+        if src_type.is_unboxed and not target_type.is_unboxed:
             return self.box(src, src_type, target=target)
-        if ((src_type.supports_unbox and target_type.supports_unbox)
+        if ((src_type.is_unboxed and target_type.is_unboxed)
                 and not is_same_type(src_type, target_type)):
             # To go from one unboxed type to another, we go through a boxed
             # in-between value, for simplicity.
             tmp = self.box(src, src_type)
             return self.unbox_or_cast(tmp, target_type, line, target=target)
-        if ((not src_type.supports_unbox and target_type.supports_unbox)
+        if ((not src_type.is_unboxed and target_type.is_unboxed)
                 or not is_subtype(src_type, target_type)):
             return self.unbox_or_cast(src, target_type, line, target=target)
         if target is None:

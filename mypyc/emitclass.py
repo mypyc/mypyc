@@ -331,7 +331,7 @@ def generate_setter(cl: ClassIR,
         emitter.emit_dec_ref('self->{}'.format(attr), rtype)
         emitter.emit_line('}')
     emitter.emit_line('if (value != NULL) {')
-    if rtype.supports_unbox:
+    if rtype.is_unboxed:
         emitter.emit_unbox('value', 'tmp', rtype, custom_failure='return -1;', declare_dest=True)
     else:
         emitter.emit_cast('value', 'tmp', rtype, declare_dest=True)

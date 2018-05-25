@@ -53,13 +53,10 @@ class RType:
 
     name = None  # type: str
     ctype = None  # type: str
+    is_unboxed = False
 
     @abstractmethod
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
-        raise NotImplementedError
-
-    @property
-    def supports_unbox(self) -> bool:
         raise NotImplementedError
 
     @property
@@ -122,10 +119,6 @@ class RPrimitive(RType):
             self.c_undefined = '2'
         else:
             assert False, 'Uncognized ctype: %r' % ctype
-
-    @property
-    def supports_unbox(self) -> bool:
-        return self.is_unboxed
 
     @property
     def c_undefined_value(self) -> str:
@@ -197,6 +190,8 @@ def is_tuple_rprimitive(rtype: RType) -> bool:
 class RTuple(RType):
     """Fixed-length tuple."""
 
+    is_unboxed = True
+
     def __init__(self, types: List[RType]) -> None:
         self.name = 'tuple'
         self.types = tuple(types)
@@ -204,10 +199,6 @@ class RTuple(RType):
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_rtuple(self)
-
-    @property
-    def supports_unbox(self) -> bool:
-        return True
 
     @property
     def c_undefined_value(self) -> str:
@@ -264,6 +255,8 @@ class RTuple(RType):
 class RInstance(RType):
     """Instance of user-defined class (compiled to C extension class)."""
 
+    is_unboxed = False
+
     def __init__(self, class_ir: 'ClassIR') -> None:
         self.name = class_ir.name
         self.class_ir = class_ir
@@ -271,10 +264,6 @@ class RInstance(RType):
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_rinstance(self)
-
-    @property
-    def supports_unbox(self) -> bool:
-        return False
 
     @property
     def c_undefined_value(self) -> str:
@@ -306,6 +295,8 @@ class RInstance(RType):
 class ROptional(RType):
     """Optional[x]"""
 
+    is_unboxed = False
+
     def __init__(self, value_type: RType) -> None:
         self.name = 'optional'
         self.value_type = value_type
@@ -313,10 +304,6 @@ class ROptional(RType):
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_roptional(self)
-
-    @property
-    def supports_unbox(self) -> bool:
-        return False
 
     @property
     def c_undefined_value(self) -> str:

@@ -108,7 +108,7 @@ class Emitter:
         elif isinstance(rtype, RTuple):
             for i, item_type in enumerate(rtype.types):
                 self.emit_inc_ref('{}.f{}'.format(dest, i), item_type)
-        elif not rtype.supports_unbox:
+        elif not rtype.is_unboxed:
             self.emit_line('Py_INCREF(%s);' % dest)
         # Otherwise assume it's an unboxed, pointerless value and do nothing.
 
@@ -123,7 +123,7 @@ class Emitter:
         elif isinstance(rtype, RTuple):
             for i, item_type in enumerate(rtype.types):
                 self.emit_dec_ref('{}.f{}'.format(dest, i), item_type)
-        elif not rtype.supports_unbox:
+        elif not rtype.is_unboxed:
             self.emit_line('Py_DECREF(%s);' % dest)
         # Otherwise assume it's an unboxed, pointerless value and do nothing.
 
@@ -271,7 +271,7 @@ class Emitter:
                 self.emit_line('PyObject *{} = PyTuple_GetItem({}, {});'.format(temp, src, i))
                 temp2 = self.temp_name()
                 # Unbox or check the item.
-                if item_type.supports_unbox:
+                if item_type.is_unboxed:
                     self.emit_unbox(temp, temp2, item_type, custom_failure, declare_dest=True,
                                     borrow=borrow)
                 else:
@@ -309,7 +309,7 @@ class Emitter:
             self.emit_line('    CPyError_OutOfMemory();')
             # TODO: Fail if dest is None
             for i in range(0, len(typ.types)):
-                if not typ.supports_unbox:
+                if not typ.is_unboxed:
                     self.emit_line('PyTuple_SetItem({}, {}, {}.f{}'.format(dest, i, src, i))
                 else:
                     inner_name = self.temp_name()
@@ -317,7 +317,7 @@ class Emitter:
                                   declare_dest=True)
                     self.emit_line('PyTuple_SetItem({}, {}, {});'.format(dest, i, inner_name, i))
         else:
-            assert not typ.supports_unbox
+            assert not typ.is_unboxed
             # Type is boxed -- trivially just assign.
             self.emit_line('{}{} = {};'.format(declaration, dest, src))
 
