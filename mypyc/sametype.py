@@ -2,7 +2,7 @@
 
 from mypyc.ops import (
     RType, RTypeVisitor, ObjectRType, UserRType, OptionalRType, RInstance, TupleRType,
-    SequenceTupleRType, NoneRType
+    NoneRType
 )
 
 
@@ -31,9 +31,6 @@ class SameTypeVisitor(RTypeVisitor[bool]):
         return (isinstance(self.right, TupleRType)
             and len(self.right.types) == len(left.types)
             and all(is_same_type(t1, t2) for t1, t2 in zip(left.types, self.right.types)))
-
-    def visit_sequence_tuple_rtype(self, left: SequenceTupleRType) -> bool:
-        return isinstance(self.right, SequenceTupleRType)
 
     def visit_none_rtype(self, left: NoneRType) -> bool:
         return isinstance(self.right, NoneRType)

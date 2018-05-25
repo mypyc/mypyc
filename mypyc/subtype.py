@@ -2,7 +2,7 @@
 
 from mypyc.ops import (
     RType, ObjectRType, OptionalRType, NoneRType, UserRType, RInstance, TupleRType,
-    SequenceTupleRType, RTypeVisitor, is_bool_rinstance, is_int_rinstance
+    RTypeVisitor, is_bool_rinstance, is_int_rinstance, is_tuple_rinstance
 )
 
 
@@ -42,15 +42,12 @@ class SubtypeVisitor(RTypeVisitor[bool]):
         return isinstance(self.right, RInstance) and left.name == self.right.name
 
     def visit_tuple_rtype(self, left: TupleRType) -> bool:
-        if isinstance(self.right, SequenceTupleRType):
+        if is_tuple_rinstance(self.right):
             return True
         if isinstance(self.right, TupleRType):
             return len(self.right.types) == len(left.types) and all(
                 is_subtype(t1, t2) for t1, t2 in zip(left.types, self.right.types))
         return False
-
-    def visit_sequence_tuple_rtype(self, left: SequenceTupleRType) -> bool:
-        return isinstance(self.right, SequenceTupleRType)
 
     def visit_none_rtype(self, left: NoneRType) -> bool:
         return isinstance(self.right, NoneRType)

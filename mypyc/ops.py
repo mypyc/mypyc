@@ -148,6 +148,9 @@ dict_rinstance = RInstance('builtins.dict', is_unboxed=False, is_refcounted=True
 # At the C layer, str is refered to as unicode (PyUnicode)
 str_rinstance = RInstance('builtins.str', is_unboxed=False, is_refcounted=True)
 
+# Tuple of an arbitrary length (corresponds to Tuple[t, ...], with explicit '...')
+tuple_rinstance = RInstance('builtins.tuple', is_unboxed=False, is_refcounted=True)
+
 
 def is_int_rinstance(rtype: RType) -> bool:
     return isinstance(rtype, RInstance) and rtype.name == 'builtins.int'
@@ -167,6 +170,10 @@ def is_dict_rinstance(rtype: RType) -> bool:
 
 def is_str_rinstance(rtype: RType) -> bool:
     return isinstance(rtype, RInstance) and rtype.name == 'builtins.str'
+
+
+def is_tuple_rinstance(rtype: RType) -> bool:
+    return isinstance(rtype, RInstance) and rtype.name == 'builtins.tuple'
 
 
 class TupleRType(RType):
@@ -258,16 +265,6 @@ class ObjectRType(PyObjectRType):
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_object_rtype(self)
-
-
-class SequenceTupleRType(PyObjectRType):
-    """Uniform tuple"""
-
-    def __init__(self) -> None:
-        self.name = 'sequence_tuple'
-
-    def accept(self, visitor: 'RTypeVisitor[T]') -> T:
-        return visitor.visit_sequence_tuple_rtype(self)
 
 
 class NoneRType(PyObjectRType):
@@ -1349,9 +1346,6 @@ class RTypeVisitor(Generic[T]):
         pass
 
     def visit_tuple_rtype(self, typ: TupleRType) -> T:
-        pass
-
-    def visit_sequence_tuple_rtype(self, typ: SequenceTupleRType) -> T:
         pass
 
     def visit_none_rtype(self, typ: NoneRType) -> T:

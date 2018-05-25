@@ -7,7 +7,7 @@ from mypyc.common import REG_PREFIX
 from mypyc.ops import (
     Environment, Label, Register, RType, ObjectRType, TupleRType, UserRType, OptionalRType,
     RInstance, type_struct_name, is_int_rinstance, is_bool_rinstance, short_name, is_list_rinstance,
-    is_dict_rinstance
+    is_dict_rinstance, is_tuple_rinstance
 )
 
 
@@ -128,9 +128,7 @@ class Emitter:
 
     def pretty_name(self, typ: RType) -> str:
         pretty_name = typ.name
-        if pretty_name == 'sequence_tuple':
-            pretty_name = 'tuple'
-        elif isinstance(typ, OptionalRType):
+        if isinstance(typ, OptionalRType):
             pretty_name = '%s or None' % self.pretty_name(typ.value_type)
         return short_name(pretty_name)
 
@@ -170,7 +168,7 @@ class Emitter:
                 err,
                 '{} = NULL;'.format(dest),
                 '}')
-        elif typ.name == 'sequence_tuple':
+        elif is_tuple_rinstance(typ):
             if declare_dest:
                 self.emit_line('{} {};'.format(typ.ctype, dest))
             self.emit_lines(

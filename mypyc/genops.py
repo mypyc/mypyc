@@ -31,10 +31,10 @@ from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Register, Label, Return, FuncIR, Assign,
     PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, TupleRType,
     Unreachable, TupleGet, ClassIR, UserRType, ModuleIR, GetAttr, SetAttr, LoadStatic,
-    PyGetAttr, PyCall, RInstance, SequenceTupleRType, ObjectRType, NoneRType,
-    OptionalRType, c_module_name, PyMethodCall,
-    INVALID_REGISTER, INVALID_LABEL, int_rinstance, is_int_rinstance, bool_rinstance,
-    list_rinstance, is_list_rinstance, dict_rinstance, is_dict_rinstance, str_rinstance
+    PyGetAttr, PyCall, RInstance, ObjectRType, NoneRType, OptionalRType, c_module_name,
+    PyMethodCall, INVALID_REGISTER, INVALID_LABEL, int_rinstance, is_int_rinstance, bool_rinstance,
+    list_rinstance, is_list_rinstance, dict_rinstance, is_dict_rinstance, str_rinstance,
+    is_tuple_rinstance, tuple_rinstance
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
@@ -68,7 +68,7 @@ class Mapper:
             elif typ.type.fullname() == 'builtins.dict':
                 return dict_rinstance
             elif typ.type.fullname() == 'builtins.tuple':
-                return SequenceTupleRType()
+                return tuple_rinstance  # Varying-length tuple
             elif typ.type.fullname() == 'builtins.object':
                 return ObjectRType()
             elif typ.type in self.type_to_ir:
@@ -636,7 +636,7 @@ class IRBuilder(NodeVisitor[Register]):
 
         if (is_list_rinstance(base_rtype)
                 or is_dict_rinstance(base_rtype)
-                or isinstance(base_rtype, SequenceTupleRType)):
+                or is_tuple_rinstance(base_rtype)):
             index_type = self.node_type(expr.index)
             if not is_dict_rinstance(base_rtype):
                 assert is_int_rinstance(index_type), 'Unsupported indexing operation'  # TODO
@@ -806,7 +806,7 @@ class IRBuilder(NodeVisitor[Register]):
             expr_rtype = self.node_type(expr.args[0])
             if is_list_rinstance(expr_rtype):
                 self.add(PrimitiveOp(target, PrimitiveOp.LIST_LEN, [arg], expr.line))
-            elif expr_rtype.name == 'sequence_tuple':
+            elif is_tuple_rinstance(expr_rtype):
                 self.add(PrimitiveOp(target, PrimitiveOp.HOMOGENOUS_TUPLE_LEN, [arg], expr.line))
             elif isinstance(expr_rtype, TupleRType):
                 self.add(LoadInt(target, len(expr_rtype.types)))
@@ -815,7 +815,7 @@ class IRBuilder(NodeVisitor[Register]):
 
         # Handle conversion to sequence tuple
         elif fn == 'tuple' and len(expr.args) == 1 and expr.arg_kinds == [ARG_POS]:
-            target = self.alloc_target(SequenceTupleRType())
+            target = self.alloc_target(tuple_rinstance)
             arg = self.accept(expr.args[0])
 
             self.add(PrimitiveOp(target, PrimitiveOp.LIST_TO_HOMOGENOUS_TUPLE, [arg], expr.line))
