@@ -6,7 +6,7 @@ from typing import List, Set, Dict, Optional
 from mypyc.common import REG_PREFIX
 from mypyc.ops import (
     Environment, Label, Register, RType, ObjectRType, TupleRType, UserRType, OptionalRType,
-    RInstance, type_struct_name, is_int_rinstance, short_name
+    RInstance, type_struct_name, is_int_rinstance, is_bool_rinstance, short_name
 )
 
 
@@ -248,7 +248,7 @@ class Emitter:
             self.emit_line('else {')
             self.emit_lines(*failure)
             self.emit_line('}')
-        elif typ.name == 'bool':
+        elif is_bool_rinstance(typ):
             # Whether we are borrowing or not makes no difference.
             if declare_dest:
                 self.emit_line('char {};'.format(dest))
@@ -298,7 +298,7 @@ class Emitter:
         if is_int_rinstance(typ):
             # Steal the existing reference if it exists.
             self.emit_line('{}{} = CPyTagged_StealAsObject({});'.format(declaration, dest, src))
-        elif typ.name == 'bool':
+        elif is_bool_rinstance(typ):
             # TODO: The Py_RETURN macros return the correct PyObject * with reference count
             #       handling. Relevant here?
             self.emit_lines('{}{} = PyBool_FromLong({});'.format(declaration, dest, src))

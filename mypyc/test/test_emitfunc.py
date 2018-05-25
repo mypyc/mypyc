@@ -6,8 +6,8 @@ from mypy.test.helpers import assert_string_arrays_equal
 from mypyc.ops import (
     Environment, BasicBlock, FuncIR, RuntimeArg, RType, Goto, Return, LoadInt, Assign,
     PrimitiveOp, IncRef, DecRef, Branch, Call, Unbox, Box, TupleRType, TupleGet, GetAttr,
-    ClassIR, UserRType, SetAttr, Op, Label, ListRType, ObjectRType, BoolRType,
-    DictRType, int_rinstance
+    ClassIR, UserRType, SetAttr, Op, Label, ListRType, ObjectRType, DictRType,
+    int_rinstance, bool_rinstance
 )
 from mypyc.emit import Emitter, EmitterContext
 from mypyc.emitfunc import generate_native_function, FunctionEmitterVisitor
@@ -24,7 +24,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.o = self.env.add_local(Var('o'), ObjectRType())
         self.o2 = self.env.add_local(Var('o2'), ObjectRType())
         self.d = self.env.add_local(Var('d'), DictRType())
-        self.b = self.env.add_local(Var('b'), BoolRType())
+        self.b = self.env.add_local(Var('b'), bool_rinstance)
         self.context = EmitterContext()
         self.emitter = Emitter(self.context, self.env)
         self.declarations = Emitter(self.context, self.env)
@@ -43,7 +43,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          "cpy_r_m = 10;")
 
     def test_tuple_get(self) -> None:
-        self.assert_emit(TupleGet(self.m, self.n, 1, BoolRType(), 0), 'cpy_r_m = cpy_r_n.f1;')
+        self.assert_emit(TupleGet(self.m, self.n, 1, bool_rinstance, 0), 'cpy_r_m = cpy_r_n.f1;')
 
     def test_load_None(self) -> None:
         self.assert_emit(PrimitiveOp(self.m, PrimitiveOp.NONE, [], 0),
@@ -126,11 +126,11 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          "CPyTagged_DecRef(cpy_r_m);")
 
     def test_dec_ref_tuple(self) -> None:
-        tuple_type = TupleRType([int_rinstance, BoolRType()])
+        tuple_type = TupleRType([int_rinstance, bool_rinstance])
         self.assert_emit(DecRef(self.m, tuple_type), 'CPyTagged_DecRef(cpy_r_m.f0);')
 
     def test_dec_ref_tuple_nested(self) -> None:
-        tuple_type = TupleRType([TupleRType([int_rinstance, BoolRType()]), BoolRType()])
+        tuple_type = TupleRType([TupleRType([int_rinstance, bool_rinstance]), bool_rinstance])
         self.assert_emit(DecRef(self.m, tuple_type), 'CPyTagged_DecRef(cpy_r_m.f0.f0);')
 
     def test_list_get_item(self) -> None:
@@ -171,14 +171,14 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """cpy_r_b = PyList_Append(cpy_r_l, cpy_r_o) != -1;""")
 
     def test_get_attr(self) -> None:
-        ir = ClassIR('A', [('x', BoolRType()),
+        ir = ClassIR('A', [('x', bool_rinstance),
                            ('y', int_rinstance)])
         rtype = UserRType(ir)
         self.assert_emit(GetAttr(self.n, self.m, 'y', rtype, 1),
                          """cpy_r_n = CPY_GET_ATTR(cpy_r_m, 2, AObject, CPyTagged);""")
 
     def test_set_attr(self) -> None:
-        ir = ClassIR('A', [('x', BoolRType()),
+        ir = ClassIR('A', [('x', bool_rinstance),
                            ('y', int_rinstance)])
         rtype = UserRType(ir)
         self.assert_emit(SetAttr(self.b, self.n, 'y', self.m, rtype, 1),

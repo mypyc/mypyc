@@ -138,33 +138,15 @@ class RInstance(RType):
 
 
 int_rinstance = RInstance('builtins.int', is_unboxed=True, is_refcounted=True, ctype='CPyTagged')
+bool_rinstance = RInstance('builtins.bool', is_unboxed=True, is_refcounted=False, ctype='char')
 
 
-def is_int_rinstance(t: RType) -> bool:
-    return isinstance(t, RInstance) and t.name == 'builtins.int'
+def is_int_rinstance(rtype: RType) -> bool:
+    return isinstance(rtype, RInstance) and rtype.name == 'builtins.int'
 
 
-class BoolRType(RType):
-    """bool"""
-
-    def __init__(self) -> None:
-        self.name = 'bool'
-        self.ctype = 'char'
-
-    def accept(self, visitor: 'RTypeVisitor[T]') -> T:
-        return visitor.visit_bool_rtype(self)
-
-    @property
-    def supports_unbox(self) -> bool:
-        return True
-
-    @property
-    def c_undefined_value(self) -> str:
-        return '2'
-
-    @property
-    def is_refcounted(self) -> bool:
-        return False
+def is_bool_rinstance(rtype: RType) -> bool:
+    return isinstance(rtype, RInstance) and rtype.name == 'builtins.bool'
 
 
 class TupleRType(RType):
@@ -663,7 +645,7 @@ class IncRef(StrictRegisterOp):
 
     def to_str(self, env: Environment) -> str:
         s = env.format('inc_ref %r', self.dest)
-        if self.target_type.name == 'bool' or is_int_rinstance(self.target_type):
+        if is_bool_rinstance(self.target_type) or is_int_rinstance(self.target_type):
             s += ' :: {}'.format(short_name(self.target_type.name))
         return s
 
@@ -689,7 +671,7 @@ class DecRef(StrictRegisterOp):
 
     def to_str(self, env: Environment) -> str:
         s = env.format('dec_ref %r', self.dest)
-        if self.target_type.name == 'bool' or is_int_rinstance(self.target_type):
+        if is_bool_rinstance(self.target_type) or is_int_rinstance(self.target_type):
             s += ' :: {}'.format(short_name(self.target_type.name))
         return s
 
@@ -1372,9 +1354,6 @@ class RTypeVisitor(Generic[T]):
         pass
 
     def visit_optional_rtype(self, typ: OptionalRType) -> T:
-        pass
-
-    def visit_bool_rtype(self, typ: BoolRType) -> T:
         pass
 
     def visit_tuple_rtype(self, typ: TupleRType) -> T:

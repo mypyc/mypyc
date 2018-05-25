@@ -31,9 +31,9 @@ from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Register, Label, Return, FuncIR, Assign,
     PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, TupleRType,
     Unreachable, TupleGet, ClassIR, UserRType, ModuleIR, GetAttr, SetAttr, LoadStatic,
-    PyGetAttr, PyCall, RInstance, BoolRType, ListRType, SequenceTupleRType, ObjectRType, NoneRType,
+    PyGetAttr, PyCall, RInstance, ListRType, SequenceTupleRType, ObjectRType, NoneRType,
     OptionalRType, DictRType, UnicodeRType, c_module_name, PyMethodCall,
-    INVALID_REGISTER, INVALID_LABEL, int_rinstance, is_int_rinstance
+    INVALID_REGISTER, INVALID_LABEL, int_rinstance, is_int_rinstance, bool_rinstance
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
@@ -61,7 +61,7 @@ class Mapper:
             elif typ.type.fullname() == 'builtins.str':
                 return UnicodeRType()
             elif typ.type.fullname() == 'builtins.bool':
-                return BoolRType()
+                return bool_rinstance
             elif typ.type.fullname() == 'builtins.list':
                 return ListRType()
             elif typ.type.fullname() == 'builtins.dict':
@@ -358,7 +358,7 @@ class IRBuilder(NodeVisitor[Register]):
             rvalue_reg = self.accept(rvalue)
             if needs_box:
                 rvalue_reg = self.box(rvalue_reg, rvalue_type)
-            target_reg = self.alloc_temp(BoolRType())
+            target_reg = self.alloc_temp(bool_rinstance)
             self.add(SetAttr(target_reg, target.obj_reg, target.attr, rvalue_reg, target.obj_type,
                              rvalue.line))
             return target_reg
@@ -371,7 +371,7 @@ class IRBuilder(NodeVisitor[Register]):
                 op = PrimitiveOp.DICT_SET
             else:
                 assert False, target.rtype
-            target_reg = self.alloc_temp(BoolRType())
+            target_reg = self.alloc_temp(bool_rinstance)
             self.add(PrimitiveOp(target_reg, op,
                                  [target.base_reg, target.index_reg, boxed_item_reg], rvalue.line))
             return target_reg
@@ -618,7 +618,7 @@ class IRBuilder(NodeVisitor[Register]):
         elif isinstance(rtype, DictRType):
             if expr_op == 'in':
                 if target is None:
-                    target = self.alloc_target(BoolRType())
+                    target = self.alloc_target(bool_rinstance)
                 lreg = self.box(lreg, ltype)
                 op = PrimitiveOp.DICT_CONTAINS
             else:
@@ -680,11 +680,11 @@ class IRBuilder(NodeVisitor[Register]):
             self.add(PrimitiveOp(target, PrimitiveOp.NONE, [], expr.line))
             return target
         elif expr.node.fullname() == 'builtins.True':
-            target = self.alloc_target(BoolRType())
+            target = self.alloc_target(bool_rinstance)
             self.add(PrimitiveOp(target, PrimitiveOp.TRUE, [], expr.line))
             return target
         elif expr.node.fullname() == 'builtins.False':
-            target = self.alloc_target(BoolRType())
+            target = self.alloc_target(bool_rinstance)
             self.add(PrimitiveOp(target, PrimitiveOp.FALSE, [], expr.line))
             return target
 
@@ -877,11 +877,11 @@ class IRBuilder(NodeVisitor[Register]):
         result_type = self.node_type(expr)
         base = self.accept(callee.expr)
         if callee.name == 'append' and base_type.name == 'list':
-            target = self.alloc_target(BoolRType())
+            target = self.alloc_target(bool_rinstance)
             arg = self.box_expr(expr.args[0])
             self.add(PrimitiveOp(target, PrimitiveOp.LIST_APPEND, [base, arg], expr.line))
         elif callee.name == 'update' and base_type.name == 'dict':
-            target = self.alloc_target(BoolRType())
+            target = self.alloc_target(bool_rinstance)
             other_list_reg = self.accept(expr.args[0])
             self.add(PrimitiveOp(target, PrimitiveOp.DICT_UPDATE, [base, other_list_reg],
                                  expr.line))

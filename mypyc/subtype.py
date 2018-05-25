@@ -1,8 +1,9 @@
 """Subtype check for RTypes."""
 
 from mypyc.ops import (
-    RType, ObjectRType, OptionalRType, NoneRType, UserRType, RInstance, BoolRType, TupleRType,
-    SequenceTupleRType, ListRType, DictRType, UnicodeRType, RTypeVisitor
+    RType, ObjectRType, OptionalRType, NoneRType, UserRType, RInstance, TupleRType,
+    SequenceTupleRType, ListRType, DictRType, UnicodeRType, RTypeVisitor, is_bool_rinstance,
+    is_int_rinstance
 )
 
 
@@ -37,12 +38,9 @@ class SubtypeVisitor(RTypeVisitor[bool]):
                                                                     self.right.value_type)
 
     def visit_rinstance(self, left: RInstance) -> bool:
+        if is_bool_rinstance(left) and is_int_rinstance(self.right):
+            return True
         return isinstance(self.right, RInstance) and left.name == self.right.name
-
-    def visit_bool_rtype(self, left: BoolRType) -> bool:
-        right = self.right
-        return isinstance(right, BoolRType) or (isinstance(right, RInstance)
-                                                and right.name == 'builtins.int')
 
     def visit_tuple_rtype(self, left: TupleRType) -> bool:
         if isinstance(self.right, SequenceTupleRType):
