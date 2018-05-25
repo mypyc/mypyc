@@ -11,6 +11,7 @@ can hold various things:
 """
 
 from abc import abstractmethod
+import re
 from typing import List, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType
 
 from mypy.nodes import Var
@@ -41,10 +42,17 @@ def c_module_name(module_name: str) -> str:
     return 'module_{}'.format(module_name.replace('.', '__dot__'))
 
 
+def short_name(name: str) -> str:
+    if name.startswith('builtins.'):
+        return name[9:]
+    return name
+
+
 class RType:
     """Abstract base class for runtime types (erased, only concrete; no generics)."""
 
     name = None  # type: str
+    ctype = None  # type: str
 
     @abstractmethod
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
@@ -63,10 +71,6 @@ class RType:
             return self.ctype + ' '
 
     @property
-    def ctype(self) -> str:
-        raise NotImplementedError
-
-    @property
     def c_undefined_value(self) -> str:
         raise NotImplementedError
 
@@ -79,8 +83,11 @@ class RType:
         """Does the unboxed representation of the type use reference counting?"""
         return True
 
+    def short_name(self) -> str:
+        return short_name(self.name)
+
     def __str__(self) -> str:
-        return self.name
+        return short_name(self.name)
 
     def __repr__(self) -> str:
         return '<%s>' % self.__class__.__name__
@@ -92,29 +99,49 @@ class RType:
         return hash(self.name)
 
 
-class IntRType(RType):
-    """int"""
-
-    def __init__(self) -> None:
-        self.name = 'int'
-
-    def accept(self, visitor: 'RTypeVisitor[T]') -> T:
-        return visitor.visit_int_rtype(self)
+class RInstance(RType):
+    def __init__(self,
+                 name: str,
+                 is_unboxed: bool,
+                 is_refcounted: bool,
+                 ctype: str = 'PyObject *') -> None:
+        self.name = name
+        self.is_unboxed = is_unboxed
+        self.ctype = ctype
+        self._is_refcounted = is_refcounted
+        if ctype == 'CPyTagged':
+            self.c_undefined = 'CPY_INT_TAG'
+        elif ctype == 'PyObject *':
+            self.c_undefined = 'NULL'
+        elif ctype == 'char':
+            self.c_undefined = '2'
+        else:
+            assert False, 'Uncognized ctype: %r' % ctype
 
     @property
     def supports_unbox(self) -> bool:
-        return True
-
-    @property
-    def ctype(self) -> str:
-        return 'CPyTagged'
+        return self.is_unboxed
 
     @property
     def c_undefined_value(self) -> str:
-        return 'CPY_INT_TAG'
+        return self.c_undefined
+
+    @property
+    def is_refcounted(self) -> bool:
+        return self._is_refcounted
+
+    def accept(self, visitor: 'RTypeVisitor[T]') -> T:
+        return visitor.visit_rinstance(self)
 
     def __repr__(self) -> str:
-        return '<IntRType>'
+        return '<RInstance %s>'% self.name
+
+
+int_rinstance = RInstance('builtins.int', is_unboxed=True, is_refcounted=True, ctype='CPyTagged')
+
+
+def is_int_rinstance(t: RType) -> bool:
+    return isinstance(t, RInstance) and t.name == 'builtins.int'
 
 
 class BoolRType(RType):
@@ -122,6 +149,7 @@ class BoolRType(RType):
 
     def __init__(self) -> None:
         self.name = 'bool'
+        self.ctype = 'char'
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_bool_rtype(self)
@@ -129,10 +157,6 @@ class BoolRType(RType):
     @property
     def supports_unbox(self) -> bool:
         return True
-
-    @property
-    def ctype(self) -> str:
-        return 'char'
 
     @property
     def c_undefined_value(self) -> str:
@@ -149,6 +173,7 @@ class TupleRType(RType):
     def __init__(self, types: List[RType]) -> None:
         self.name = 'tuple'
         self.types = tuple(types)
+        self.ctype = 'struct {}'.format(self.struct_name)
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_tuple_rtype(self)
@@ -164,10 +189,6 @@ class TupleRType(RType):
         #
         #    struct foo _tmp = { <item0-undefined>, <item1-undefined>, ... };
         assert False, "Tuple undefined value can't be represented as a C expression"
-
-    @property
-    def ctype(self) -> str:
-        return 'struct {}'.format(self.struct_name)
 
     @property
     def is_refcounted(self) -> bool:
@@ -216,13 +237,11 @@ class TupleRType(RType):
 class PyObjectRType(RType):
     """Abstract base class for PyObject * types."""
 
+    ctype = 'PyObject *'
+
     @property
     def supports_unbox(self) -> bool:
         return False
-
-    @property
-    def ctype(self) -> str:
-        return 'PyObject *'
 
     @property
     def c_undefined_value(self) -> str:
@@ -644,8 +663,8 @@ class IncRef(StrictRegisterOp):
 
     def to_str(self, env: Environment) -> str:
         s = env.format('inc_ref %r', self.dest)
-        if self.target_type.name in ['bool', 'int']:
-            s += ' :: {}'.format(self.target_type.name)
+        if self.target_type.name == 'bool' or is_int_rinstance(self.target_type):
+            s += ' :: {}'.format(short_name(self.target_type.name))
         return s
 
     def sources(self) -> List[Register]:
@@ -670,8 +689,8 @@ class DecRef(StrictRegisterOp):
 
     def to_str(self, env: Environment) -> str:
         s = env.format('dec_ref %r', self.dest)
-        if self.target_type.name in ['bool', 'int']:
-            s += ' :: {}'.format(self.target_type.name)
+        if self.target_type.name == 'bool' or is_int_rinstance(self.target_type):
+            s += ' :: {}'.format(short_name(self.target_type.name))
         return s
 
     def sources(self) -> List[Register]:
@@ -1346,13 +1365,13 @@ class RTypeVisitor(Generic[T]):
     def visit_object_rtype(self, typ: ObjectRType) -> T:
         pass
 
+    def visit_rinstance(self, typ: RInstance) -> T:
+        pass
+
     def visit_user_rtype(self, typ: UserRType) -> T:
         pass
 
     def visit_optional_rtype(self, typ: OptionalRType) -> T:
-        pass
-
-    def visit_int_rtype(self, typ: IntRType) -> T:
         pass
 
     def visit_bool_rtype(self, typ: BoolRType) -> T:

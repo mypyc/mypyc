@@ -31,9 +31,9 @@ from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Register, Label, Return, FuncIR, Assign,
     PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, TupleRType,
     Unreachable, TupleGet, ClassIR, UserRType, ModuleIR, GetAttr, SetAttr, LoadStatic,
-    PyGetAttr, PyCall, IntRType, BoolRType, ListRType, SequenceTupleRType, ObjectRType, NoneRType,
+    PyGetAttr, PyCall, RInstance, BoolRType, ListRType, SequenceTupleRType, ObjectRType, NoneRType,
     OptionalRType, DictRType, UnicodeRType, c_module_name, PyMethodCall,
-    INVALID_REGISTER, INVALID_LABEL
+    INVALID_REGISTER, INVALID_LABEL, int_rinstance, is_int_rinstance
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
@@ -57,7 +57,7 @@ class Mapper:
     def type_to_rtype(self, typ: Type) -> RType:
         if isinstance(typ, Instance):
             if typ.type.fullname() == 'builtins.int':
-                return IntRType()
+                return int_rinstance
             elif typ.type.fullname() == 'builtins.str':
                 return UnicodeRType()
             elif typ.type.fullname() == 'builtins.bool':
@@ -325,7 +325,7 @@ class IRBuilder(NodeVisitor[Register]):
             index_type = self.node_type(lvalue.index)
             base_reg = self.accept(lvalue.base)
             index_reg = self.accept(lvalue.index)
-            if isinstance(base_type, ListRType) and isinstance(index_type, IntRType):
+            if isinstance(base_type, ListRType) and is_int_rinstance(index_type):
                 # Indexed list set
                 return AssignmentTargetIndex(base_reg, index_reg, base_type)
             elif isinstance(base_type, DictRType):
@@ -466,7 +466,8 @@ class IRBuilder(NodeVisitor[Register]):
             end_reg = self.accept(end)
 
             # Initialize loop index to 0.
-            index_reg = self.assign(s.index, IntExpr(0), IntRType(), IntRType(), declare_new=True)
+            index_reg = self.assign(s.index, IntExpr(0), int_rinstance, int_rinstance,
+                                    declare_new=True)
             goto = Goto(INVALID_LABEL)
             self.add(goto)
 
@@ -487,7 +488,7 @@ class IRBuilder(NodeVisitor[Register]):
             end_goto.label = end_block.label
 
             # Increment index register.
-            one_reg = self.alloc_temp(IntRType())
+            one_reg = self.alloc_temp(int_rinstance)
             self.add(LoadInt(one_reg, 1))
             self.add(PrimitiveOp(index_reg, PrimitiveOp.INT_ADD, [index_reg, one_reg], s.line))
 
@@ -504,10 +505,10 @@ class IRBuilder(NodeVisitor[Register]):
 
             expr_reg = self.accept(s.expr)
 
-            index_reg = self.alloc_temp(IntRType())
+            index_reg = self.alloc_temp(int_rinstance)
             self.add(LoadInt(index_reg, 0))
 
-            one_reg = self.alloc_temp(IntRType())
+            one_reg = self.alloc_temp(int_rinstance)
             self.add(LoadInt(one_reg, 1))
 
             assert isinstance(s.index, NameExpr)
@@ -519,7 +520,7 @@ class IRBuilder(NodeVisitor[Register]):
 
             # For compatibility with python semantics we recalculate the length
             # at every iteration.
-            len_reg = self.alloc_temp(IntRType())
+            len_reg = self.alloc_temp(int_rinstance)
             self.add(PrimitiveOp(len_reg, PrimitiveOp.LIST_LEN, [expr_reg], s.line))
 
             branch = Branch(index_reg, len_reg, INVALID_LABEL, INVALID_LABEL, Branch.INT_LT)
@@ -582,10 +583,10 @@ class IRBuilder(NodeVisitor[Register]):
 
         etype = self.node_type(expr.expr)
         reg = self.accept(expr.expr)
-        if etype.name != 'int':
+        if not is_int_rinstance(etype):
             assert False, 'Unsupported unary operation'
 
-        target = self.alloc_target(IntRType())
+        target = self.alloc_target(int_rinstance)
         zero = self.accept(IntExpr(0))
         self.add(PrimitiveOp(target, PrimitiveOp.INT_SUB, [zero, reg], expr.line))
 
@@ -600,16 +601,16 @@ class IRBuilder(NodeVisitor[Register]):
 
     def binary_op(self, ltype: RType, lreg: Register, rtype: RType, rreg: Register, expr_op: str,
                   line: int, target: Optional[Register] = None) -> Register:
-        if ltype.name == 'int' and rtype.name == 'int':
+        if is_int_rinstance(ltype) and is_int_rinstance(rtype):
             # Primitive int operation
             if target is None:
-                target = self.alloc_target(IntRType())
+                target = self.alloc_target(int_rinstance)
             op = self.int_binary_ops[expr_op]
         elif (ltype.name == 'list' or rtype.name == 'list') and expr_op == '*':
             if rtype.name == 'list':
                 ltype, rtype = rtype, ltype
                 lreg, rreg = rreg, lreg
-            if rtype.name != 'int':
+            if not is_int_rinstance(rtype):
                 assert False, 'Unsupported binary operation'  # TODO: Operator overloading
             if target is None:
                 target = self.alloc_target(ListRType())
@@ -635,7 +636,7 @@ class IRBuilder(NodeVisitor[Register]):
         if isinstance(base_rtype, (ListRType, SequenceTupleRType, DictRType)):
             index_type = self.node_type(expr.index)
             if not isinstance(base_rtype, DictRType):
-                assert isinstance(index_type, IntRType), 'Unsupported indexing operation'  # TODO
+                assert is_int_rinstance(index_type), 'Unsupported indexing operation'  # TODO
             if isinstance(base_rtype, ListRType):
                 op = PrimitiveOp.LIST_GET
             elif isinstance(base_rtype, DictRType):
@@ -659,7 +660,7 @@ class IRBuilder(NodeVisitor[Register]):
         assert False, 'Unsupported indexing operation'
 
     def visit_int_expr(self, expr: IntExpr) -> Register:
-        reg = self.alloc_target(IntRType())
+        reg = self.alloc_target(int_rinstance)
         self.add(LoadInt(reg, expr.value))
         return reg
 
@@ -796,7 +797,7 @@ class IRBuilder(NodeVisitor[Register]):
         assert isinstance(expr.callee, NameExpr)
         fn = expr.callee.name  # TODO: fullname
         if fn == 'len' and len(expr.args) == 1 and expr.arg_kinds == [ARG_POS]:
-            target = self.alloc_target(IntRType())
+            target = self.alloc_target(int_rinstance)
             arg = self.accept(expr.args[0])
 
             expr_rtype = self.node_type(expr.args[0])
@@ -1054,7 +1055,7 @@ class IRBuilder(NodeVisitor[Register]):
     def node_type(self, node: Expression) -> RType:
         if isinstance(node, IntExpr):
             # TODO: Don't special case IntExpr
-            return IntRType()
+            return int_rinstance
         mypy_type = self.types[node]
         return self.type_to_rtype(mypy_type)
 

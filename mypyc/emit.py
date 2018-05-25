@@ -6,7 +6,7 @@ from typing import List, Set, Dict, Optional
 from mypyc.common import REG_PREFIX
 from mypyc.ops import (
     Environment, Label, Register, RType, ObjectRType, TupleRType, UserRType, OptionalRType,
-    IntRType, type_struct_name
+    RInstance, type_struct_name, is_int_rinstance, short_name
 )
 
 
@@ -101,7 +101,7 @@ class Emitter:
         For composite unboxed structures (e.g. tuples) recursively
         increment reference counts for each component.
         """
-        if rtype.name == 'int':
+        if is_int_rinstance(rtype):
             self.emit_line('CPyTagged_IncRef(%s);' % dest)
         elif isinstance(rtype, TupleRType):
             for i, item_type in enumerate(rtype.types):
@@ -116,7 +116,7 @@ class Emitter:
         For composite unboxed structures (e.g. tuples) recursively
         decrement reference counts for each component.
         """
-        if rtype.name == 'int':
+        if is_int_rinstance(rtype):
             self.emit_line('CPyTagged_DecRef(%s);' % dest)
         elif isinstance(rtype, TupleRType):
             for i, item_type in enumerate(rtype.types):
@@ -131,7 +131,7 @@ class Emitter:
             pretty_name = 'tuple'
         elif isinstance(typ, OptionalRType):
             pretty_name = '%s or None' % self.pretty_name(typ.value_type)
-        return pretty_name
+        return short_name(pretty_name)
 
     def emit_cast(self, src: str, dest: str, typ: RType, declare_dest: bool = False,
                   custom_message: Optional[str] = None) -> None:
@@ -237,7 +237,7 @@ class Emitter:
         else:
             failure = [raise_exc,
                        '%s = %s;' % (dest, typ.c_error_value)]
-        if typ.name == 'int':
+        if is_int_rinstance(typ):
             if declare_dest:
                 self.emit_line('CPyTagged {};'.format(dest))
             self.emit_line('if (PyLong_Check({}))'.format(src))
@@ -295,7 +295,7 @@ class Emitter:
             declaration = 'PyObject *'
         else:
             declaration = ''
-        if typ.name == 'int':
+        if is_int_rinstance(typ):
             # Steal the existing reference if it exists.
             self.emit_line('{}{} = CPyTagged_StealAsObject({});'.format(declaration, dest, src))
         elif typ.name == 'bool':
@@ -338,7 +338,7 @@ class Emitter:
         if not rtype.is_refcounted:
             # Not refcounted -> no pointers -> no GC interaction.
             return
-        elif isinstance(rtype, IntRType):
+        elif isinstance(rtype, RInstance) and rtype.name == 'builtins.int':
             self.emit_line('if (CPyTagged_CheckLong({})) {{'.format(target))
             self.emit_line('Py_VISIT(CPyTagged_LongAsObject({}));'.format(target))
             self.emit_line('}')
@@ -360,7 +360,7 @@ class Emitter:
         if not rtype.is_refcounted:
             # Not refcounted -> no pointers -> no GC interaction.
             return
-        elif isinstance(rtype, IntRType):
+        elif isinstance(rtype, RInstance) and rtype.name == 'builtins.int':
             self.emit_line('if (CPyTagged_CheckLong({})) {{'.format(target))
             self.emit_line('CPyTagged __tmp = {};'.format(target))
             self.emit_line('{} = {};'.format(target, rtype.c_undefined_value))

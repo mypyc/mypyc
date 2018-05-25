@@ -6,8 +6,8 @@ from mypy.test.helpers import assert_string_arrays_equal
 from mypyc.ops import (
     Environment, BasicBlock, FuncIR, RuntimeArg, RType, Goto, Return, LoadInt, Assign,
     PrimitiveOp, IncRef, DecRef, Branch, Call, Unbox, Box, TupleRType, TupleGet, GetAttr,
-    ClassIR, UserRType, SetAttr, Op, Label, IntRType, ListRType, ObjectRType, BoolRType,
-    DictRType
+    ClassIR, UserRType, SetAttr, Op, Label, ListRType, ObjectRType, BoolRType,
+    DictRType, int_rinstance
 )
 from mypyc.emit import Emitter, EmitterContext
 from mypyc.emitfunc import generate_native_function, FunctionEmitterVisitor
@@ -16,9 +16,9 @@ from mypyc.emitfunc import generate_native_function, FunctionEmitterVisitor
 class TestFunctionEmitterVisitor(unittest.TestCase):
     def setUp(self) -> None:
         self.env = Environment()
-        self.n = self.env.add_local(Var('n'), IntRType())
-        self.m = self.env.add_local(Var('m'), IntRType())
-        self.k = self.env.add_local(Var('k'), IntRType())
+        self.n = self.env.add_local(Var('n'), int_rinstance)
+        self.m = self.env.add_local(Var('m'), int_rinstance)
+        self.k = self.env.add_local(Var('k'), int_rinstance)
         self.l = self.env.add_local(Var('l'), ListRType())
         self.ll = self.env.add_local(Var('ll'), ListRType())
         self.o = self.env.add_local(Var('o'), ObjectRType())
@@ -118,19 +118,19 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          "CPyDef_myfn(cpy_r_m, cpy_r_k);")
 
     def test_inc_ref(self) -> None:
-        self.assert_emit(IncRef(self.m, IntRType()),
+        self.assert_emit(IncRef(self.m, int_rinstance),
                          "CPyTagged_IncRef(cpy_r_m);")
 
     def test_dec_ref(self) -> None:
-        self.assert_emit(DecRef(self.m, IntRType()),
+        self.assert_emit(DecRef(self.m, int_rinstance),
                          "CPyTagged_DecRef(cpy_r_m);")
 
     def test_dec_ref_tuple(self) -> None:
-        tuple_type = TupleRType([IntRType(), BoolRType()])
+        tuple_type = TupleRType([int_rinstance, BoolRType()])
         self.assert_emit(DecRef(self.m, tuple_type), 'CPyTagged_DecRef(cpy_r_m.f0);')
 
     def test_dec_ref_tuple_nested(self) -> None:
-        tuple_type = TupleRType([TupleRType([IntRType(), BoolRType()]), BoolRType()])
+        tuple_type = TupleRType([TupleRType([int_rinstance, BoolRType()]), BoolRType()])
         self.assert_emit(DecRef(self.m, tuple_type), 'CPyTagged_DecRef(cpy_r_m.f0.f0);')
 
     def test_list_get_item(self) -> None:
@@ -142,11 +142,11 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """cpy_r_b = CPyList_SetItem(cpy_r_l, cpy_r_n, cpy_r_o) != 0;""")
 
     def test_box(self) -> None:
-        self.assert_emit(Box(self.o, self.n, IntRType()),
+        self.assert_emit(Box(self.o, self.n, int_rinstance),
                          """cpy_r_o = CPyTagged_StealAsObject(cpy_r_n);""")
 
     def test_unbox(self) -> None:
-        self.assert_emit(Unbox(self.n, self.m, IntRType(), 55),
+        self.assert_emit(Unbox(self.n, self.m, int_rinstance, 55),
                          """if (PyLong_Check(cpy_r_m))
                                 cpy_r_n = CPyTagged_FromObject(cpy_r_m);
                             else {
@@ -172,14 +172,14 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
 
     def test_get_attr(self) -> None:
         ir = ClassIR('A', [('x', BoolRType()),
-                           ('y', IntRType())])
+                           ('y', int_rinstance)])
         rtype = UserRType(ir)
         self.assert_emit(GetAttr(self.n, self.m, 'y', rtype, 1),
                          """cpy_r_n = CPY_GET_ATTR(cpy_r_m, 2, AObject, CPyTagged);""")
 
     def test_set_attr(self) -> None:
         ir = ClassIR('A', [('x', BoolRType()),
-                           ('y', IntRType())])
+                           ('y', int_rinstance)])
         rtype = UserRType(ir)
         self.assert_emit(SetAttr(self.b, self.n, 'y', self.m, rtype, 1),
                          """cpy_r_b = CPY_SET_ATTR(cpy_r_n, 3, cpy_r_m, AObject, CPyTagged);""")
@@ -230,14 +230,14 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
 class TestGenerateFunction(unittest.TestCase):
     def setUp(self) -> None:
         self.var = Var('arg')
-        self.arg = RuntimeArg('arg', IntRType())
+        self.arg = RuntimeArg('arg', int_rinstance)
         self.env = Environment()
-        self.reg = self.env.add_local(self.var, IntRType())
+        self.reg = self.env.add_local(self.var, int_rinstance)
         self.block = BasicBlock(Label(0))
 
     def test_simple(self) -> None:
         self.block.ops.append(Return(self.reg))
-        fn = FuncIR('myfunc', None, [self.arg], IntRType(), [self.block], self.env)
+        fn = FuncIR('myfunc', None, [self.arg], int_rinstance, [self.block], self.env)
         emitter = Emitter(EmitterContext())
         generate_native_function(fn, emitter, 'prog.py')
         result = emitter.fragments
@@ -251,7 +251,7 @@ class TestGenerateFunction(unittest.TestCase):
             result, msg='Generated code invalid')
 
     def test_register(self) -> None:
-        self.temp = self.env.add_temp(IntRType())
+        self.temp = self.env.add_temp(int_rinstance)
         self.block.ops.append(LoadInt(self.temp, 5))
         fn = FuncIR('myfunc', None, [self.arg], ListRType(), [self.block], self.env)
         emitter = Emitter(EmitterContext())
