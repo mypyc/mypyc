@@ -141,6 +141,8 @@ int_rinstance = RInstance('builtins.int', is_unboxed=True, is_refcounted=True, c
 
 bool_rinstance = RInstance('builtins.bool', is_unboxed=True, is_refcounted=False, ctype='char')
 
+object_rinstance = RInstance('builtins.object', is_unboxed=False, is_refcounted=True)
+
 none_rinstance = RInstance('builtins.None', is_unboxed=False, is_refcounted=True)
 
 list_rinstance = RInstance('builtins.list', is_unboxed=False, is_refcounted=True)
@@ -160,6 +162,10 @@ def is_int_rinstance(rtype: RType) -> bool:
 
 def is_bool_rinstance(rtype: RType) -> bool:
     return isinstance(rtype, RInstance) and rtype.name == 'builtins.bool'
+
+
+def is_object_rinstance(rtype: RType) -> bool:
+    return isinstance(rtype, RInstance) and rtype.name == 'builtins.object'
 
 
 def is_none_rinstance(rtype: RType) -> bool:
@@ -261,16 +267,6 @@ class PyObjectRType(RType):
     @property
     def c_undefined_value(self) -> str:
         return 'NULL'
-
-
-class ObjectRType(PyObjectRType):
-    """Arbitrary object (PyObject *)"""
-
-    def __init__(self) -> None:
-        self.name = 'object'
-
-    def accept(self, visitor: 'RTypeVisitor[T]') -> T:
-        return visitor.visit_object_rtype(self)
 
 
 class UserRType(PyObjectRType):
@@ -1331,9 +1327,6 @@ def format_func(fn: FuncIR) -> List[str]:
 
 
 class RTypeVisitor(Generic[T]):
-    def visit_object_rtype(self, typ: ObjectRType) -> T:
-        pass
-
     def visit_rinstance(self, typ: RInstance) -> T:
         pass
 

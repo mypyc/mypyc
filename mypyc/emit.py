@@ -5,9 +5,9 @@ from typing import List, Set, Dict, Optional
 
 from mypyc.common import REG_PREFIX
 from mypyc.ops import (
-    Environment, Label, Register, RType, ObjectRType, TupleRType, UserRType, OptionalRType,
+    Environment, Label, Register, RType, TupleRType, UserRType, OptionalRType,
     RInstance, type_struct_name, is_int_rinstance, is_bool_rinstance, short_name, is_list_rinstance,
-    is_dict_rinstance, is_tuple_rinstance, is_none_rinstance
+    is_dict_rinstance, is_tuple_rinstance, is_none_rinstance, object_rinstance
 )
 
 
@@ -275,7 +275,7 @@ class Emitter:
                                     borrow=borrow)
                 else:
                     if not borrow:
-                        self.emit_inc_ref(temp, ObjectRType())
+                        self.emit_inc_ref(temp, object_rinstance)
                     self.emit_cast(temp, temp2, item_type, declare_dest=True)
                 self.emit_line('{}.f{} = {};'.format(dest, i, temp2))
             self.emit_line('}')

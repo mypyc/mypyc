@@ -31,10 +31,10 @@ from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Register, Label, Return, FuncIR, Assign,
     PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, TupleRType,
     Unreachable, TupleGet, ClassIR, UserRType, ModuleIR, GetAttr, SetAttr, LoadStatic,
-    PyGetAttr, PyCall, RInstance, ObjectRType, OptionalRType, c_module_name,
-    PyMethodCall, INVALID_REGISTER, INVALID_LABEL, int_rinstance, is_int_rinstance, bool_rinstance,
-    list_rinstance, is_list_rinstance, dict_rinstance, is_dict_rinstance, str_rinstance,
-    is_tuple_rinstance, tuple_rinstance, none_rinstance, is_none_rinstance
+    PyGetAttr, PyCall, RInstance, OptionalRType, c_module_name, PyMethodCall, INVALID_REGISTER,
+    INVALID_LABEL, int_rinstance, is_int_rinstance, bool_rinstance, list_rinstance,
+    is_list_rinstance, dict_rinstance, is_dict_rinstance, str_rinstance, is_tuple_rinstance,
+    tuple_rinstance, none_rinstance, is_none_rinstance, object_rinstance
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
@@ -70,13 +70,13 @@ class Mapper:
             elif typ.type.fullname() == 'builtins.tuple':
                 return tuple_rinstance  # Varying-length tuple
             elif typ.type.fullname() == 'builtins.object':
-                return ObjectRType()
+                return object_rinstance
             elif typ.type in self.type_to_ir:
                 return UserRType(self.type_to_ir[typ.type])
         elif isinstance(typ, TupleType):
             return TupleRType([self.type_to_rtype(t) for t in typ.items])
         elif isinstance(typ, CallableType):
-            return ObjectRType()
+            return object_rinstance
         elif isinstance(typ, NoneTyp):
             return none_rinstance
         elif isinstance(typ, UnionType):
@@ -286,7 +286,7 @@ class IRBuilder(NodeVisitor[Register]):
             if isinstance(lvalue, IndexExpr):
                 # TODO: This won't be right for user-defined classes. Store the
                 #     lvalue type in mypy and remove this special case.
-                lvalue_type = ObjectRType()
+                lvalue_type = object_rinstance
             else:
                 lvalue_type = self.node_type(lvalue)
         rvalue_type = self.node_type(stmt.rvalue)
@@ -534,7 +534,7 @@ class IRBuilder(NodeVisitor[Register]):
             target_list_type = self.types[s.expr]
             assert isinstance(target_list_type, Instance)
             target_type = self.type_to_rtype(target_list_type.args[0])
-            value_box = self.alloc_temp(ObjectRType())
+            value_box = self.alloc_temp(object_rinstance)
             self.add(PrimitiveOp(value_box, PrimitiveOp.LIST_GET, [expr_reg, index_reg], s.line))
 
             self.unbox_or_cast(value_box, target_type, s.line, target=lvalue_reg)
@@ -649,7 +649,7 @@ class IRBuilder(NodeVisitor[Register]):
             index_reg = self.accept(expr.index)
             if is_dict_rinstance(base_rtype):
                 index_reg = self.box(index_reg, index_type)
-            tmp = self.alloc_temp(ObjectRType())
+            tmp = self.alloc_temp(object_rinstance)
             self.add(PrimitiveOp(tmp, op, [base_reg, index_reg], expr.line))
             target = self.alloc_target(target_type)
             return self.unbox_or_cast(tmp, target_type, expr.line, target)
@@ -742,7 +742,7 @@ class IRBuilder(NodeVisitor[Register]):
         target = self.alloc_target(self.node_type(expr))
         module = '.'.join(expr.node.fullname().split('.')[:-1])
         right = expr.node.fullname().split('.')[-1]
-        left = self.alloc_temp(ObjectRType())
+        left = self.alloc_temp(object_rinstance)
         self.add(LoadStatic(left, c_module_name(module)))
         self.add(PyGetAttr(target, left, right, expr.line))
 
@@ -750,7 +750,7 @@ class IRBuilder(NodeVisitor[Register]):
 
     def py_call(self, function: Register, args: List[Expression], target_type: RType,
                 line: int) -> Register:
-        target_box = self.alloc_temp(ObjectRType())
+        target_box = self.alloc_temp(object_rinstance)
 
         arg_boxes = [] # type: List[Register]
         for arg_expr in args:
@@ -766,7 +766,7 @@ class IRBuilder(NodeVisitor[Register]):
                        args: List[Expression],
                        target_type: RType,
                        line: int) -> Register:
-        target_box = self.alloc_temp(ObjectRType())
+        target_box = self.alloc_temp(object_rinstance)
 
         arg_boxes = [] # type: List[Register]
         for arg_expr in args:
@@ -1065,7 +1065,7 @@ class IRBuilder(NodeVisitor[Register]):
     def box(self, src: Register, typ: RType, target: Optional[Register] = None) -> Register:
         if typ.supports_unbox:
             if target is None:
-                target = self.alloc_temp(ObjectRType())
+                target = self.alloc_temp(object_rinstance)
             self.add(Box(target, src, typ))
             return target
         else:

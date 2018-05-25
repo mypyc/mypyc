@@ -113,7 +113,6 @@ class FunctionEmitterVisitor(OpVisitor[None]):
 
     def visit_return(self, op: Return) -> None:
         typ = self.type(op.reg)
-        assert typ.name != 'object'
         regstr = self.reg(op.reg)
         self.emit_line('return %s;' % regstr)
 
