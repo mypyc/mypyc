@@ -1034,6 +1034,9 @@ class IRBuilder(NodeVisitor[Register]):
         return self.mapper.type_to_rtype(typ)
 
     def node_type(self, node: Expression) -> RType:
+        if isinstance(node, IntExpr):
+            # TODO: Don't special case IntExpr
+            return IntRType()
         mypy_type = self.types[node]
         return self.type_to_rtype(mypy_type)
 
