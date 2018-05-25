@@ -31,9 +31,10 @@ from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Register, Label, Return, FuncIR, Assign,
     PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, TupleRType,
     Unreachable, TupleGet, ClassIR, UserRType, ModuleIR, GetAttr, SetAttr, LoadStatic,
-    PyGetAttr, PyCall, RInstance, ListRType, SequenceTupleRType, ObjectRType, NoneRType,
+    PyGetAttr, PyCall, RInstance, SequenceTupleRType, ObjectRType, NoneRType,
     OptionalRType, DictRType, UnicodeRType, c_module_name, PyMethodCall,
-    INVALID_REGISTER, INVALID_LABEL, int_rinstance, is_int_rinstance, bool_rinstance
+    INVALID_REGISTER, INVALID_LABEL, int_rinstance, is_int_rinstance, bool_rinstance,
+    list_rinstance, is_list_rinstance
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
@@ -63,7 +64,7 @@ class Mapper:
             elif typ.type.fullname() == 'builtins.bool':
                 return bool_rinstance
             elif typ.type.fullname() == 'builtins.list':
-                return ListRType()
+                return list_rinstance
             elif typ.type.fullname() == 'builtins.dict':
                 return DictRType()
             elif typ.type.fullname() == 'builtins.tuple':
@@ -325,7 +326,7 @@ class IRBuilder(NodeVisitor[Register]):
             index_type = self.node_type(lvalue.index)
             base_reg = self.accept(lvalue.base)
             index_reg = self.accept(lvalue.index)
-            if isinstance(base_type, ListRType) and is_int_rinstance(index_type):
+            if is_list_rinstance(base_type) and is_int_rinstance(index_type):
                 # Indexed list set
                 return AssignmentTargetIndex(base_reg, index_reg, base_type)
             elif isinstance(base_type, DictRType):
@@ -365,7 +366,7 @@ class IRBuilder(NodeVisitor[Register]):
         elif isinstance(target, AssignmentTargetIndex):
             item_reg = self.accept(rvalue)
             boxed_item_reg = self.box(item_reg, rvalue_type)
-            if isinstance(target.rtype, ListRType):
+            if is_list_rinstance(target.rtype):
                 op = PrimitiveOp.LIST_SET
             elif isinstance(target.rtype, DictRType):
                 op = PrimitiveOp.DICT_SET
@@ -500,7 +501,7 @@ class IRBuilder(NodeVisitor[Register]):
             self.pop_loop_stack(end_block, next)
             return INVALID_REGISTER
 
-        if self.node_type(s.expr).name == 'list':
+        if is_list_rinstance(self.node_type(s.expr)):
             self.push_loop_stack()
 
             expr_reg = self.accept(s.expr)
@@ -606,14 +607,14 @@ class IRBuilder(NodeVisitor[Register]):
             if target is None:
                 target = self.alloc_target(int_rinstance)
             op = self.int_binary_ops[expr_op]
-        elif (ltype.name == 'list' or rtype.name == 'list') and expr_op == '*':
-            if rtype.name == 'list':
+        elif (is_list_rinstance(ltype) or is_list_rinstance(rtype)) and expr_op == '*':
+            if is_list_rinstance(rtype):
                 ltype, rtype = rtype, ltype
                 lreg, rreg = rreg, lreg
             if not is_int_rinstance(rtype):
                 assert False, 'Unsupported binary operation'  # TODO: Operator overloading
             if target is None:
-                target = self.alloc_target(ListRType())
+                target = self.alloc_target(list_rinstance)
             op = PrimitiveOp.LIST_REPEAT
         elif isinstance(rtype, DictRType):
             if expr_op == 'in':
@@ -633,11 +634,11 @@ class IRBuilder(NodeVisitor[Register]):
         base_reg = self.accept(expr.base)
         target_type = self.node_type(expr)
 
-        if isinstance(base_rtype, (ListRType, SequenceTupleRType, DictRType)):
+        if is_list_rinstance(base_rtype) or isinstance(base_rtype, (SequenceTupleRType, DictRType)):
             index_type = self.node_type(expr.index)
             if not isinstance(base_rtype, DictRType):
                 assert is_int_rinstance(index_type), 'Unsupported indexing operation'  # TODO
-            if isinstance(base_rtype, ListRType):
+            if is_list_rinstance(base_rtype):
                 op = PrimitiveOp.LIST_GET
             elif isinstance(base_rtype, DictRType):
                 op = PrimitiveOp.DICT_GET
@@ -801,7 +802,7 @@ class IRBuilder(NodeVisitor[Register]):
             arg = self.accept(expr.args[0])
 
             expr_rtype = self.node_type(expr.args[0])
-            if expr_rtype.name == 'list':
+            if is_list_rinstance(expr_rtype):
                 self.add(PrimitiveOp(target, PrimitiveOp.LIST_LEN, [arg], expr.line))
             elif expr_rtype.name == 'sequence_tuple':
                 self.add(PrimitiveOp(target, PrimitiveOp.HOMOGENOUS_TUPLE_LEN, [arg], expr.line))
@@ -876,7 +877,7 @@ class IRBuilder(NodeVisitor[Register]):
         base_type = self.node_type(callee.expr)
         result_type = self.node_type(expr)
         base = self.accept(callee.expr)
-        if callee.name == 'append' and base_type.name == 'list':
+        if callee.name == 'append' and is_list_rinstance(base_type):
             target = self.alloc_target(bool_rinstance)
             arg = self.box_expr(expr.args[0])
             self.add(PrimitiveOp(target, PrimitiveOp.LIST_APPEND, [base, arg], expr.line))
@@ -893,7 +894,7 @@ class IRBuilder(NodeVisitor[Register]):
         list_type = self.types[expr]
         assert isinstance(list_type, Instance)
         item_type = self.type_to_rtype(list_type.args[0])
-        target = self.alloc_target(ListRType())
+        target = self.alloc_target(list_rinstance)
         items = []
         for item in expr.items:
             item_reg = self.accept(item)

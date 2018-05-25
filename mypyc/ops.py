@@ -139,6 +139,7 @@ class RInstance(RType):
 
 int_rinstance = RInstance('builtins.int', is_unboxed=True, is_refcounted=True, ctype='CPyTagged')
 bool_rinstance = RInstance('builtins.bool', is_unboxed=True, is_refcounted=False, ctype='char')
+list_rinstance = RInstance('builtins.list', is_unboxed=False, is_refcounted=True)
 
 
 def is_int_rinstance(rtype: RType) -> bool:
@@ -147,6 +148,10 @@ def is_int_rinstance(rtype: RType) -> bool:
 
 def is_bool_rinstance(rtype: RType) -> bool:
     return isinstance(rtype, RInstance) and rtype.name == 'builtins.bool'
+
+
+def is_list_rinstance(rtype: RType) -> bool:
+    return isinstance(rtype, RInstance) and rtype.name == 'builtins.list'
 
 
 class TupleRType(RType):
@@ -256,14 +261,6 @@ class NoneRType(PyObjectRType):
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_none_rtype(self)
-
-
-class ListRType(PyObjectRType):
-    def __init__(self) -> None:
-        self.name = 'list'
-
-    def accept(self, visitor: 'RTypeVisitor[T]') -> T:
-        return visitor.visit_list_rtype(self)
 
 
 class DictRType(PyObjectRType):
@@ -1094,7 +1091,7 @@ class Cast(StrictRegisterOp):
         return [self.src]
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = cast(%s, %r)', self.dest, self.typ.name, self.src)
+        return env.format('%r = cast(%s, %r)', self.dest, self.typ, self.src)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_cast(self)
@@ -1363,9 +1360,6 @@ class RTypeVisitor(Generic[T]):
         pass
 
     def visit_none_rtype(self, typ: NoneRType) -> T:
-        pass
-
-    def visit_list_rtype(self, typ: ListRType) -> T:
         pass
 
     def visit_dict_rtype(self, typ: DictRType) -> T:

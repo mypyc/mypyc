@@ -6,8 +6,8 @@ from mypy.test.helpers import assert_string_arrays_equal
 from mypyc.ops import (
     Environment, BasicBlock, FuncIR, RuntimeArg, RType, Goto, Return, LoadInt, Assign,
     PrimitiveOp, IncRef, DecRef, Branch, Call, Unbox, Box, TupleRType, TupleGet, GetAttr,
-    ClassIR, UserRType, SetAttr, Op, Label, ListRType, ObjectRType, DictRType,
-    int_rinstance, bool_rinstance
+    ClassIR, UserRType, SetAttr, Op, Label, ObjectRType, DictRType,
+    int_rinstance, bool_rinstance, list_rinstance
 )
 from mypyc.emit import Emitter, EmitterContext
 from mypyc.emitfunc import generate_native_function, FunctionEmitterVisitor
@@ -19,8 +19,8 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.n = self.env.add_local(Var('n'), int_rinstance)
         self.m = self.env.add_local(Var('m'), int_rinstance)
         self.k = self.env.add_local(Var('k'), int_rinstance)
-        self.l = self.env.add_local(Var('l'), ListRType())
-        self.ll = self.env.add_local(Var('ll'), ListRType())
+        self.l = self.env.add_local(Var('l'), list_rinstance)
+        self.ll = self.env.add_local(Var('ll'), list_rinstance)
         self.o = self.env.add_local(Var('o'), ObjectRType())
         self.o2 = self.env.add_local(Var('o2'), ObjectRType())
         self.d = self.env.add_local(Var('d'), DictRType())
@@ -253,7 +253,7 @@ class TestGenerateFunction(unittest.TestCase):
     def test_register(self) -> None:
         self.temp = self.env.add_temp(int_rinstance)
         self.block.ops.append(LoadInt(self.temp, 5))
-        fn = FuncIR('myfunc', None, [self.arg], ListRType(), [self.block], self.env)
+        fn = FuncIR('myfunc', None, [self.arg], list_rinstance, [self.block], self.env)
         emitter = Emitter(EmitterContext())
         generate_native_function(fn, emitter, 'prog.py')
         result = emitter.fragments

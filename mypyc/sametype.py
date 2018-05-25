@@ -2,7 +2,7 @@
 
 from mypyc.ops import (
     RType, RTypeVisitor, ObjectRType, UserRType, OptionalRType, RInstance, TupleRType,
-    SequenceTupleRType, NoneRType, ListRType, DictRType, UnicodeRType
+    SequenceTupleRType, NoneRType, DictRType, UnicodeRType
 )
 
 
@@ -37,9 +37,6 @@ class SameTypeVisitor(RTypeVisitor[bool]):
 
     def visit_none_rtype(self, left: NoneRType) -> bool:
         return isinstance(self.right, NoneRType)
-
-    def visit_list_rtype(self, left: ListRType) -> bool:
-        return isinstance(self.right, ListRType)
 
     def visit_dict_rtype(self, left: DictRType) -> bool:
         return isinstance(self.right, DictRType)
