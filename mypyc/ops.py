@@ -255,10 +255,16 @@ class TupleRType(RType):
         return result
 
 
-class PyObjectRType(RType):
-    """Abstract base class for PyObject * types."""
+class UserRType(RType):
+    """Instance of user-defined class."""
 
-    ctype = 'PyObject *'
+    def __init__(self, class_ir: 'ClassIR') -> None:
+        self.name = class_ir.name
+        self.class_ir = class_ir
+        self.ctype = 'PyObject *'
+
+    def accept(self, visitor: 'RTypeVisitor[T]') -> T:
+        return visitor.visit_user_rtype(self)
 
     @property
     def supports_unbox(self) -> bool:
@@ -267,17 +273,6 @@ class PyObjectRType(RType):
     @property
     def c_undefined_value(self) -> str:
         return 'NULL'
-
-
-class UserRType(PyObjectRType):
-    """Instance of user-defined class."""
-
-    def __init__(self, class_ir: 'ClassIR') -> None:
-        self.name = class_ir.name
-        self.class_ir = class_ir
-
-    def accept(self, visitor: 'RTypeVisitor[T]') -> T:
-        return visitor.visit_user_rtype(self)
 
     @property
     def struct_name(self) -> str:
@@ -302,15 +297,24 @@ class UserRType(PyObjectRType):
         return '<UserRType %s>' % self.name
 
 
-class OptionalRType(PyObjectRType):
+class OptionalRType(RType):
     """Optional[x]"""
 
     def __init__(self, value_type: RType) -> None:
         self.name = 'optional'
         self.value_type = value_type
+        self.ctype = 'PyObject *'
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_optional_rtype(self)
+
+    @property
+    def supports_unbox(self) -> bool:
+        return False
+
+    @property
+    def c_undefined_value(self) -> str:
+        return 'NULL'
 
     def __repr__(self) -> str:
         return '<OptionalRType %s>' % self.value_type
