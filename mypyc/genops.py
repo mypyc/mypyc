@@ -221,7 +221,7 @@ class IRBuilder(NodeVisitor[Register]):
 
         blocks, env = self.leave()
         args = self.convert_args(fdef)
-        return FuncIR(fdef.name(), class_name, args, ret_type, blocks, env)
+        return FuncIR(fdef.name(), class_name, args, self.ret_type, blocks, env)
 
     def visit_func_def(self, fdef: FuncDef) -> Register:
         self.functions.append(self.gen_func_def(fdef))
