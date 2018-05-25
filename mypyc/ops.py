@@ -55,6 +55,7 @@ class RType:
     ctype = None  # type: str
     is_unboxed = False
     c_undefined = None  # type: str
+    is_refcounted = True  # If unboxed: does the unboxed version use reference counting?
 
     @abstractmethod
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
@@ -73,11 +74,6 @@ class RType:
 
     def c_error_value(self) -> str:
         return self.c_undefined_value()
-
-    @property
-    def is_refcounted(self) -> bool:
-        """Does the unboxed representation of the type use reference counting?"""
-        return True
 
     def short_name(self) -> str:
         return short_name(self.name)
@@ -109,7 +105,7 @@ class RPrimitive(RType):
         self.name = name
         self.is_unboxed = is_unboxed
         self.ctype = ctype
-        self._is_refcounted = is_refcounted
+        self.is_refcounted = is_refcounted
         if ctype == 'CPyTagged':
             self.c_undefined = 'CPY_INT_TAG'
         elif ctype == 'PyObject *':
@@ -121,10 +117,6 @@ class RPrimitive(RType):
 
     def c_undefined_value(self) -> str:
         return self.c_undefined
-
-    @property
-    def is_refcounted(self) -> bool:
-        return self._is_refcounted
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_rprimitive(self)
@@ -194,6 +186,7 @@ class RTuple(RType):
         self.name = 'tuple'
         self.types = tuple(types)
         self.ctype = 'struct {}'.format(self.struct_name)
+        self.is_refcounted = any(t.is_refcounted for t in self.types)
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_rtuple(self)
@@ -204,10 +197,6 @@ class RTuple(RType):
         #
         #    struct foo _tmp = { <item0-undefined>, <item1-undefined>, ... };
         assert False, "Tuple undefined value can't be represented as a C expression"
-
-    @property
-    def is_refcounted(self) -> bool:
-        return any(t.is_refcounted for t in self.types)
 
     @property
     def unique_id(self) -> str:
