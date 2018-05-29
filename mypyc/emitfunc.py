@@ -126,10 +126,6 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
     def visit_primitive_op2(self, op: PrimitiveOp2) -> None:
         op.desc.emit(self, op)
 
-    UNARY_OP_MAP = {
-        PrimitiveOp.INT_NEG: 'CPy_NegateInt',
-    }
-
     def visit_primitive_op(self, op: PrimitiveOp) -> None:
         # N.B: PrimitiveOp has support for is_void ops that don't have
         # destinations, but none currently exist.
@@ -248,9 +244,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
             elif op.desc is PrimitiveOp.LIST_TO_HOMOGENOUS_TUPLE:
                 self.emit_line('%s = PyList_AsTuple(%s);' % (dest, src))
             else:
-                # Simple unary op
-                fn = FunctionEmitterVisitor.UNARY_OP_MAP[op.desc]
-                self.emit_line('%s = %s(%s);' % (dest, fn, src))
+                assert False
 
     def visit_assign(self, op: Assign) -> None:
         dest = self.reg(op.dest)

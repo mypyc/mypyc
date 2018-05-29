@@ -78,9 +78,9 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                             cpy_r_ll = PySequence_Repeat(cpy_r_l, __tmp1);
                          """)
 
-    def test_int_neg(self) -> None:
-        self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.INT_NEG, [self.m], 55),
-                         "cpy_r_n = CPy_NegateInt(cpy_r_m);")
+    #def test_int_neg(self) -> None:
+    #    self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.INT_NEG, [self.m], 55),
+    #                     "cpy_r_n = CPy_NegateInt(cpy_r_m);")
 
     def test_list_len(self) -> None:
         self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.LIST_LEN, [self.l], 55),
