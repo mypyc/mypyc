@@ -1377,3 +1377,7 @@ class RTypeVisitor(Generic[T]):
     @abstractmethod
     def visit_rtuple(self, typ: RTuple) -> T:
         raise NotImplementedError
+
+
+# Import various modules that set up global state.
+import mypyc.ops_int

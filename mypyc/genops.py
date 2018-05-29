@@ -36,7 +36,7 @@ from mypyc.ops import (
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp2
 )
-from mypyc.ops2 import binary_ops
+from mypyc.ops_primitive import binary_ops
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
 
