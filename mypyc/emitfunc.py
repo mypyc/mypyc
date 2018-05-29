@@ -5,7 +5,7 @@ from mypyc.emit import Emitter
 from mypyc.ops import (
     FuncIR, OpVisitor, Goto, Branch, Return, PrimitiveOp, Assign, LoadInt, LoadErrorValue, GetAttr,
     SetAttr, LoadStatic, TupleGet, Call, PyCall, PyGetAttr, IncRef, DecRef, Box, Cast, Unbox, Label,
-    Register, RType, OP_BINARY, RTuple, PyMethodCall
+    Register, RType, OP_BINARY, RTuple, PyMethodCall, PrimitiveOp2, EmitterInterface
 )
 
 
@@ -46,7 +46,7 @@ def generate_native_function(fn: FuncIR, emitter: Emitter, source_path: str) -> 
     emitter.emit_from_emitter(body)
 
 
-class FunctionEmitterVisitor(OpVisitor[None]):
+class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
     def __init__(self,
                  emitter: Emitter,
                  declarations: Emitter,
@@ -122,6 +122,9 @@ class FunctionEmitterVisitor(OpVisitor[None]):
         typ = self.type(op.reg)
         regstr = self.reg(op.reg)
         self.emit_line('return %s;' % regstr)
+
+    def visit_primitive_op2(self, op: PrimitiveOp2) -> None:
+        op.desc.emit(self, op)
 
     OP_MAP = {
         PrimitiveOp.INT_ADD: 'CPyTagged_Add',

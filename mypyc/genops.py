@@ -34,8 +34,9 @@ from mypyc.ops import (
     PyGetAttr, PyCall, ROptional, c_module_name, PyMethodCall, INVALID_REGISTER,
     INVALID_LABEL, int_rprimitive, is_int_rprimitive, bool_rprimitive, list_rprimitive,
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
-    tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive
+    tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp2
 )
+from mypyc.ops2 import binary_ops
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
 
@@ -600,14 +601,23 @@ class IRBuilder(NodeVisitor[Register]):
         rreg = self.accept(expr.right)
         return self.binary_op(ltype, lreg, rtype, rreg, expr.op, expr.line)
 
-    def binary_op(self, ltype: RType, lreg: Register, rtype: RType, rreg: Register, expr_op: str,
-                  line: int, target: Optional[Register] = None) -> Register:
-        if is_int_rprimitive(ltype) and is_int_rprimitive(rtype):
-            # Primitive int operation
-            if target is None:
-                target = self.alloc_target(int_rprimitive)
-            op = self.int_binary_ops[expr_op]
-        elif (is_list_rprimitive(ltype) or is_list_rprimitive(rtype)) and expr_op == '*':
+    def binary_op(self,
+                  ltype: RType,
+                  lreg: Register,
+                  rtype: RType,
+                  rreg: Register,
+                  expr_op: str,
+                  line: int,
+                  target: Optional[Register] = None) -> Register:
+        for desc in binary_ops.get(expr_op, []):
+            if (is_subtype(ltype, desc.arg_types[0])
+                    and is_subtype(rtype, desc.arg_types[1])):
+                if target is None:
+                    target = self.alloc_target(desc.result_type)
+                self.add(PrimitiveOp2(target, [lreg, rreg], desc, line))
+                return target
+
+        if (is_list_rprimitive(ltype) or is_list_rprimitive(rtype)) and expr_op == '*':
             if is_list_rprimitive(rtype):
                 ltype, rtype = rtype, ltype
                 lreg, rreg = rreg, lreg

@@ -10,9 +10,11 @@ can hold various things:
 - literals (integer literals, True, False, etc.)
 """
 
-from abc import abstractmethod
+from abc import abstractmethod, abstractproperty
 import re
-from typing import List, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType
+from typing import (
+    List, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType, Callable
+)
 
 from mypy.nodes import Var
 
@@ -595,6 +597,7 @@ class StrictRegisterOp(RegisterOp):
         assert self._dest is not None
         return self._dest
 
+
 class IncRef(StrictRegisterOp):
     """inc_ref r"""
 
@@ -758,6 +761,57 @@ class PyGetAttr(StrictRegisterOp):
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_py_get_attr(self)
+
+
+class EmitterInterface:
+    @abstractmethod
+    def reg(self, name: Register) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def emit_line(self, line: str) -> None:
+        raise NotImplementedError
+
+
+OpDescription = NamedTuple(
+    'OpDescription', [('name', str),
+                      ('arg_types', List[RType]),
+                      ('result_type', RType),
+                      ('error_kind', int),
+                      ('format_str', str),
+                      ('emit', Callable[[EmitterInterface, 'PrimitiveOp2'], None])])
+
+
+class PrimitiveOp2(RegisterOp):
+    def __init__(self,
+                  dest: Optional[Register],
+                  args: List[Register],
+                  desc: OpDescription,
+                  line: int) -> None:
+        self.error_kind = desc.error_kind
+        super().__init__(dest, line)
+        self.args = args
+        self.desc = desc
+
+    def sources(self) -> List[Register]:
+        return list(self.args)
+
+    def __repr__(self) -> str:
+        return '<PrimiveOp2 name=%r dest=%s args=%s>' % (self.desc.name,
+                                                         self.dest,
+                                                         self.args)
+
+    def to_str(self, env: Environment) -> str:
+        params = {}  # type: Dict[str, Any]
+        if self.dest is not None and self.dest != INVALID_REGISTER:
+            params['dest'] = env.format('%r', self.dest)
+        args = [env.format('%r', arg) for arg in self.args]
+        params['args'] = args
+        params['comma_args'] = ', '.join(args)
+        return self.desc.format_str.format(**params)
+
+    def accept(self, visitor: 'OpVisitor[T]') -> T:
+        return visitor.visit_primitive_op2(self)
 
 
 VAR_ARG = -1
@@ -1218,6 +1272,9 @@ class OpVisitor(Generic[T]):
         pass
 
     def visit_unreachable(self, op: Unreachable) -> T:
+        pass
+
+    def visit_primitive_op2(self, op: PrimitiveOp2) -> T:
         pass
 
     def visit_primitive_op(self, op: PrimitiveOp) -> T:
