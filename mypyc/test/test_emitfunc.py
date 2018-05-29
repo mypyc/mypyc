@@ -61,13 +61,13 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.assert_emit(Assign(self.m, self.n),
                          "cpy_r_m = cpy_r_n;")
 
-    def test_int_add(self) -> None:
-        self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.INT_ADD, [self.m, self.k], 55),
-                         "cpy_r_n = CPyTagged_Add(cpy_r_m, cpy_r_k);")
+    #def test_int_add(self) -> None:
+    #    self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.INT_ADD, [self.m, self.k], 55),
+    #                     "cpy_r_n = CPyTagged_Add(cpy_r_m, cpy_r_k);")
 
-    def test_int_sub(self) -> None:
-        self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.INT_SUB, [self.m, self.k], 55),
-                         "cpy_r_n = CPyTagged_Subtract(cpy_r_m, cpy_r_k);")
+    #def test_int_sub(self) -> None:
+    #    self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.INT_SUB, [self.m, self.k], 55),
+    #                     "cpy_r_n = CPyTagged_Subtract(cpy_r_m, cpy_r_k);")
 
     def test_list_repeat(self) -> None:
         self.assert_emit(PrimitiveOp(self.ll, PrimitiveOp.LIST_REPEAT, [self.l, self.n], 55),

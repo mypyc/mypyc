@@ -126,14 +126,6 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
     def visit_primitive_op2(self, op: PrimitiveOp2) -> None:
         op.desc.emit(self, op)
 
-    OP_MAP = {
-        PrimitiveOp.INT_ADD: 'CPyTagged_Add',
-        PrimitiveOp.INT_SUB: 'CPyTagged_Subtract',
-        PrimitiveOp.INT_MUL: 'CPyTagged_Multiply',
-        PrimitiveOp.INT_DIV: 'CPyTagged_FloorDivide',
-        PrimitiveOp.INT_MOD: 'CPyTagged_Remainder',
-    }
-
     UNARY_OP_MAP = {
         PrimitiveOp.INT_NEG: 'CPy_NegateInt',
     }
@@ -152,10 +144,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         if op.desc.kind == OP_BINARY:
             left = self.reg(op.args[0])
             right = self.reg(op.args[1])
-            if op.desc in FunctionEmitterVisitor.OP_MAP:
-                fn = FunctionEmitterVisitor.OP_MAP[op.desc]
-                self.emit_line('%s = %s(%s, %s);' % (dest, fn, left, right))
-            elif op.desc is PrimitiveOp.LIST_GET:
+            if op.desc is PrimitiveOp.LIST_GET:
                 self.emit_line('%s = CPyList_GetItem(%s, %s);' % (dest, left, right))
             elif op.desc is PrimitiveOp.DICT_GET:
                 self.emit_lines('%s = PyDict_GetItemWithError(%s, %s);' % (dest, left, right),

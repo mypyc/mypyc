@@ -867,18 +867,6 @@ class PrimitiveOp(RegisterOp):
     specific operand types.
     """
 
-    # Binary
-    INT_ADD = make_op('+', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
-    INT_SUB = make_op('-', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
-    INT_MUL = make_op('*', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
-    INT_DIV = make_op('//', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
-    INT_MOD = make_op('%', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
-    INT_AND = make_op('&', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
-    INT_OR =  make_op('|', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
-    INT_XOR = make_op('^', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
-    INT_SHL = make_op('<<', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
-    INT_SHR = make_op('>>', 2, 'int', kind=OP_BINARY, error_kind=ERR_NEVER)
-
     # Unary
     INT_NEG = make_op('-', 1, 'int', error_kind=ERR_NEVER)
     LIST_LEN = make_op('len', 1, 'list', error_kind=ERR_NEVER)

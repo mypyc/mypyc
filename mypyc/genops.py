@@ -36,7 +36,7 @@ from mypyc.ops import (
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp2
 )
-from mypyc.ops_primitive import binary_ops
+from mypyc.ops_primitive import binary_ops, unary_ops
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
 
@@ -492,7 +492,8 @@ class IRBuilder(NodeVisitor[Register]):
             # Increment index register.
             one_reg = self.alloc_temp(int_rprimitive)
             self.add(LoadInt(one_reg, 1))
-            self.add(PrimitiveOp(index_reg, PrimitiveOp.INT_ADD, [index_reg, one_reg], s.line))
+            self.binary_op(int_rprimitive, index_reg, int_rprimitive, one_reg, '+', s.line,
+                           target=index_reg)
 
             # Go back to loop condition check.
             self.add(Goto(top.label))
@@ -543,7 +544,8 @@ class IRBuilder(NodeVisitor[Register]):
             s.body.accept(self)
 
             end_block = self.goto_new_block()
-            self.add(PrimitiveOp(index_reg, PrimitiveOp.INT_ADD, [index_reg, one_reg], s.line))
+            self.binary_op(int_rprimitive, index_reg, int_rprimitive, one_reg, '+', s.line,
+                           target=index_reg)
             self.add(Goto(condition_block.label))
 
             next_block = self.new_block()
@@ -565,32 +567,17 @@ class IRBuilder(NodeVisitor[Register]):
         self.add(self.continue_gotos[-1][-1])
         return INVALID_REGISTER
 
-    int_binary_ops = {
-        '+': PrimitiveOp.INT_ADD,
-        '-': PrimitiveOp.INT_SUB,
-        '*': PrimitiveOp.INT_MUL,
-        '//': PrimitiveOp.INT_DIV,
-        '%': PrimitiveOp.INT_MOD,
-        '&': PrimitiveOp.INT_AND,
-        '|': PrimitiveOp.INT_OR,
-        '^': PrimitiveOp.INT_XOR,
-        '<<': PrimitiveOp.INT_SHL,
-        '>>': PrimitiveOp.INT_SHR,
-        '>>': PrimitiveOp.INT_SHR,
-    }
-
     def visit_unary_expr(self, expr: UnaryExpr) -> Register:
-        if expr.op != '-':
-            assert False, 'Unsupported unary operation'
-
         etype = self.node_type(expr.expr)
-        reg = self.accept(expr.expr)
-        if not is_int_rprimitive(etype):
+        ereg = self.accept(expr.expr)
+        for desc in unary_ops.get(expr.op, []):
+            if is_subtype(etype, desc.arg_types[0]):
+                target = self.alloc_target(desc.result_type)
+                self.add(PrimitiveOp2(target, [ereg], desc, expr.line))
+                break
+        else:
+            # TODO: Fall back to generic C API
             assert False, 'Unsupported unary operation'
-
-        target = self.alloc_target(int_rprimitive)
-        zero = self.accept(IntExpr(0))
-        self.add(PrimitiveOp(target, PrimitiveOp.INT_SUB, [zero, reg], expr.line))
 
         return target
 

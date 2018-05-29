@@ -340,11 +340,10 @@ def f(n: int) -> int:
     return -1
 [out]
 def f(n):
-    n, r0, r1, r2 :: int
+    n, r0, r1 :: int
 L0:
     r0 = 1
-    r2 = 0
-    r1 = r2 - r0 :: int
+    r1 = -r0 :: int
     return r1
 
 [case testConditionalExpr]
