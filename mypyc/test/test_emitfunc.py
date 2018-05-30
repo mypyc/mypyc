@@ -166,9 +166,9 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                             }
                          """)
 
-    def test_list_append(self) -> None:
-        self.assert_emit(PrimitiveOp(self.b, PrimitiveOp.LIST_APPEND, [self.l, self.o], 1),
-                         """cpy_r_b = PyList_Append(cpy_r_l, cpy_r_o) != -1;""")
+    #def test_list_append(self) -> None:
+    #    self.assert_emit(PrimitiveOp(self.b, PrimitiveOp.LIST_APPEND, [self.l, self.o], 1),
+    #                     """cpy_r_b = PyList_Append(cpy_r_l, cpy_r_o) != -1;""")
 
     def test_get_attr(self) -> None:
         ir = ClassIR('A', [('x', bool_rprimitive),

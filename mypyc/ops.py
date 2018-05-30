@@ -894,8 +894,6 @@ class PrimitiveOp(RegisterOp):
     LIST_SET = make_op('[]=', 3, 'list', error_kind=ERR_FALSE)
     NEW_LIST = make_op('new', VAR_ARG, 'list', format_str='{dest} = [{comma_args}]',
                        error_kind=ERR_MAGIC)
-    LIST_APPEND = make_op('append', 2, 'list', format_str='{dest} = {args[0]}.append({args[1]})',
-                          error_kind=ERR_FALSE)
 
     # Dict
     DICT_GET = make_op('[]', 2, 'dict', kind=OP_BINARY, error_kind=ERR_MAGIC)
