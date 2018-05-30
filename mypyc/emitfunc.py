@@ -140,9 +140,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         if op.desc.kind == OP_BINARY:
             left = self.reg(op.args[0])
             right = self.reg(op.args[1])
-            if op.desc is PrimitiveOp.LIST_GET:
-                self.emit_line('%s = CPyList_GetItem(%s, %s);' % (dest, left, right))
-            elif op.desc is PrimitiveOp.DICT_GET:
+            if op.desc is PrimitiveOp.DICT_GET:
                 self.emit_lines('%s = PyDict_GetItemWithError(%s, %s);' % (dest, left, right),
                                 'if (!%s)' % dest,
                                 '    PyErr_SetObject(PyExc_KeyError, %s);' % right,

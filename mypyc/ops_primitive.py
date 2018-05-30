@@ -58,7 +58,7 @@ def func_op(name: str,
 
 def method_op(name: str,
               arg_types: List[RType],
-              result_type: RType,
+              result_type: Optional[RType],
               error_kind: int,
               emit: EmitCallback) -> OpDescription:
     ops = method_ops.setdefault(name, [])
@@ -66,7 +66,10 @@ def method_op(name: str,
     args = ', '.join('{args[%d]}' % i
                      for i in range(1, len(arg_types)))
     method_name = name.rpartition('.')[2]
-    format_str = '{dest} = {args[0]}.%s(%s)' % (method_name, args)
+    if method_name == '__getitem__':
+        format_str = '{dest} = {args[0]}[{args[1]}] :: %s' % short_name(arg_types[0].name)
+    else:
+        format_str = '{dest} = {args[0]}.%s(%s)' % (method_name, args)
     desc = OpDescription(method_name, arg_types, result_type, error_kind, format_str, emit)
     ops.append(desc)
     return desc

@@ -9,6 +9,20 @@ from mypyc.ops import (
 from mypyc.ops_primitive import binary_op, func_op, method_op
 
 
+def emit_get_item(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+    assert op.dest is not None
+    emitter.emit_line('%s = CPyList_GetItem(%s, %s);' % (emitter.reg(op.dest),
+                                                         emitter.reg(op.args[0]),
+                                                         emitter.reg(op.args[1])))
+
+
+list_get_item_op = method_op(name='builtins.list.__getitem__',
+                             arg_types=[list_rprimitive, int_rprimitive],
+                             result_type=object_rprimitive,
+                             error_kind=ERR_MAGIC,
+                             emit=emit_get_item)
+
+
 def emit_set_item(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
     assert op.dest is not None
     emitter.emit_line('%s = CPyList_SetItem(%s, %s, %s) != 0;' % (emitter.reg(op.dest),
@@ -34,7 +48,7 @@ def emit_append(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
 
 list_append_op = method_op(name='builtins.list.append',
                            arg_types=[list_rprimitive, object_rprimitive],
-                           result_type=bool_rprimitive,
+                           result_type=None,
                            error_kind=ERR_FALSE,
                            emit=emit_append)
 

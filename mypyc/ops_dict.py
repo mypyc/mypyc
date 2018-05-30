@@ -34,6 +34,6 @@ def emit_update(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
 
 dict_update_op = method_op(name='builtins.dict.update',
                            arg_types=[dict_rprimitive, object_rprimitive],
-                           result_type=bool_rprimitive,
+                           result_type=None,
                            error_kind=ERR_FALSE,
                            emit=emit_update)

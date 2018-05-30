@@ -788,7 +788,7 @@ class EmitterInterface:
 OpDescription = NamedTuple(
     'OpDescription', [('name', str),
                       ('arg_types', List[RType]),
-                      ('result_type', RType),
+                      ('result_type', Optional[RType]),
                       ('error_kind', int),
                       ('format_str', str),
                       ('emit', Callable[[EmitterInterface, 'PrimitiveOp2'], None])])

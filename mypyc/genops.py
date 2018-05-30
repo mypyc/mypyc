@@ -379,6 +379,7 @@ class IRBuilder(NodeVisitor[Register]):
                 target.base_reg,
                 '__setitem__',
                 [target.index_reg, item_reg],
+                None,
                 rvalue.line,
                 temp_result=True)
             if target_reg2 is not None:
@@ -580,6 +581,7 @@ class IRBuilder(NodeVisitor[Register]):
         ereg = self.accept(expr.expr)
         for desc in unary_ops.get(expr.op, []):
             if is_subtype(etype, desc.arg_types[0]):
+                assert desc.result_type is not None
                 target = self.alloc_target(desc.result_type)
                 self.add(PrimitiveOp2(target, [ereg], desc, expr.line))
                 break
@@ -608,6 +610,7 @@ class IRBuilder(NodeVisitor[Register]):
             if (is_subtype(ltype, desc.arg_types[0])
                     and is_subtype(rtype, desc.arg_types[1])):
                 if target is None:
+                    assert desc.result_type is not None
                     target = self.alloc_target(desc.result_type)
                 self.add(PrimitiveOp2(target, [lreg, rreg], desc, line))
                 return target
@@ -630,31 +633,37 @@ class IRBuilder(NodeVisitor[Register]):
         base_reg = self.accept(expr.base)
         target_type = self.node_type(expr)
 
-        if (is_list_rprimitive(base_rtype)
-                or is_dict_rprimitive(base_rtype)
-                or is_tuple_rprimitive(base_rtype)):
+        if isinstance(base_rtype, RTuple):
+            assert isinstance(expr.index, IntExpr)  # TODO
+            target = self.alloc_target(target_type)
+            self.add(TupleGet(target, base_reg, expr.index.value,
+                              base_rtype.types[expr.index.value], expr.line))
+            return target
+
+        index_reg = self.accept(expr.index)
+        target_reg = self.translate_special_method_call(
+            base_reg,
+            '__getitem__',
+            [index_reg],
+            self.node_type(expr),
+            expr.line)
+        if target_reg is not None:
+            return target_reg
+
+        if is_dict_rprimitive(base_rtype) or is_tuple_rprimitive(base_rtype):
             index_type = self.node_type(expr.index)
             if not is_dict_rprimitive(base_rtype):
                 assert is_int_rprimitive(index_type), 'Unsupported indexing operation'  # TODO
-            if is_list_rprimitive(base_rtype):
-                op = PrimitiveOp.LIST_GET
-            elif is_dict_rprimitive(base_rtype):
+            if is_dict_rprimitive(base_rtype):
                 op = PrimitiveOp.DICT_GET
             else:
                 op = PrimitiveOp.HOMOGENOUS_TUPLE_GET
-            index_reg = self.accept(expr.index)
             if is_dict_rprimitive(base_rtype):
                 index_reg = self.box(index_reg, index_type)
             tmp = self.alloc_temp(object_rprimitive)
             self.add(PrimitiveOp(tmp, op, [base_reg, index_reg], expr.line))
             target = self.alloc_target(target_type)
             return self.unbox_or_cast(tmp, target_type, expr.line, target)
-        elif isinstance(base_rtype, RTuple):
-            assert isinstance(expr.index, IntExpr)  # TODO
-            target = self.alloc_target(target_type)
-            self.add(TupleGet(target, base_reg, expr.index.value,
-                              base_rtype.types[expr.index.value], expr.line))
-            return target
 
         assert False, 'Unsupported indexing operation'
 
@@ -779,7 +788,7 @@ class IRBuilder(NodeVisitor[Register]):
                 obj = self.accept(expr.callee.expr)
                 args = [self.accept(arg) for arg in expr.args]
                 target = self.translate_special_method_call(
-                    obj, expr.callee.name, args, expr.line)
+                    obj, expr.callee.name, args, self.node_type(expr), expr.line)
                 if target:
                     return target
 
@@ -809,6 +818,7 @@ class IRBuilder(NodeVisitor[Register]):
                         if not is_subtype(actual_arg, formal_arg):
                             break
                     else:
+                        assert desc.result_type is not None  # TODO: Support no return value
                         target = self.alloc_target(desc.result_type)
                         self.add(PrimitiveOp2(target, args, desc, expr.line))
                         return target
@@ -883,6 +893,7 @@ class IRBuilder(NodeVisitor[Register]):
                                       base_reg: Register,
                                       name: str,
                                       args: List[Register],
+                                      result_type: Optional[RType],
                                       line: int,
                                       temp_result: bool = False) -> Optional[Register]:
         """Translate a method call which is handled nongenerically.
@@ -906,12 +917,28 @@ class IRBuilder(NodeVisitor[Register]):
                 for arg, actual, formal in zip(args, arg_types, desc.arg_types[1:]):
                     reg = self.coerce(arg, actual, formal, line)
                     coerced_args.append(reg)
-                assert desc.result_type is not None  # Void ops not supported yet
-                if temp_result:
-                    target = self.alloc_temp(desc.result_type)
+                if desc.result_type is None:
+                    assert desc.error_kind == ERR_FALSE  # TODO: No-value ops not supported yet
+                    result_type = bool_rprimitive
+                    coercion = False
+                elif result_type is None:
+                    result_type = desc.result_type
+                    coercion = False
                 else:
-                    target = self.alloc_target(desc.result_type)
-                self.add(PrimitiveOp2(target, [base_reg] + coerced_args, desc, line))
+                    coercion = not is_same_type(desc.result_type, result_type)
+                if coercion:
+                    assert desc.result_type is not None
+                    op_target = self.alloc_temp(desc.result_type)
+                if temp_result:
+                    target = self.alloc_temp(result_type)
+                else:
+                    target = self.alloc_target(result_type)
+                if not coercion:
+                    op_target = target
+                self.add(PrimitiveOp2(op_target, [base_reg] + coerced_args, desc, line))
+                if coercion:
+                    assert desc.result_type is not None
+                    self.coerce(op_target, desc.result_type, result_type, line, target=target)
                 return target
 
         return None
