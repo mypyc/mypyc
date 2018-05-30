@@ -69,14 +69,14 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
     #    self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.INT_SUB, [self.m, self.k], 55),
     #                     "cpy_r_n = CPyTagged_Subtract(cpy_r_m, cpy_r_k);")
 
-    def test_list_repeat(self) -> None:
-        self.assert_emit(PrimitiveOp(self.ll, PrimitiveOp.LIST_REPEAT, [self.l, self.n], 55),
-                         """long long __tmp1;
-                            __tmp1 = CPyTagged_AsLongLong(cpy_r_n);
-                            if (__tmp1 == -1 && PyErr_Occurred())
-                                CPyError_OutOfMemory();
-                            cpy_r_ll = PySequence_Repeat(cpy_r_l, __tmp1);
-                         """)
+    #def test_list_repeat(self) -> None:
+    #    self.assert_emit(PrimitiveOp(self.ll, PrimitiveOp.LIST_REPEAT, [self.l, self.n], 55),
+    #                     """long long __tmp1;
+    #                        __tmp1 = CPyTagged_AsLongLong(cpy_r_n);
+    #                        if (__tmp1 == -1 && PyErr_Occurred())
+    #                            CPyError_OutOfMemory();
+    #                        cpy_r_ll = PySequence_Repeat(cpy_r_l, __tmp1);
+    #                     """)
 
     #def test_int_neg(self) -> None:
     #    self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.INT_NEG, [self.m], 55),

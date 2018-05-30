@@ -148,14 +148,6 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
                                 '    PyErr_SetObject(PyExc_KeyError, %s);' % right,
                                 'else',
                                 '    Py_INCREF(%s);' % dest)
-            elif op.desc is PrimitiveOp.LIST_REPEAT:
-                temp = self.temp_name()
-                self.declarations.emit_line('long long %s;' % temp)
-                self.emit_lines(
-                    '%s = CPyTagged_AsLongLong(%s);' % (temp, right),
-                    'if (%s == -1 && PyErr_Occurred())' % temp,
-                    '    CPyError_OutOfMemory();',
-                    '%s = PySequence_Repeat(%s, %s);' % (dest, left, temp))
             elif op.desc is PrimitiveOp.HOMOGENOUS_TUPLE_GET:
                 self.emit_line('%s = CPySequenceTuple_GetItem(%s, %s);' % (dest, left, right))
             elif op.desc is PrimitiveOp.DICT_CONTAINS:
@@ -377,3 +369,6 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
 
     def emit_dec_ref(self, dest: str, rtype: RType) -> None:
         self.emitter.emit_dec_ref(dest, rtype)
+
+    def emit_declaration(self, line: str) -> None:
+        self.declarations.emit_line(line)

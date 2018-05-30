@@ -125,7 +125,7 @@ L0:
     r3 = 4
     r4 = box(int, r3)
     r2 = [r4]
-    b = r2 * r1 :: list
+    b = r1 * r2 :: list
     r5 = None
     return r5
 

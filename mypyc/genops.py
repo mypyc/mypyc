@@ -604,16 +604,7 @@ class IRBuilder(NodeVisitor[Register]):
                 self.add(PrimitiveOp2(target, [lreg, rreg], desc, line))
                 return target
 
-        if (is_list_rprimitive(ltype) or is_list_rprimitive(rtype)) and expr_op == '*':
-            if is_list_rprimitive(rtype):
-                ltype, rtype = rtype, ltype
-                lreg, rreg = rreg, lreg
-            if not is_int_rprimitive(rtype):
-                assert False, 'Unsupported binary operation'  # TODO: Operator overloading
-            if target is None:
-                target = self.alloc_target(list_rprimitive)
-            op = PrimitiveOp.LIST_REPEAT
-        elif is_dict_rprimitive(rtype):
+        if is_dict_rprimitive(rtype):
             if expr_op == 'in':
                 if target is None:
                     target = self.alloc_target(bool_rprimitive)

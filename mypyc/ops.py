@@ -769,7 +769,19 @@ class EmitterInterface:
         raise NotImplementedError
 
     @abstractmethod
+    def temp_name(self) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
     def emit_line(self, line: str) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def emit_lines(self, *line: str) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def emit_declaration(self, line: str) -> None:
         raise NotImplementedError
 
 
@@ -879,7 +891,6 @@ class PrimitiveOp(RegisterOp):
 
     # List
     LIST_GET = make_op('[]', 2, 'list', kind=OP_BINARY, error_kind=ERR_MAGIC)
-    LIST_REPEAT = make_op('*', 2, 'list', kind=OP_BINARY, error_kind=ERR_MAGIC)
     LIST_SET = make_op('[]=', 3, 'list', error_kind=ERR_FALSE)
     NEW_LIST = make_op('new', VAR_ARG, 'list', format_str='{dest} = [{comma_args}]',
                        error_kind=ERR_MAGIC)
@@ -1368,3 +1379,4 @@ class RTypeVisitor(Generic[T]):
 
 # Import various modules that set up global state.
 import mypyc.ops_int
+import mypyc.ops_list
