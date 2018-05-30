@@ -1,4 +1,3 @@
-import textwrap
 from typing import List
 
 from mypyc.ops import (
