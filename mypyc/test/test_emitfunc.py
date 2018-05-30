@@ -197,9 +197,9 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.assert_emit(PrimitiveOp(self.b, PrimitiveOp.DICT_SET, [self.d, self.o, self.o2], 1),
                          """cpy_r_b = PyDict_SetItem(cpy_r_d, cpy_r_o, cpy_r_o2) >= 0;""")
 
-    def test_dict_update(self) -> None:
-        self.assert_emit(PrimitiveOp(self.b, PrimitiveOp.DICT_UPDATE, [self.d, self.o], 1),
-                        """cpy_r_b = PyDict_Update(cpy_r_d, cpy_r_o) != -1;""")
+    #def test_dict_update(self) -> None:
+    #    self.assert_emit(PrimitiveOp(self.b, PrimitiveOp.DICT_UPDATE, [self.d, self.o], 1),
+    #                    """cpy_r_b = PyDict_Update(cpy_r_d, cpy_r_o) != -1;""")
 
     def test_new_dict(self) -> None:
         self.assert_emit(PrimitiveOp(self.d, PrimitiveOp.NEW_DICT, [], 1),

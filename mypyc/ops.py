@@ -900,7 +900,6 @@ class PrimitiveOp(RegisterOp):
     DICT_SET = make_op('[]=', 3, 'dict', error_kind=ERR_FALSE)
     NEW_DICT = make_op('new', 0, 'dict', format_str='{dest} = {{}}', error_kind=ERR_MAGIC)
     DICT_CONTAINS = make_op('in', 2, 'dict', kind=OP_BINARY, error_kind=ERR_MAGIC)
-    DICT_UPDATE = make_op('update', 2, 'dict', kind=OP_SPECIAL_METHOD_CALL, error_kind=ERR_FALSE)
 
     # Sequence Tuple
     HOMOGENOUS_TUPLE_GET = make_op('[]', 2, 'sequence_tuple', kind=OP_BINARY, error_kind=ERR_MAGIC)
@@ -1378,3 +1377,4 @@ class RTypeVisitor(Generic[T]):
 # Import various modules that set up global state.
 import mypyc.ops_int
 import mypyc.ops_list
+import mypyc.ops_dict

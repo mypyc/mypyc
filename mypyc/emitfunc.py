@@ -205,15 +205,6 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         elif op.desc is PrimitiveOp.NEW_DICT:
             self.emit_line('%s = PyDict_New();' % dest)
 
-        elif op.desc is PrimitiveOp.DICT_UPDATE:
-            # NOTE: PyDict_Update is technically not equivalent to update, but the cases where it
-            # differs (when the second argument has no keys) should never typecheck for us, so the
-            # difference is irrelevant.
-            self.emit_line(
-                '%s = PyDict_Update(%s, %s) != -1;' % (self.reg(op.dest),
-                                                       self.reg(op.args[0]),
-                                                       self.reg(op.args[1])))
-
         else:
             assert len(op.args) == 1
             src = self.reg(op.args[0])

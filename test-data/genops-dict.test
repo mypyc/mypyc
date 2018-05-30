@@ -116,6 +116,6 @@ def f(a, b):
     r0 :: bool
     r1 :: None
 L0:
-    r0 = a.update b :: dict
+    r0 = a.update(b)
     r1 = None
     return r1

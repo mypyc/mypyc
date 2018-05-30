@@ -903,15 +903,7 @@ class IRBuilder(NodeVisitor[Register]):
                 self.add(PrimitiveOp2(target, [base] + args, desc, expr.line))
                 return target
 
-        result_type = self.node_type(expr)
-        if callee.name == 'update' and is_dict_rprimitive(base_type):
-            target = self.alloc_target(bool_rprimitive)
-            other_list_reg = self.accept(expr.args[0])
-            self.add(PrimitiveOp(target, PrimitiveOp.DICT_UPDATE, [base, other_list_reg],
-                                 expr.line))
-        else:
-            return None
-        return target
+        return None
 
     def visit_list_expr(self, expr: ListExpr) -> Register:
         list_type = self.types[expr]
