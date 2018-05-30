@@ -1,3 +1,5 @@
+"""List primitive ops."""
+
 from typing import List
 
 from mypyc.ops import (
@@ -5,6 +7,36 @@ from mypyc.ops import (
     ERR_FALSE, EmitterInterface, PrimitiveOp2, Register
 )
 from mypyc.ops_primitive import binary_op, func_op, method_op
+
+
+def emit_set_item(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+    assert op.dest is not None
+    emitter.emit_line('%s = CPyList_SetItem(%s, %s, %s) != 0;' % (emitter.reg(op.dest),
+                                                                  emitter.reg(op.args[0]),
+                                                                  emitter.reg(op.args[1]),
+                                                                  emitter.reg(op.args[2])))
+
+
+list_set_item_op = method_op(name='builtins.list.__setitem__',
+                             arg_types=[list_rprimitive, int_rprimitive, object_rprimitive],
+                             result_type=bool_rprimitive,
+                             error_kind=ERR_FALSE,
+                             emit=emit_set_item)
+
+
+def emit_append(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+    assert op.dest is not None
+    emitter.emit_line(
+        '%s = PyList_Append(%s, %s) != -1;' % (emitter.reg(op.dest),
+                                               emitter.reg(op.args[0]),
+                                               emitter.reg(op.args[1])))
+
+
+list_append_op = method_op(name='builtins.list.append',
+                           arg_types=[list_rprimitive, object_rprimitive],
+                           result_type=bool_rprimitive,
+                           error_kind=ERR_FALSE,
+                           emit=emit_append)
 
 
 def emit_multiply_helper(emitter: EmitterInterface, dest_reg: Register, list_reg: Register,
@@ -59,18 +91,3 @@ list_len_op = func_op(name='builtins.len',
                       result_type=int_rprimitive,
                       error_kind=ERR_NEVER,
                       emit=emit_len)
-
-
-def emit_append(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
-    assert op.dest is not None
-    emitter.emit_line(
-        '%s = PyList_Append(%s, %s) != -1;' % (emitter.reg(op.dest),
-                                               emitter.reg(op.args[0]),
-                                               emitter.reg(op.args[1])))
-
-
-list_append_op = method_op(name='builtins.list.append',
-                           arg_types=[list_rprimitive, object_rprimitive],
-                           result_type=bool_rprimitive,
-                           error_kind=ERR_FALSE,
-                           emit=emit_append)

@@ -572,7 +572,7 @@ L0:
     r6 = 2
     r4 = (r5, r6)
     r7 = box(tuple[int, int], r4)
-    a[r3] = r7 :: list; r8 = is_error
+    r8 = a.__setitem__(r3, r7)
     r9 = True
     y = box(bool, r9)
     r10 = 3

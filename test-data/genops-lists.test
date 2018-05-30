@@ -67,7 +67,7 @@ L0:
     r0 = 0
     r1 = 1
     r2 = box(int, r1)
-    x[r0] = r2 :: list; r3 = is_error
+    r3 = x.__setitem__(r0, r2)
     r4 = None
     return r4
 

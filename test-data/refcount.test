@@ -480,7 +480,7 @@ L0:
     r3 = unbox(int, r2)
     dec_ref r2
     r4 = box(int, r3)
-    a[r0] = r4 :: list; r5 = is_error
+    r5 = a.__setitem__(r0, r4)
     dec_ref r0 :: int
     dec_ref r4
     r6 = None

@@ -97,11 +97,15 @@ class AssignmentTarget(object):
 
 
 class AssignmentTargetRegister(AssignmentTarget):
+    """Register as assignment target"""
+
     def __init__(self, register: Register) -> None:
         self.register = register
 
 
 class AssignmentTargetIndex(AssignmentTarget):
+    """base[index] as assignment target"""
+
     def __init__(self, base_reg: Register, index_reg: Register, rtype: RType) -> None:
         self.base_reg = base_reg
         self.index_reg = index_reg
@@ -109,6 +113,8 @@ class AssignmentTargetIndex(AssignmentTarget):
 
 
 class AssignmentTargetAttr(AssignmentTarget):
+    """obj.attr as assignment target"""
+
     def __init__(self, obj_reg: Register, attr: str, obj_type: RInstance) -> None:
         self.obj_reg = obj_reg
         self.attr = attr
@@ -368,10 +374,18 @@ class IRBuilder(NodeVisitor[Register]):
             return target_reg
         elif isinstance(target, AssignmentTargetIndex):
             item_reg = self.accept(rvalue)
-            boxed_item_reg = self.box(item_reg, rvalue_type)
-            if is_list_rprimitive(target.rtype):
-                op = PrimitiveOp.LIST_SET
-            elif is_dict_rprimitive(target.rtype):
+
+            target_reg2 = self.translate_special_method_call(
+                target.base_reg,
+                '__setitem__',
+                [target.index_reg, item_reg],
+                rvalue.line,
+                temp_result=True)
+            if target_reg2 is not None:
+                return target_reg2
+
+            if is_dict_rprimitive(target.rtype):
+                boxed_item_reg = self.box(item_reg, rvalue_type)
                 op = PrimitiveOp.DICT_SET
             else:
                 assert False, target.rtype
@@ -770,7 +784,10 @@ class IRBuilder(NodeVisitor[Register]):
         if isinstance(expr.callee, MemberExpr):
             is_module_call = self.is_module_member_expr(expr.callee)
             if expr.callee.expr in self.types and not is_module_call:
-                target = self.translate_special_method_call(expr.callee, expr)
+                obj = self.accept(expr.callee.expr)
+                args = [self.accept(arg) for arg in expr.args]
+                target = self.translate_special_method_call(
+                    obj, expr.callee.name, args, expr.line)
                 if target:
                     return target
 
@@ -870,37 +887,39 @@ class IRBuilder(NodeVisitor[Register]):
 
         return target
 
-    def translate_special_method_call(self, callee: MemberExpr,
-                                      expr: CallExpr) -> Optional[Register]:
+    def translate_special_method_call(self,
+                                      base_reg: Register,
+                                      name: str,
+                                      args: List[Register],
+                                      line: int,
+                                      temp_result: bool = False) -> Optional[Register]:
         """Translate a method call which is handled nongenerically.
 
         These are special in the sense that we have code generated specifically for them.
         They tend to be method calls which have equivalents in C that are more direct
         than calling with the PyObject api.
-        """
-        base_type = self.node_type(callee.expr)
-        base = self.accept(callee.expr)
 
-        # Look for a data-driven primitive method call.
-        fullname = '%s.%s' % (base_type.name, callee.name)
-        arg_types = [self.node_type(arg) for arg in expr.args]
+        Return None if no translation found; otherwise return the target register.
+        """
+        base_type = self.environment.types[base_reg]
+        arg_types = [self.environment.types[arg] for arg in args]
+        fullname = '%s.%s' % (base_type.name, name)
         for desc in method_ops.get(fullname, []):
             if (is_subtype(base_type, desc.arg_types[0])
                     and len(arg_types) == len(desc.arg_types) - 1
                     and all(is_subtype(actual, formal)
                             for actual, formal in zip(arg_types, desc.arg_types[1:]))):
                 # Found primitive call.
-                args = []
-                for arg, actual, formal in zip(expr.args, arg_types, desc.arg_types[1:]):
-                    reg = self.accept(arg)
-                    reg = self.coerce(reg, actual, formal, expr.line)
-                    args.append(reg)
-                target = None
-                if desc.result_type is not None:
+                coerced_args = []
+                for arg, actual, formal in zip(args, arg_types, desc.arg_types[1:]):
+                    reg = self.coerce(arg, actual, formal, line)
+                    coerced_args.append(reg)
+                assert desc.result_type is not None  # Void ops not supported yet
+                if temp_result:
+                    target = self.alloc_temp(desc.result_type)
+                else:
                     target = self.alloc_target(desc.result_type)
-                elif desc.error_kind == ERR_FALSE:
-                    target = self.alloc_target(bool_rprimitive)
-                self.add(PrimitiveOp2(target, [base] + args, desc, expr.line))
+                self.add(PrimitiveOp2(target, [base_reg] + coerced_args, desc, line))
                 return target
 
         return None
