@@ -1,6 +1,6 @@
 """Utilities for defining primitive ops."""
 
-from typing import Dict, List, Callable
+from typing import Dict, List, Callable, Optional
 
 from mypyc.ops import (
     OpDescription, PrimitiveOp2, RType, EmitterInterface, short_name
@@ -10,6 +10,7 @@ from mypyc.ops import (
 binary_ops = {}  # type: Dict[str, List[OpDescription]]
 unary_ops = {}  # type: Dict[str, List[OpDescription]]
 func_ops = {}  # type: Dict[str, List[OpDescription]]
+method_ops = {}  # type: Dict[str, List[OpDescription]]
 
 EmitCallback = Callable[[EmitterInterface, PrimitiveOp2], None]
 
@@ -51,5 +52,21 @@ def func_op(name: str,
                                                  for i in range(len(arg_types))),
                                        typename)
     desc = OpDescription(name, arg_types, result_type, error_kind, format_str, emit)
+    ops.append(desc)
+    return desc
+
+
+def method_op(name: str,
+              arg_types: List[RType],
+              result_type: RType,
+              error_kind: int,
+              emit: EmitCallback) -> OpDescription:
+    ops = method_ops.setdefault(name, [])
+    assert len(arg_types) > 0
+    args = ', '.join('{args[%d]}' % i
+                     for i in range(1, len(arg_types)))
+    method_name = name.rpartition('.')[2]
+    format_str = '{dest} = {args[0]}.%s(%s)' % (method_name, args)
+    desc = OpDescription(method_name, arg_types, result_type, error_kind, format_str, emit)
     ops.append(desc)
     return desc

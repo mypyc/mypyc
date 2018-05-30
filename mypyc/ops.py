@@ -800,6 +800,7 @@ class PrimitiveOp2(RegisterOp):
                   args: List[Register],
                   desc: OpDescription,
                   line: int) -> None:
+        assert len(args) == len(desc.arg_types)
         self.error_kind = desc.error_kind
         super().__init__(dest, line)
         self.args = args

@@ -34,9 +34,10 @@ from mypyc.ops import (
     PyGetAttr, PyCall, ROptional, c_module_name, PyMethodCall, INVALID_REGISTER,
     INVALID_LABEL, int_rprimitive, is_int_rprimitive, bool_rprimitive, list_rprimitive,
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
-    tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp2
+    tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp2,
+    ERR_FALSE
 )
-from mypyc.ops_primitive import binary_ops, unary_ops, func_ops
+from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops
 from mypyc.ops_list import list_len_op
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
@@ -878,13 +879,32 @@ class IRBuilder(NodeVisitor[Register]):
         than calling with the PyObject api.
         """
         base_type = self.node_type(callee.expr)
-        result_type = self.node_type(expr)
         base = self.accept(callee.expr)
-        if callee.name == 'append' and is_list_rprimitive(base_type):
-            target = self.alloc_target(bool_rprimitive)
-            arg = self.box_expr(expr.args[0])
-            self.add(PrimitiveOp(target, PrimitiveOp.LIST_APPEND, [base, arg], expr.line))
-        elif callee.name == 'update' and is_dict_rprimitive(base_type):
+
+        # Look for a data-driven primitive method call.
+        fullname = '%s.%s' % (base_type.name, callee.name)
+        arg_types = [self.node_type(arg) for arg in expr.args]
+        for desc in method_ops.get(fullname, []):
+            if (is_subtype(base_type, desc.arg_types[0])
+                    and len(arg_types) == len(desc.arg_types) - 1
+                    and all(is_subtype(actual, formal)
+                            for actual, formal in zip(arg_types, desc.arg_types[1:]))):
+                # Found primitive call.
+                args = []
+                for arg, actual, formal in zip(expr.args, arg_types, desc.arg_types[1:]):
+                    reg = self.accept(arg)
+                    reg = self.coerce(reg, actual, formal, expr.line)
+                    args.append(reg)
+                target = None
+                if desc.result_type is not None:
+                    target = self.alloc_target(desc.result_type)
+                elif desc.error_kind == ERR_FALSE:
+                    target = self.alloc_target(bool_rprimitive)
+                self.add(PrimitiveOp2(target, [base] + args, desc, expr.line))
+                return target
+
+        result_type = self.node_type(expr)
+        if callee.name == 'update' and is_dict_rprimitive(base_type):
             target = self.alloc_target(bool_rprimitive)
             other_list_reg = self.accept(expr.args[0])
             self.add(PrimitiveOp(target, PrimitiveOp.DICT_UPDATE, [base, other_list_reg],
