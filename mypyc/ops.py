@@ -890,7 +890,6 @@ class PrimitiveOp(RegisterOp):
     FALSE = make_op('False', 0, 'False', format_str='{dest} = False', error_kind=ERR_NEVER)
 
     # List
-    LIST_GET = make_op('[]', 2, 'list', kind=OP_BINARY, error_kind=ERR_MAGIC)
     NEW_LIST = make_op('new', VAR_ARG, 'list', format_str='{dest} = [{comma_args}]',
                        error_kind=ERR_MAGIC)
 

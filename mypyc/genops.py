@@ -38,7 +38,7 @@ from mypyc.ops import (
     ERR_FALSE
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops
-from mypyc.ops_list import list_len_op
+from mypyc.ops_list import list_len_op, list_get_item_op
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
 
@@ -546,7 +546,7 @@ class IRBuilder(NodeVisitor[Register]):
             assert isinstance(target_list_type, Instance)
             target_type = self.type_to_rtype(target_list_type.args[0])
             value_box = self.alloc_temp(object_rprimitive)
-            self.add(PrimitiveOp(value_box, PrimitiveOp.LIST_GET, [expr_reg, index_reg], s.line))
+            self.add(PrimitiveOp2(value_box, [expr_reg, index_reg], list_get_item_op, s.line))
 
             self.unbox_or_cast(value_box, target_type, s.line, target=lvalue_reg)
 
