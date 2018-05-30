@@ -894,7 +894,6 @@ class PrimitiveOp(RegisterOp):
                        error_kind=ERR_MAGIC)
 
     # Dict
-    DICT_GET = make_op('[]', 2, 'dict', kind=OP_BINARY, error_kind=ERR_MAGIC)
     NEW_DICT = make_op('new', 0, 'dict', format_str='{dest} = {{}}', error_kind=ERR_MAGIC)
     DICT_CONTAINS = make_op('in', 2, 'dict', kind=OP_BINARY, error_kind=ERR_MAGIC)
 

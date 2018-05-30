@@ -184,14 +184,14 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.assert_emit(SetAttr(self.b, self.n, 'y', self.m, rtype, 1),
                          """cpy_r_b = CPY_SET_ATTR(cpy_r_n, 3, cpy_r_m, AObject, CPyTagged);""")
 
-    def test_dict_get_item(self) -> None:
-        self.assert_emit(PrimitiveOp(self.o, PrimitiveOp.DICT_GET, [self.d, self.o2], 1),
-                         """cpy_r_o = PyDict_GetItemWithError(cpy_r_d, cpy_r_o2);
-                            if (!cpy_r_o)
-                                PyErr_SetObject(PyExc_KeyError, cpy_r_o2);
-                            else
-                                Py_INCREF(cpy_r_o);
-                         """)
+    #def test_dict_get_item(self) -> None:
+    #    self.assert_emit(PrimitiveOp(self.o, PrimitiveOp.DICT_GET, [self.d, self.o2], 1),
+    #                     """cpy_r_o = PyDict_GetItemWithError(cpy_r_d, cpy_r_o2);
+    #                        if (!cpy_r_o)
+    #                            PyErr_SetObject(PyExc_KeyError, cpy_r_o2);
+    #                        else
+    #                            Py_INCREF(cpy_r_o);
+    #                     """)
 
     #def test_dict_set_item(self) -> None:
     #    self.assert_emit(PrimitiveOp(self.b, PrimitiveOp.DICT_SET, [self.d, self.o, self.o2], 1),

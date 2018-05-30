@@ -1,9 +1,29 @@
 """Primitive dict ops."""
 
 from mypyc.ops import (
-    EmitterInterface, PrimitiveOp2, dict_rprimitive, object_rprimitive, bool_rprimitive, ERR_FALSE
+    EmitterInterface, PrimitiveOp2, dict_rprimitive, object_rprimitive, bool_rprimitive, ERR_FALSE,
+    ERR_MAGIC
 )
 from mypyc.ops_primitive import method_op
+
+
+def emit_get_item(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+    assert op.dest is not None
+    dest = emitter.reg(op.dest)
+    obj = emitter.reg(op.args[0])
+    key = emitter.reg(op.args[1])
+    emitter.emit_lines('%s = PyDict_GetItemWithError(%s, %s);' % (dest, obj, key),
+                       'if (!%s)' % dest,
+                       '    PyErr_SetObject(PyExc_KeyError, %s);' % key,
+                       'else',
+                       '    Py_INCREF(%s);' % dest)
+
+
+dict_get_item_op = method_op('builtins.dict.__getitem__',
+                             arg_types=[dict_rprimitive, object_rprimitive],
+                             result_type=object_rprimitive,
+                             error_kind=ERR_MAGIC,
+                             emit=emit_get_item)
 
 
 def emit_set_item(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
