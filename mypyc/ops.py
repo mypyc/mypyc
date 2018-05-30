@@ -880,7 +880,6 @@ class PrimitiveOp(RegisterOp):
     """
 
     # Unary
-    LIST_LEN = make_op('len', 1, 'list', error_kind=ERR_NEVER)
     HOMOGENOUS_TUPLE_LEN = make_op('len', 1, 'sequence_tuple', error_kind=ERR_NEVER)
     LIST_TO_HOMOGENOUS_TUPLE = make_op('tuple', 1, 'list', error_kind=ERR_NEVER)
 

@@ -36,7 +36,8 @@ from mypyc.ops import (
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp2
 )
-from mypyc.ops_primitive import binary_ops, unary_ops
+from mypyc.ops_primitive import binary_ops, unary_ops, func_ops
+from mypyc.ops_list import list_len_op
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
 
@@ -524,7 +525,7 @@ class IRBuilder(NodeVisitor[Register]):
             # For compatibility with python semantics we recalculate the length
             # at every iteration.
             len_reg = self.alloc_temp(int_rprimitive)
-            self.add(PrimitiveOp(len_reg, PrimitiveOp.LIST_LEN, [expr_reg], s.line))
+            self.add(PrimitiveOp2(len_reg, [expr_reg], list_len_op, s.line))
 
             branch = Branch(index_reg, len_reg, INVALID_LABEL, INVALID_LABEL, Branch.INT_LT)
             self.add(branch)
@@ -735,14 +736,13 @@ class IRBuilder(NodeVisitor[Register]):
 
         return target
 
-    def py_call(self, function: Register, args: List[Expression], target_type: RType,
-                line: int) -> Register:
+    def py_call(self, function: Register, args: List[Register], arg_types: List[RType],
+                target_type: RType, line: int) -> Register:
         target_box = self.alloc_temp(object_rprimitive)
 
         arg_boxes = [] # type: List[Register]
-        for arg_expr in args:
-            arg_reg = self.accept(arg_expr)
-            arg_boxes.append(self.box(arg_reg, self.node_type(arg_expr)))
+        for arg_reg, arg_type in zip(args, arg_types):
+            arg_boxes.append(self.box(arg_reg, arg_type))
 
         self.add(PyCall(target_box, function, arg_boxes, line))
         return self.unbox_or_cast(target_box, target_type, line)
@@ -777,24 +777,41 @@ class IRBuilder(NodeVisitor[Register]):
             # to fallback to a PyCall
             if is_module_call:
                 function = self.accept(expr.callee)
-                return self.py_call(function, expr.args, self.node_type(expr), expr.line)
+                args = [self.accept(arg) for arg in expr.args]
+                arg_types = [self.node_type(arg) for arg in expr.args]
+                return self.py_call(function, args, arg_types, self.node_type(expr), expr.line)
             else:
                 assert expr.callee.expr in self.types
                 obj = self.accept(expr.callee.expr)
                 method = self.load_static_unicode(expr.callee.name)
                 return self.py_method_call(obj, method, expr.args, self.node_type(expr), expr.line)
 
-        assert isinstance(expr.callee, NameExpr)
+        assert isinstance(expr.callee, NameExpr)  # TODO: Allow arbitrary callees
+
+        # Primitive call ops.
+        fullname = expr.callee.fullname
+        args = [self.accept(arg) for arg in expr.args]
+        arg_types = [self.node_type(arg) for arg in expr.args]
+        if fullname is not None:
+            for desc in func_ops.get(fullname, []):
+                if len(args) == len(desc.arg_types) and expr.arg_kinds == [ARG_POS] * len(args):
+                    for actual_arg, formal_arg in zip(arg_types, desc.arg_types):
+                        if not is_subtype(actual_arg, formal_arg):
+                            break
+                    else:
+                        target = self.alloc_target(desc.result_type)
+                        self.add(PrimitiveOp2(target, args, desc, expr.line))
+                        return target
+
         fn = expr.callee.name  # TODO: fullname
         if fn == 'len' and len(expr.args) == 1 and expr.arg_kinds == [ARG_POS]:
             target = self.alloc_target(int_rprimitive)
             arg = self.accept(expr.args[0])
 
-            expr_rtype = self.node_type(expr.args[0])
-            if is_list_rprimitive(expr_rtype):
-                self.add(PrimitiveOp(target, PrimitiveOp.LIST_LEN, [arg], expr.line))
-            elif is_tuple_rprimitive(expr_rtype):
-                self.add(PrimitiveOp(target, PrimitiveOp.HOMOGENOUS_TUPLE_LEN, [arg], expr.line))
+            expr_rtype = arg_types[0]
+            if is_tuple_rprimitive(expr_rtype):
+                self.add(PrimitiveOp(target, PrimitiveOp.HOMOGENOUS_TUPLE_LEN, args,
+                                     expr.line))
             elif isinstance(expr_rtype, RTuple):
                 self.add(LoadInt(target, len(expr_rtype.types)))
             else:
@@ -803,27 +820,24 @@ class IRBuilder(NodeVisitor[Register]):
         # Handle conversion to sequence tuple
         elif fn == 'tuple' and len(expr.args) == 1 and expr.arg_kinds == [ARG_POS]:
             target = self.alloc_target(tuple_rprimitive)
-            arg = self.accept(expr.args[0])
-
-            self.add(PrimitiveOp(target, PrimitiveOp.LIST_TO_HOMOGENOUS_TUPLE, [arg], expr.line))
+            self.add(PrimitiveOp(target, PrimitiveOp.LIST_TO_HOMOGENOUS_TUPLE, args, expr.line))
         else:
             target_type = self.node_type(expr)
             if not self.is_native_name_expr(expr.callee):
                 function = self.accept(expr.callee)
-                return self.py_call(function, expr.args, target_type, expr.line)
+                return self.py_call(function, args, arg_types, target_type, expr.line)
 
-            target = self.alloc_target(target_type)
             callee_type = self.types[expr.callee]
             assert isinstance(callee_type, CallableType)
             # TODO: Argument kinds
             formal_arg_types = [self.type_to_rtype(t) for t in callee_type.arg_types]
-            args = []
-            for arg_expr, arg_type in zip(expr.args, formal_arg_types):
-                reg = self.accept(arg_expr)
+            coerced_args = []
+            for reg, arg_type in zip(args, formal_arg_types):
                 typ = self.environment.types[reg]
                 reg = self.coerce(reg, typ, arg_type, expr.line)
-                args.append(reg)
-            self.add(Call(target, fn, args, expr.line))
+                coerced_args.append(reg)
+            target = self.alloc_target(target_type)
+            self.add(Call(target, fn, coerced_args, expr.line))
         return target
 
     def translate_cast_expr(self, expr: CastExpr) -> Register:

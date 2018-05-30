@@ -428,24 +428,12 @@ def f(a: int) -> int:
     return f(a + 1)
 [out]
 L0:
-    r1 = 1
-    r2 = a + r1 :: int
+    r0 = 1
+    r1 = a + r0 :: int
+    dec_ref r0 :: int
+    r2 = f(r1)
     dec_ref r1 :: int
-    r0 = f(r2)
-    dec_ref r2 :: int
-    return r0
-
-[case testCall]
-def f(a: int) -> int:
-    return f(a + 1)
-[out]
-L0:
-    r1 = 1
-    r2 = a + r1 :: int
-    dec_ref r1 :: int
-    r0 = f(r2)
-    dec_ref r2 :: int
-    return r0
+    return r2
 
 [case testError]
 def f(x: List[int]) -> None: pass # E: Name 'List' is not defined

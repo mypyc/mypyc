@@ -82,12 +82,12 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
     #    self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.INT_NEG, [self.m], 55),
     #                     "cpy_r_n = CPy_NegateInt(cpy_r_m);")
 
-    def test_list_len(self) -> None:
-        self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.LIST_LEN, [self.l], 55),
-                         """long long __tmp1;
-                            __tmp1 = PyList_GET_SIZE(cpy_r_l);
-                            cpy_r_n = CPyTagged_ShortFromLongLong(__tmp1);
-                         """)
+    #def test_list_len(self) -> None:
+    #    self.assert_emit(PrimitiveOp(self.n, PrimitiveOp.LIST_LEN, [self.l], 55),
+    #                     """long long __tmp1;
+    #                        __tmp1 = PyList_GET_SIZE(cpy_r_l);
+    #                        cpy_r_n = CPyTagged_ShortFromLongLong(__tmp1);
+    #                     """)
 
     def test_branch_eq(self) -> None:
         self.assert_emit(Branch(self.n, self.m, Label(8), Label(9), Branch.INT_EQ),

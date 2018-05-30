@@ -223,12 +223,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         else:
             assert len(op.args) == 1
             src = self.reg(op.args[0])
-            if op.desc is PrimitiveOp.LIST_LEN:
-                temp = self.temp_name()
-                self.declarations.emit_line('long long %s;' % temp)
-                self.emit_line('%s = PyList_GET_SIZE(%s);' % (temp, src))
-                self.emit_line('%s = CPyTagged_ShortFromLongLong(%s);' % (dest, temp))
-            elif op.desc is PrimitiveOp.HOMOGENOUS_TUPLE_LEN:
+            if op.desc is PrimitiveOp.HOMOGENOUS_TUPLE_LEN:
                 temp = self.temp_name()
                 self.declarations.emit_line('long long %s;' % temp)
                 self.emit_line('%s = PyTuple_GET_SIZE(%s);' % (temp, src))
