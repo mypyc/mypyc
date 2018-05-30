@@ -384,15 +384,7 @@ class IRBuilder(NodeVisitor[Register]):
             if target_reg2 is not None:
                 return target_reg2
 
-            if is_dict_rprimitive(target.rtype):
-                boxed_item_reg = self.box(item_reg, rvalue_type)
-                op = PrimitiveOp.DICT_SET
-            else:
-                assert False, target.rtype
-            target_reg = self.alloc_temp(bool_rprimitive)
-            self.add(PrimitiveOp(target_reg, op,
-                                 [target.base_reg, target.index_reg, boxed_item_reg], rvalue.line))
-            return target_reg
+            assert False, target.rtype
 
         assert False, 'Unsupported assignment target'
 
