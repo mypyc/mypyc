@@ -159,18 +159,6 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
             else:
                 assert False, op.desc
 
-        elif op.desc is PrimitiveOp.LIST_SET:
-            self.emit_line('%s = CPyList_SetItem(%s, %s, %s) != 0;' % (dest,
-                                                                       self.reg(op.args[0]),
-                                                                       self.reg(op.args[1]),
-                                                                       self.reg(op.args[2])))
-
-        elif op.desc is PrimitiveOp.DICT_SET:
-            self.emit_line('%s = PyDict_SetItem(%s, %s, %s) >= 0;' % (dest,
-                                                                      self.reg(op.args[0]),
-                                                                      self.reg(op.args[1]),
-                                                                      self.reg(op.args[2])))
-
         elif op.desc is PrimitiveOp.NONE:
             self.emit_lines(
                 '{} = Py_None;'.format(dest),
