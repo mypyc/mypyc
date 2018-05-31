@@ -70,7 +70,7 @@ def f(x):
     x :: tuple
     r0 :: int
 L0:
-    r0 = len x :: sequence_tuple
+    r0 = len x :: tuple
     return r0
 
 [case testSequenceTupleForced]

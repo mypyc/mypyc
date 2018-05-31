@@ -881,7 +881,6 @@ class PrimitiveOp(RegisterOp):
     """
 
     # Unary
-    HOMOGENOUS_TUPLE_LEN = make_op('len', 1, 'sequence_tuple', error_kind=ERR_NEVER)
     LIST_TO_HOMOGENOUS_TUPLE = make_op('tuple', 1, 'list', error_kind=ERR_NEVER)
 
     # Other
@@ -1373,3 +1372,4 @@ class RTypeVisitor(Generic[T]):
 import mypyc.ops_int
 import mypyc.ops_list
 import mypyc.ops_dict
+import mypyc.ops_tuple

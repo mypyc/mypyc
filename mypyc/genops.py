@@ -793,10 +793,19 @@ class IRBuilder(NodeVisitor[Register]):
 
         assert isinstance(expr.callee, NameExpr)  # TODO: Allow arbitrary callees
 
-        # Primitive call ops.
         fullname = expr.callee.fullname
-        args = [self.accept(arg) for arg in expr.args]
         arg_types = [self.node_type(arg) for arg in expr.args]
+
+        if fullname == 'builtins.len' and len(expr.args) == 1 and expr.arg_kinds == [ARG_POS]:
+            expr_rtype = arg_types[0]
+            if isinstance(expr_rtype, RTuple):
+                target = self.alloc_target(int_rprimitive)
+                arg = self.accept(expr.args[0])
+                self.add(LoadInt(target, len(expr_rtype.types)))
+                return target
+
+        # Handle data-driven primitive call ops.
+        args = [self.accept(arg) for arg in expr.args]
         if fullname is not None:
             for desc in func_ops.get(fullname, []):
                 if len(args) == len(desc.arg_types) and expr.arg_kinds == [ARG_POS] * len(args):
@@ -810,21 +819,9 @@ class IRBuilder(NodeVisitor[Register]):
                         return target
 
         fn = expr.callee.name  # TODO: fullname
-        if fn == 'len' and len(expr.args) == 1 and expr.arg_kinds == [ARG_POS]:
-            target = self.alloc_target(int_rprimitive)
-            arg = self.accept(expr.args[0])
-
-            expr_rtype = arg_types[0]
-            if is_tuple_rprimitive(expr_rtype):
-                self.add(PrimitiveOp(target, PrimitiveOp.HOMOGENOUS_TUPLE_LEN, args,
-                                     expr.line))
-            elif isinstance(expr_rtype, RTuple):
-                self.add(LoadInt(target, len(expr_rtype.types)))
-            else:
-                assert False, "unsupported use of len"
 
         # Handle conversion to sequence tuple
-        elif fn == 'tuple' and len(expr.args) == 1 and expr.arg_kinds == [ARG_POS]:
+        if fn == 'tuple' and len(expr.args) == 1 and expr.arg_kinds == [ARG_POS]:
             target = self.alloc_target(tuple_rprimitive)
             self.add(PrimitiveOp(target, PrimitiveOp.LIST_TO_HOMOGENOUS_TUPLE, args, expr.line))
         else:
