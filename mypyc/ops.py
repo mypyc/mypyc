@@ -880,9 +880,6 @@ class PrimitiveOp(RegisterOp):
     specific operand types.
     """
 
-    # Unary
-    LIST_TO_HOMOGENOUS_TUPLE = make_op('tuple', 1, 'list', error_kind=ERR_NEVER)
-
     # Other
     NONE = make_op('None', 0, 'None', format_str='{dest} = None', error_kind=ERR_NEVER)
     TRUE = make_op('True', 0, 'True', format_str='{dest} = True', error_kind=ERR_NEVER)

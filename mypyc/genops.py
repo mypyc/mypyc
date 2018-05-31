@@ -799,12 +799,13 @@ class IRBuilder(NodeVisitor[Register]):
         if fullname == 'builtins.len' and len(expr.args) == 1 and expr.arg_kinds == [ARG_POS]:
             expr_rtype = arg_types[0]
             if isinstance(expr_rtype, RTuple):
+                # len() of fixed-length tuple can be trivially determined statically.
                 target = self.alloc_target(int_rprimitive)
                 arg = self.accept(expr.args[0])
                 self.add(LoadInt(target, len(expr_rtype.types)))
                 return target
 
-        # Handle data-driven primitive call ops.
+        # Handle data-driven special-cased primitive call ops.
         args = [self.accept(arg) for arg in expr.args]
         if fullname is not None:
             for desc in func_ops.get(fullname, []):
@@ -819,17 +820,13 @@ class IRBuilder(NodeVisitor[Register]):
                         return target
 
         fn = expr.callee.name  # TODO: fullname
-
-        # Handle conversion to sequence tuple
-        if fn == 'tuple' and len(expr.args) == 1 and expr.arg_kinds == [ARG_POS]:
-            target = self.alloc_target(tuple_rprimitive)
-            self.add(PrimitiveOp(target, PrimitiveOp.LIST_TO_HOMOGENOUS_TUPLE, args, expr.line))
+        target_type = self.node_type(expr)
+        if not self.is_native_name_expr(expr.callee):
+            # Python call
+            function = self.accept(expr.callee)
+            return self.py_call(function, args, arg_types, target_type, expr.line)
         else:
-            target_type = self.node_type(expr)
-            if not self.is_native_name_expr(expr.callee):
-                function = self.accept(expr.callee)
-                return self.py_call(function, args, arg_types, target_type, expr.line)
-
+            # Native call
             callee_type = self.types[expr.callee]
             assert isinstance(callee_type, CallableType)
             # TODO: Argument kinds
@@ -841,7 +838,7 @@ class IRBuilder(NodeVisitor[Register]):
                 coerced_args.append(reg)
             target = self.alloc_target(target_type)
             self.add(Call(target, fn, coerced_args, expr.line))
-        return target
+            return target
 
     def translate_cast_expr(self, expr: CastExpr) -> Register:
         src = self.accept(expr.expr)

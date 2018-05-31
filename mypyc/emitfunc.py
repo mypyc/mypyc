@@ -180,12 +180,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
             self.emit_line('%s = PyDict_New();' % dest)
 
         else:
-            assert len(op.args) == 1
-            src = self.reg(op.args[0])
-            if op.desc is PrimitiveOp.LIST_TO_HOMOGENOUS_TUPLE:
-                self.emit_line('%s = PyList_AsTuple(%s);' % (dest, src))
-            else:
-                assert False
+            assert False, 'Unexpected primitive op: %s' % (op.desc,)
 
     def visit_assign(self, op: Assign) -> None:
         dest = self.reg(op.dest)
