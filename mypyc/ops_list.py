@@ -9,17 +9,14 @@ from mypyc.ops import (
 from mypyc.ops_primitive import binary_op, func_op, method_op, custom_op
 
 
-def emit_new(emitter: EmitterInterface, op: PrimitiveOp) -> None:
+def emit_new(emitter: EmitterInterface, args: List[str], dest: str) -> None:
     # TODO: This would be better split into multiple smaller ops.
-    assert op.dest is not None
-    dest = emitter.reg(op.dest)
-    emitter.emit_line('%s = PyList_New(%d); ' % (dest, len(op.args)))
-    for arg in op.args:
-        emitter.emit_line('Py_INCREF(%s);' % emitter.reg(arg))
+    emitter.emit_line('%s = PyList_New(%d); ' % (dest, len(args)))
+    for arg in args:
+        emitter.emit_line('Py_INCREF(%s);' % arg)
     emitter.emit_line('if (%s != NULL) {' % dest)
-    for i, arg in enumerate(op.args):
-        reg = emitter.reg(arg)
-        emitter.emit_line('PyList_SET_ITEM(%s, %s, %s);' % (dest, i, reg))
+    for i, arg in enumerate(args):
+        emitter.emit_line('PyList_SET_ITEM(%s, %s, %s);' % (dest, i, arg))
     emitter.emit_line('}')
 
 
@@ -31,11 +28,8 @@ new_list_op = custom_op(arg_types=[object_rprimitive],
                         emit=emit_new)
 
 
-def emit_get_item(emitter: EmitterInterface, op: PrimitiveOp) -> None:
-    assert op.dest is not None
-    emitter.emit_line('%s = CPyList_GetItem(%s, %s);' % (emitter.reg(op.dest),
-                                                         emitter.reg(op.args[0]),
-                                                         emitter.reg(op.args[1])))
+def emit_get_item(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+    emitter.emit_line('%s = CPyList_GetItem(%s, %s);' % (dest, args[0], args[1]))
 
 
 list_get_item_op = method_op(name='builtins.list.__getitem__',
@@ -45,12 +39,9 @@ list_get_item_op = method_op(name='builtins.list.__getitem__',
                              emit=emit_get_item)
 
 
-def emit_set_item(emitter: EmitterInterface, op: PrimitiveOp) -> None:
-    assert op.dest is not None
-    emitter.emit_line('%s = CPyList_SetItem(%s, %s, %s) != 0;' % (emitter.reg(op.dest),
-                                                                  emitter.reg(op.args[0]),
-                                                                  emitter.reg(op.args[1]),
-                                                                  emitter.reg(op.args[2])))
+def emit_set_item(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+    emitter.emit_line(
+        '%s = CPyList_SetItem(%s, %s, %s) != 0;' % (dest, args[0], args[1], args[2]))
 
 
 list_set_item_op = method_op(name='builtins.list.__setitem__',
@@ -60,12 +51,8 @@ list_set_item_op = method_op(name='builtins.list.__setitem__',
                              emit=emit_set_item)
 
 
-def emit_append(emitter: EmitterInterface, op: PrimitiveOp) -> None:
-    assert op.dest is not None
-    emitter.emit_line(
-        '%s = PyList_Append(%s, %s) != -1;' % (emitter.reg(op.dest),
-                                               emitter.reg(op.args[0]),
-                                               emitter.reg(op.args[1])))
+def emit_append(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+    emitter.emit_line('%s = PyList_Append(%s, %s) != -1;' % (dest, args[0], args[1]))
 
 
 list_append_op = method_op(name='builtins.list.append',
@@ -75,12 +62,8 @@ list_append_op = method_op(name='builtins.list.append',
                            emit=emit_append)
 
 
-def emit_multiply_helper(emitter: EmitterInterface, dest_reg: Register, list_reg: Register,
-                         num_reg: Register) -> None:
+def emit_multiply_helper(emitter: EmitterInterface, dest: str, lst: str, num: str) -> None:
     temp = emitter.temp_name()
-    num = emitter.reg(num_reg)
-    lst = emitter.reg(list_reg)
-    dest = emitter.reg(dest_reg)
     emitter.emit_declaration('long long %s;' % temp)
     emitter.emit_lines(
         "%s = CPyTagged_AsLongLong(%s);" % (temp, num),
@@ -89,14 +72,12 @@ def emit_multiply_helper(emitter: EmitterInterface, dest_reg: Register, list_reg
         "%s = PySequence_Repeat(%s, %s);" % (dest, lst, temp))
 
 
-def emit_multiply(emitter: EmitterInterface, op: PrimitiveOp) -> None:
-    assert op.dest is not None
-    emit_multiply_helper(emitter, op.dest, op.args[0], op.args[1])
+def emit_multiply(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+    emit_multiply_helper(emitter, dest, args[0], args[1])
 
 
-def emit_multiply_reversed(emitter: EmitterInterface, op: PrimitiveOp) -> None:
-    assert op.dest is not None
-    emit_multiply_helper(emitter, op.dest, op.args[1], op.args[0])
+def emit_multiply_reversed(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+    emit_multiply_helper(emitter, dest, args[1], args[0])
 
 
 binary_op(op='*',
@@ -114,12 +95,11 @@ binary_op(op='*',
           emit=emit_multiply_reversed)
 
 
-def emit_len(emitter: EmitterInterface, op: PrimitiveOp) -> None:
-    assert op.dest is not None
+def emit_len(emitter: EmitterInterface, args: List[str], dest: str) -> None:
     temp = emitter.temp_name()
     emitter.emit_declaration('long long %s;' % temp)
-    emitter.emit_line('%s = PyList_GET_SIZE(%s);' % (temp, emitter.reg(op.args[0])))
-    emitter.emit_line('%s = CPyTagged_ShortFromLongLong(%s);' % (emitter.reg(op.dest), temp))
+    emitter.emit_line('%s = PyList_GET_SIZE(%s);' % (temp, args[0]))
+    emitter.emit_line('%s = CPyTagged_ShortFromLongLong(%s);' % (dest, temp))
 
 
 list_len_op = func_op(name='builtins.len',

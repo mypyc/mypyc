@@ -1,5 +1,7 @@
 """Primitive dict ops."""
 
+from typing import List
+
 from mypyc.ops import (
     EmitterInterface, PrimitiveOp, dict_rprimitive, object_rprimitive, bool_rprimitive, ERR_FALSE,
     ERR_MAGIC
@@ -7,14 +9,10 @@ from mypyc.ops import (
 from mypyc.ops_primitive import method_op, binary_op, func_op
 
 
-def emit_get_item(emitter: EmitterInterface, op: PrimitiveOp) -> None:
-    assert op.dest is not None
-    dest = emitter.reg(op.dest)
-    obj = emitter.reg(op.args[0])
-    key = emitter.reg(op.args[1])
-    emitter.emit_lines('%s = PyDict_GetItemWithError(%s, %s);' % (dest, obj, key),
+def emit_get_item(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+    emitter.emit_lines('%s = PyDict_GetItemWithError(%s, %s);' % (dest, args[0], args[1]),
                        'if (!%s)' % dest,
-                       '    PyErr_SetObject(PyExc_KeyError, %s);' % key,
+                       '    PyErr_SetObject(PyExc_KeyError, %s);' % args[1],
                        'else',
                        '    Py_INCREF(%s);' % dest)
 
@@ -26,12 +24,8 @@ dict_get_item_op = method_op('builtins.dict.__getitem__',
                              emit=emit_get_item)
 
 
-def emit_set_item(emitter: EmitterInterface, op: PrimitiveOp) -> None:
-    assert op.dest is not None
-    emitter.emit_line('%s = PyDict_SetItem(%s, %s, %s) >= 0;' % (emitter.reg(op.dest),
-                                                                 emitter.reg(op.args[0]),
-                                                                 emitter.reg(op.args[1]),
-                                                                 emitter.reg(op.args[2])))
+def emit_set_item(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+    emitter.emit_line('%s = PyDict_SetItem(%s, %s, %s) >= 0;' % (dest, args[0], args[1], args[2]))
 
 
 dict_set_item_op = method_op(name='builtins.dict.__setitem__',
@@ -41,12 +35,9 @@ dict_set_item_op = method_op(name='builtins.dict.__setitem__',
                              emit=emit_set_item)
 
 
-def emit_in(emitter: EmitterInterface, op: PrimitiveOp) -> None:
-    assert op.dest is not None
+def emit_in(emitter: EmitterInterface, args: List[str], dest: str) -> None:
     temp = emitter.temp_name()
-    dest = emitter.reg(op.dest)
-    emitter.emit_lines('int %s = PyDict_Contains(%s, %s);' % (temp, emitter.reg(op.args[1]),
-                                                              emitter.reg(op.args[0])),
+    emitter.emit_lines('int %s = PyDict_Contains(%s, %s);' % (temp, args[1], args[0]),
                        'if (%s < 0)' % temp,
                        '    %s = %s;' % (dest, bool_rprimitive.c_error_value()),
                        'else',
@@ -61,15 +52,12 @@ binary_op(op='in',
           emit=emit_in)
 
 
-def emit_update(emitter: EmitterInterface, op: PrimitiveOp) -> None:
-    assert op.dest is not None
+def emit_update(emitter: EmitterInterface, args: List[str], dest: str) -> None:
     # NOTE: PyDict_Update is technically not equivalent to update, but the cases where it
     # differs (when the second argument has no keys) should never typecheck for us, so the
     # difference is irrelevant.
     emitter.emit_line(
-        '%s = PyDict_Update(%s, %s) != -1;' % (emitter.reg(op.dest),
-                                               emitter.reg(op.args[0]),
-                                               emitter.reg(op.args[1])))
+        '%s = PyDict_Update(%s, %s) != -1;' % (dest, args[0], args[1]))
 
 
 dict_update_op = method_op(name='builtins.dict.update',
@@ -79,9 +67,8 @@ dict_update_op = method_op(name='builtins.dict.update',
                            emit=emit_update)
 
 
-def emit_new(emitter: EmitterInterface, op: PrimitiveOp) -> None:
-    assert op.dest is not None
-    emitter.emit_line('%s = PyDict_New();' % emitter.reg(op.dest))
+def emit_new(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+    emitter.emit_line('%s = PyDict_New();' % dest)
 
 
 new_dict_op = func_op(name='builtins.dict',

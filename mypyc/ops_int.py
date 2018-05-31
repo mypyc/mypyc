@@ -1,12 +1,12 @@
+from typing import List
+
 from mypyc.ops import PrimitiveOp, int_rprimitive, RType, EmitterInterface, ERR_NEVER
 from mypyc.ops_primitive import binary_op, unary_op
 
 
 def int_binary_op(op: str, c_func_name: str) -> None:
-    def emit(emitter: EmitterInterface, op: PrimitiveOp) -> None:
-        assert op.dest is not None
-        line = '%s = %s(%s, %s);' % (emitter.reg(op.dest), c_func_name,
-                                     emitter.reg(op.args[0]), emitter.reg(op.args[1]))
+    def emit(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+        line = '%s = %s(%s, %s);' % (dest, c_func_name, args[0], args[1])
         emitter.emit_line(line)
 
     binary_op(op=op,
@@ -25,10 +25,8 @@ int_binary_op('%', 'CPyTagged_Remainder')
 
 
 def int_unary_op(op: str, c_func_name: str) -> None:
-    def emit(emitter: EmitterInterface, op: PrimitiveOp) -> None:
-        assert op.dest is not None
-        line = '%s = %s(%s);' % (emitter.reg(op.dest), c_func_name, emitter.reg(op.args[0]))
-        emitter.emit_line(line)
+    def emit(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+        emitter.emit_line('%s = %s(%s);' % (dest, c_func_name, args[0]))
 
     unary_op(op=op,
              arg_type=int_rprimitive,

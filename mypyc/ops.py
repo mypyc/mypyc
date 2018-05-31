@@ -785,6 +785,8 @@ class EmitterInterface:
         raise NotImplementedError
 
 
+EmitCallback = Callable[[EmitterInterface, List[str], str], None]
+
 OpDescription = NamedTuple(
     'OpDescription', [('name', str),
                       ('arg_types', List[RType]),
@@ -792,7 +794,7 @@ OpDescription = NamedTuple(
                       ('is_var_arg', bool),
                       ('error_kind', int),
                       ('format_str', str),
-                      ('emit', Callable[[EmitterInterface, 'PrimitiveOp'], None])])
+                      ('emit', EmitCallback)])
 
 
 class PrimitiveOp(RegisterOp):

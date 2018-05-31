@@ -3,7 +3,7 @@
 from typing import Dict, List, Callable, Optional
 
 from mypyc.ops import (
-    OpDescription, PrimitiveOp, RType, EmitterInterface, short_name
+    OpDescription, PrimitiveOp, RType, EmitterInterface, EmitCallback, short_name
 )
 
 
@@ -17,8 +17,6 @@ func_ops = {}  # type: Dict[str, List[OpDescription]]
 method_ops = {}  # type: Dict[str, List[OpDescription]]
 # Primitive ops for reading module attributes (key is name such as 'builtins.None')
 name_ref_ops = {}  # type: Dict[str, OpDescription]
-
-EmitCallback = Callable[[EmitterInterface, PrimitiveOp], None]
 
 
 def binary_op(op: str,

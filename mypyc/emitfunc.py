@@ -124,7 +124,15 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         self.emit_line('return %s;' % regstr)
 
     def visit_primitive_op(self, op: PrimitiveOp) -> None:
-        op.desc.emit(self, op)
+        args = [self.reg(arg) for arg in op.args]
+        if op.dest is not None:
+            dest = self.reg(op.dest)
+        else:
+            # This will generate a C compile error if used. The reason for this
+            # is that we don't want to insert "assert dest is not None" checks
+            # everywhere.
+            dest = '<undefined dest>'
+        op.desc.emit(self, args, dest)
 
     def visit_tuple_set(self, op: TupleSet) -> None:
         dest = self.reg(op.dest)
