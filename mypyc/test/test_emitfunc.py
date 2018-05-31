@@ -192,8 +192,8 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         ir = ClassIR('A', [('x', bool_rprimitive),
                            ('y', int_rprimitive)])
         rtype = RInstance(ir)
-        self.assert_emit(SetAttr(self.b, self.n, 'y', self.m, rtype, 1),
-                         """cpy_r_b = CPY_SET_ATTR(cpy_r_n, 3, cpy_r_m, AObject, CPyTagged);""")
+        self.assert_emit(SetAttr(self.n, 'y', self.m, rtype, 1),
+                         """cpy_r_r0 = CPY_SET_ATTR(cpy_r_n, 3, cpy_r_m, AObject, CPyTagged);""")
 
     def test_dict_get_item(self) -> None:
         self.assert_emit(PrimitiveOp(self.o, [self.d, self.o2], dict_get_item_op, 1),

@@ -989,15 +989,17 @@ class SetAttr(StrictRegisterOp):
     """obj.attr = src (for a native object)"""
 
     error_kind = ERR_FALSE
+    no_reg = True
 
-    def __init__(self, dest: Register, obj: Register, attr: str, src: Register,
+    def __init__(self, obj: Register, attr: str, src: Register,
                  class_type: RInstance,
                  line: int) -> None:
-        super().__init__(dest, line)
+        super().__init__(self, line)
         self.obj = obj
         self.attr = attr
         self.src = src
         self.class_type = class_type
+        self.type = bool_rprimitive
 
     def sources(self) -> List[Register]:
         return [self.obj, self.src]
@@ -1013,10 +1015,12 @@ class LoadStatic(StrictRegisterOp):
     """dest = name :: static"""
 
     error_kind = ERR_NEVER
+    no_reg = True
 
-    def __init__(self, dest: Register, identifier: str, line: int = -1) -> None:
-        super().__init__(dest, line)
+    def __init__(self, type: RType, identifier: str, line: int = -1) -> None:
+        super().__init__(self, line)
         self.identifier = identifier
+        self.type = type
 
     def sources(self) -> List[Register]:
         return []

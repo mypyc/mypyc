@@ -369,10 +369,8 @@ class IRBuilder(NodeVisitor[Register]):
             rvalue_reg = self.accept(rvalue)
             if needs_box:
                 rvalue_reg = self.box(rvalue_reg, rvalue_type)
-            target_reg = self.alloc_temp(bool_rprimitive)
-            self.add(SetAttr(target_reg, target.obj_reg, target.attr, rvalue_reg, target.obj_type,
-                             rvalue.line))
-            return target_reg
+            return self.add(SetAttr(target.obj_reg, target.attr, rvalue_reg, target.obj_type,
+                                    rvalue.line))
         elif isinstance(target, AssignmentTargetIndex):
             item_reg = self.accept(rvalue)
 
@@ -708,8 +706,7 @@ class IRBuilder(NodeVisitor[Register]):
         assert expr.node, "RefExpr not resolved"
         module = '.'.join(expr.node.fullname().split('.')[:-1])
         right = expr.node.fullname().split('.')[-1]
-        left = self.alloc_temp(object_rprimitive)
-        self.add(LoadStatic(left, c_module_name(module)))
+        left = self.add(LoadStatic(object_rprimitive, c_module_name(module)))
         return self.add(PyGetAttr(self.node_type(expr), left, right, expr.line))
 
     def py_call(self, function: Register, args: List[Register],
@@ -1145,8 +1142,7 @@ class IRBuilder(NodeVisitor[Register]):
         if value not in self.unicode_literals:
             self.unicode_literals[value] = '__unicode_' + str(len(self.unicode_literals))
         static_symbol = self.unicode_literals[value]
-        target = self.alloc_temp(str_rprimitive, target)
-        self.add(LoadStatic(target, static_symbol))
+        return self.add(LoadStatic(str_rprimitive, static_symbol))
         return target
 
     def coerce(self, src: Register, src_type: RType, target_type: RType, line: int,

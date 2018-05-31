@@ -487,11 +487,12 @@ def f() -> str:
     return "some other string"
 [out]
 def f():
-    x, r0 :: str
+    x, r0, r1 :: str
 L0:
-    x = __unicode_0 :: static
-    r0 = __unicode_1 :: static
-    return r0
+    r0 = __unicode_0 :: static
+    x = r0
+    r1 = __unicode_1 :: static
+    return r1
 
 [case testPyMethodCall1]
 from typing import List
