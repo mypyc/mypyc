@@ -882,10 +882,6 @@ class PrimitiveOp(RegisterOp):
     specific operand types.
     """
 
-    # Tuple
-    NEW_TUPLE = make_op('new', VAR_ARG, 'tuple', format_str='{dest} = ({comma_args})',
-                        error_kind=ERR_MAGIC)
-
     def __init__(self, dest: Optional[Register], desc: OpDesc, args: List[Register],
                  line: int) -> None:
         """Create a primitive op.
@@ -1040,6 +1036,27 @@ class LoadStatic(StrictRegisterOp):
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_load_static(self)
+
+
+class TupleSet(StrictRegisterOp):
+    """dest = (reg, ...) (for fixed-length tuple)"""
+
+    error_kind = ERR_NEVER
+
+    def __init__(self, dest: Register, items: List[Register], typ: RTuple, line: int) -> None:
+        super().__init__(dest, line)
+        self.items = items
+        self.type = typ
+
+    def sources(self) -> List[Register]:
+        return self.items[:]
+
+    def to_str(self, env: Environment) -> str:
+        item_str = ', '.join(env.format('%r', item) for item in self.items)
+        return env.format('%r = (%s)', self.dest, item_str)
+
+    def accept(self, visitor: 'OpVisitor[T]') -> T:
+        return visitor.visit_tuple_set(self)
 
 
 class TupleGet(StrictRegisterOp):
@@ -1275,6 +1292,9 @@ class OpVisitor(Generic[T]):
         pass
 
     def visit_tuple_get(self, op: TupleGet) -> T:
+        pass
+
+    def visit_tuple_set(self, op: TupleSet) -> T:
         pass
 
     def visit_inc_ref(self, op: IncRef) -> T:

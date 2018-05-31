@@ -4,8 +4,8 @@ from mypyc.common import REG_PREFIX, NATIVE_PREFIX
 from mypyc.emit import Emitter
 from mypyc.ops import (
     FuncIR, OpVisitor, Goto, Branch, Return, PrimitiveOp, Assign, LoadInt, LoadErrorValue, GetAttr,
-    SetAttr, LoadStatic, TupleGet, Call, PyCall, PyGetAttr, IncRef, DecRef, Box, Cast, Unbox, Label,
-    Register, RType, OP_BINARY, RTuple, PyMethodCall, PrimitiveOp2, EmitterInterface
+    SetAttr, LoadStatic, TupleGet, TupleSet, Call, PyCall, PyGetAttr, IncRef, DecRef, Box, Cast,
+    Unbox, Label, Register, RType, OP_BINARY, RTuple, PyMethodCall, PrimitiveOp2, EmitterInterface
 )
 
 
@@ -126,27 +126,13 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
     def visit_primitive_op2(self, op: PrimitiveOp2) -> None:
         op.desc.emit(self, op)
 
-    def visit_primitive_op(self, op: PrimitiveOp) -> None:
-        # N.B: PrimitiveOp has support for is_void ops that don't have
-        # destinations, but none currently exist.
-        # So that we can assert that op.desc isn't None, we can handle
-        # is_void ops first.
-        if op.desc.is_void:
-            assert False, "No is_void ops implemented yet"
-
-        assert op.dest is not None
+    def visit_tuple_set(self, op: TupleSet) -> None:
         dest = self.reg(op.dest)
-
-        if op.desc is PrimitiveOp.NEW_TUPLE:
-            tuple_type = self.env.types[op.dest]
-            assert isinstance(tuple_type, RTuple)
-            self.emitter.declare_tuple_struct(tuple_type)
-            for i, arg in enumerate(op.args):
-                self.emit_line('{}.f{} = {};'.format(dest, i, self.reg(arg)))
-            self.emit_inc_ref(dest, tuple_type)
-
-        else:
-            assert False, 'Unexpected primitive op: %s' % (op.desc,)
+        tuple_type = op.type
+        self.emitter.declare_tuple_struct(tuple_type)
+        for i, item in enumerate(op.items):
+            self.emit_line('{}.f{} = {};'.format(dest, i, self.reg(item)))
+        self.emit_inc_ref(dest, tuple_type)
 
     def visit_assign(self, op: Assign) -> None:
         dest = self.reg(op.dest)

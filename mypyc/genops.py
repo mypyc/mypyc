@@ -30,7 +30,7 @@ from mypy.subtypes import is_named_instance
 from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Register, Label, Return, FuncIR, Assign,
     PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple,
-    Unreachable, TupleGet, ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic,
+    Unreachable, TupleGet, TupleSet, ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic,
     PyGetAttr, PyCall, ROptional, c_module_name, PyMethodCall, INVALID_REGISTER,
     INVALID_LABEL, int_rprimitive, is_int_rprimitive, bool_rprimitive, list_rprimitive,
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
@@ -917,12 +917,16 @@ class IRBuilder(NodeVisitor[Register]):
         return self.primitive_op(new_list_op, items, expr.line)
 
     def visit_tuple_expr(self, expr: TupleExpr) -> Register:
-        tuple_type = self.types[expr]
-        assert isinstance(tuple_type, TupleType)
+        tuple_type = self.node_type(expr)
+        assert isinstance(tuple_type, RTuple)
 
-        target = self.alloc_target(self.type_to_rtype(tuple_type))
-        items = [self.accept(i) for i in expr.items]
-        self.add(PrimitiveOp(target, PrimitiveOp.NEW_TUPLE, items, expr.line))
+        target = self.alloc_target(tuple_type)
+        items = []
+        for item_expr, item_type in zip(expr.items, tuple_type.types):
+            reg = self.accept(item_expr)
+            reg = self.coerce(reg, self.environment.types[reg], item_type, item_expr.line)
+            items.append(reg)
+        self.add(TupleSet(target, items, tuple_type, expr.line))
         return target
 
     def visit_dict_expr(self, expr: DictExpr) -> Register:
