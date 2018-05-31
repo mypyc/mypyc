@@ -4,12 +4,12 @@ from typing import List
 
 from mypyc.ops import (
     int_rprimitive, list_rprimitive, object_rprimitive, bool_rprimitive, ERR_MAGIC, ERR_NEVER,
-    ERR_FALSE, EmitterInterface, PrimitiveOp2, Register
+    ERR_FALSE, EmitterInterface, PrimitiveOp, Register
 )
 from mypyc.ops_primitive import binary_op, func_op, method_op, custom_op
 
 
-def emit_new(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+def emit_new(emitter: EmitterInterface, op: PrimitiveOp) -> None:
     # TODO: This would be better split into multiple smaller ops.
     assert op.dest is not None
     dest = emitter.reg(op.dest)
@@ -31,7 +31,7 @@ new_list_op = custom_op(arg_types=[object_rprimitive],
                         emit=emit_new)
 
 
-def emit_get_item(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+def emit_get_item(emitter: EmitterInterface, op: PrimitiveOp) -> None:
     assert op.dest is not None
     emitter.emit_line('%s = CPyList_GetItem(%s, %s);' % (emitter.reg(op.dest),
                                                          emitter.reg(op.args[0]),
@@ -45,7 +45,7 @@ list_get_item_op = method_op(name='builtins.list.__getitem__',
                              emit=emit_get_item)
 
 
-def emit_set_item(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+def emit_set_item(emitter: EmitterInterface, op: PrimitiveOp) -> None:
     assert op.dest is not None
     emitter.emit_line('%s = CPyList_SetItem(%s, %s, %s) != 0;' % (emitter.reg(op.dest),
                                                                   emitter.reg(op.args[0]),
@@ -60,7 +60,7 @@ list_set_item_op = method_op(name='builtins.list.__setitem__',
                              emit=emit_set_item)
 
 
-def emit_append(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+def emit_append(emitter: EmitterInterface, op: PrimitiveOp) -> None:
     assert op.dest is not None
     emitter.emit_line(
         '%s = PyList_Append(%s, %s) != -1;' % (emitter.reg(op.dest),
@@ -89,12 +89,12 @@ def emit_multiply_helper(emitter: EmitterInterface, dest_reg: Register, list_reg
         "%s = PySequence_Repeat(%s, %s);" % (dest, lst, temp))
 
 
-def emit_multiply(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+def emit_multiply(emitter: EmitterInterface, op: PrimitiveOp) -> None:
     assert op.dest is not None
     emit_multiply_helper(emitter, op.dest, op.args[0], op.args[1])
 
 
-def emit_multiply_reversed(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+def emit_multiply_reversed(emitter: EmitterInterface, op: PrimitiveOp) -> None:
     assert op.dest is not None
     emit_multiply_helper(emitter, op.dest, op.args[1], op.args[0])
 
@@ -114,7 +114,7 @@ binary_op(op='*',
           emit=emit_multiply_reversed)
 
 
-def emit_len(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+def emit_len(emitter: EmitterInterface, op: PrimitiveOp) -> None:
     assert op.dest is not None
     temp = emitter.temp_name()
     emitter.emit_declaration('long long %s;' % temp)

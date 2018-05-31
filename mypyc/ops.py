@@ -792,10 +792,10 @@ OpDescription = NamedTuple(
                       ('is_var_arg', bool),
                       ('error_kind', int),
                       ('format_str', str),
-                      ('emit', Callable[[EmitterInterface, 'PrimitiveOp2'], None])])
+                      ('emit', Callable[[EmitterInterface, 'PrimitiveOp'], None])])
 
 
-class PrimitiveOp2(RegisterOp):
+class PrimitiveOp(RegisterOp):
     """reg = op(reg, ...)
 
     These are register-based primitive operations that work on specific
@@ -837,7 +837,7 @@ class PrimitiveOp2(RegisterOp):
         return self.desc.format_str.format(**params)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
-        return visitor.visit_primitive_op2(self)
+        return visitor.visit_primitive_op(self)
 
 
 class Assign(StrictRegisterOp):
@@ -1187,7 +1187,7 @@ class OpVisitor(Generic[T]):
     def visit_unreachable(self, op: Unreachable) -> T:
         pass
 
-    def visit_primitive_op2(self, op: PrimitiveOp2) -> T:
+    def visit_primitive_op(self, op: PrimitiveOp) -> T:
         pass
 
     def visit_assign(self, op: Assign) -> T:

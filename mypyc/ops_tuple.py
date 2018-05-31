@@ -5,13 +5,13 @@ These are for varying-length tuples represented as Python tuple objects
 """
 
 from mypyc.ops import (
-    EmitterInterface, PrimitiveOp2, tuple_rprimitive, int_rprimitive, list_rprimitive,
+    EmitterInterface, PrimitiveOp, tuple_rprimitive, int_rprimitive, list_rprimitive,
     object_rprimitive, ERR_NEVER, ERR_MAGIC
 )
 from mypyc.ops_primitive import method_op, func_op
 
 
-def emit_get_item(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+def emit_get_item(emitter: EmitterInterface, op: PrimitiveOp) -> None:
     assert op.dest is not None
     emitter.emit_line('%s = CPySequenceTuple_GetItem(%s, %s);' % (emitter.reg(op.dest),
                                                                   emitter.reg(op.args[0]),
@@ -25,7 +25,7 @@ tuple_get_item_op = method_op(name='builtins.tuple.__getitem__',
                               emit=emit_get_item)
 
 
-def emit_len(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+def emit_len(emitter: EmitterInterface, op: PrimitiveOp) -> None:
     assert op.dest is not None
     temp = emitter.temp_name()
     emitter.emit_declaration('long long %s;' % temp)
@@ -40,7 +40,7 @@ tuple_len_op = func_op(name='builtins.len',
                        emit=emit_len)
 
 
-def emit_from_list(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+def emit_from_list(emitter: EmitterInterface, op: PrimitiveOp) -> None:
     assert op.dest is not None
     emitter.emit_line('%s = PyList_AsTuple(%s);' % (emitter.reg(op.dest), emitter.reg(op.args[0])))
 

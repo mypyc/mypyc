@@ -5,7 +5,7 @@ from mypyc.emit import Emitter
 from mypyc.ops import (
     FuncIR, OpVisitor, Goto, Branch, Return, Assign, LoadInt, LoadErrorValue, GetAttr,
     SetAttr, LoadStatic, TupleGet, TupleSet, Call, PyCall, PyGetAttr, IncRef, DecRef, Box, Cast,
-    Unbox, Label, Register, RType, RTuple, PyMethodCall, PrimitiveOp2, EmitterInterface
+    Unbox, Label, Register, RType, RTuple, PyMethodCall, PrimitiveOp, EmitterInterface
 )
 
 
@@ -123,7 +123,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         regstr = self.reg(op.reg)
         self.emit_line('return %s;' % regstr)
 
-    def visit_primitive_op2(self, op: PrimitiveOp2) -> None:
+    def visit_primitive_op(self, op: PrimitiveOp) -> None:
         op.desc.emit(self, op)
 
     def visit_tuple_set(self, op: TupleSet) -> None:

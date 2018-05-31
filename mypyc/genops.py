@@ -34,7 +34,7 @@ from mypyc.ops import (
     PyGetAttr, PyCall, ROptional, c_module_name, PyMethodCall, INVALID_REGISTER,
     INVALID_LABEL, int_rprimitive, is_int_rprimitive, bool_rprimitive, list_rprimitive,
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
-    tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp2,
+    tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp,
     ERR_FALSE, OpDescription
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
@@ -255,7 +255,7 @@ class IRBuilder(NodeVisitor[Register]):
         block = self.blocks[-1][-1]
         if not block.ops or not isinstance(block.ops[-1], Return):
             retval = self.environment.add_temp(none_rprimitive)
-            self.add(PrimitiveOp2(retval, [], none_op, line=-1))
+            self.add(PrimitiveOp(retval, [], none_op, line=-1))
             self.add(Return(retval))
 
     def add_implicit_unreachable(self) -> None:
@@ -278,7 +278,7 @@ class IRBuilder(NodeVisitor[Register]):
             retval = self.coerce(retval, self.node_type(stmt.expr), self.ret_type, stmt.line)
         else:
             retval = self.environment.add_temp(none_rprimitive)
-            self.add(PrimitiveOp2(retval, [], none_op, line=-1))
+            self.add(PrimitiveOp(retval, [], none_op, line=-1))
         self.add(Return(retval))
         return INVALID_REGISTER
 
@@ -535,7 +535,7 @@ class IRBuilder(NodeVisitor[Register]):
             # For compatibility with python semantics we recalculate the length
             # at every iteration.
             len_reg = self.alloc_temp(int_rprimitive)
-            self.add(PrimitiveOp2(len_reg, [expr_reg], list_len_op, s.line))
+            self.add(PrimitiveOp(len_reg, [expr_reg], list_len_op, s.line))
 
             branch = Branch(index_reg, len_reg, INVALID_LABEL, INVALID_LABEL, Branch.INT_LT)
             self.add(branch)
@@ -548,7 +548,7 @@ class IRBuilder(NodeVisitor[Register]):
             assert isinstance(target_list_type, Instance)
             target_type = self.type_to_rtype(target_list_type.args[0])
             value_box = self.alloc_temp(object_rprimitive)
-            self.add(PrimitiveOp2(value_box, [expr_reg, index_reg], list_get_item_op, s.line))
+            self.add(PrimitiveOp(value_box, [expr_reg, index_reg], list_get_item_op, s.line))
 
             self.unbox_or_cast(value_box, target_type, s.line, target=lvalue_reg)
 
@@ -585,7 +585,7 @@ class IRBuilder(NodeVisitor[Register]):
             if is_subtype(etype, desc.arg_types[0]):
                 assert desc.result_type is not None
                 target = self.alloc_target(desc.result_type)
-                self.add(PrimitiveOp2(target, [ereg], desc, expr.line))
+                self.add(PrimitiveOp(target, [ereg], desc, expr.line))
                 break
         else:
             # TODO: Fall back to generic C API
@@ -616,7 +616,7 @@ class IRBuilder(NodeVisitor[Register]):
                 if target is None:
                     assert desc.result_type is not None
                     target = self.alloc_target(desc.result_type)
-                self.add(PrimitiveOp2(target, [lreg, rreg], desc, line))
+                self.add(PrimitiveOp(target, [lreg, rreg], desc, line))
                 return target
 
         # TODO: Fall back to generic operation
@@ -668,7 +668,7 @@ class IRBuilder(NodeVisitor[Register]):
             desc = name_ref_ops[fullname]
             assert desc.result_type is not None
             target = self.alloc_target(desc.result_type)
-            self.add(PrimitiveOp2(target, [], desc, expr.line))
+            self.add(PrimitiveOp(target, [], desc, expr.line))
             return target
 
         if not self.is_native_name_expr(expr):
@@ -805,7 +805,7 @@ class IRBuilder(NodeVisitor[Register]):
                     else:
                         assert desc.result_type is not None  # TODO: Support no return value
                         target = self.alloc_target(desc.result_type)
-                        self.add(PrimitiveOp2(target, args, desc, expr.line))
+                        self.add(PrimitiveOp(target, args, desc, expr.line))
                         return target
 
         fn = expr.callee.name  # TODO: fullname
@@ -904,7 +904,7 @@ class IRBuilder(NodeVisitor[Register]):
                     target = self.alloc_target(result_type)
                 if not coercion:
                     op_target = target
-                self.add(PrimitiveOp2(op_target, [base_reg] + coerced_args, desc, line))
+                self.add(PrimitiveOp(op_target, [base_reg] + coerced_args, desc, line))
                 if coercion:
                     assert desc.result_type is not None
                     self.coerce(op_target, desc.result_type, result_type, line, target=target)
@@ -932,7 +932,7 @@ class IRBuilder(NodeVisitor[Register]):
     def visit_dict_expr(self, expr: DictExpr) -> Register:
         assert not expr.items  # TODO
         target = self.alloc_target(dict_rprimitive)
-        self.add(PrimitiveOp2(target, [], new_dict_op, expr.line))
+        self.add(PrimitiveOp(target, [], new_dict_op, expr.line))
         return target
 
     # Conditional expressions
@@ -1060,7 +1060,7 @@ class IRBuilder(NodeVisitor[Register]):
             formal_type = self.op_arg_type(desc, i)
             arg = self.coerce(arg, self.environment.types[arg], formal_type, line)
             coerced.append(arg)
-        self.add(PrimitiveOp2(target, coerced, desc, line))
+        self.add(PrimitiveOp(target, coerced, desc, line))
         return target
 
     def op_arg_type(self, desc: OpDescription, n: int) -> RType:
