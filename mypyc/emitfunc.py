@@ -156,9 +156,6 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
                 self.emit_line('{}.f{} = {};'.format(dest, i, self.reg(arg)))
             self.emit_inc_ref(dest, tuple_type)
 
-        elif op.desc is PrimitiveOp.NEW_DICT:
-            self.emit_line('%s = PyDict_New();' % dest)
-
         else:
             assert False, 'Unexpected primitive op: %s' % (op.desc,)
 

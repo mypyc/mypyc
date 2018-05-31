@@ -48,15 +48,17 @@ def func_op(name: str,
             arg_types: List[RType],
             result_type: RType,
             error_kind: int,
-            emit: EmitCallback) -> OpDescription:
+            emit: EmitCallback,
+            format_str: Optional[str] = None) -> OpDescription:
     ops = func_ops.setdefault(name, [])
     typename = ''
     if len(arg_types) == 1:
         typename = ' :: %s' % short_name(arg_types[0].name)
-    format_str = '{dest} = %s %s%s' % (short_name(name),
-                                       ', '.join('{args[%d]}' % i
-                                                 for i in range(len(arg_types))),
-                                       typename)
+    if format_str is None:
+        format_str = '{dest} = %s %s%s' % (short_name(name),
+                                           ', '.join('{args[%d]}' % i
+                                                     for i in range(len(arg_types))),
+                                           typename)
     desc = OpDescription(name, arg_types, result_type, error_kind, format_str, emit)
     ops.append(desc)
     return desc

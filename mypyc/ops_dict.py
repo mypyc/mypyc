@@ -4,7 +4,7 @@ from mypyc.ops import (
     EmitterInterface, PrimitiveOp2, dict_rprimitive, object_rprimitive, bool_rprimitive, ERR_FALSE,
     ERR_MAGIC
 )
-from mypyc.ops_primitive import method_op, binary_op
+from mypyc.ops_primitive import method_op, binary_op, func_op
 
 
 def emit_get_item(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
@@ -77,3 +77,16 @@ dict_update_op = method_op(name='builtins.dict.update',
                            result_type=None,
                            error_kind=ERR_FALSE,
                            emit=emit_update)
+
+
+def emit_new(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+    assert op.dest is not None
+    emitter.emit_line('%s = PyDict_New();' % emitter.reg(op.dest))
+
+
+new_dict_op = func_op(name='builtins.dict',
+                      arg_types=[],
+                      result_type=dict_rprimitive,
+                      error_kind=ERR_MAGIC,
+                      emit=emit_new,
+                      format_str='{dest} = {{}}')

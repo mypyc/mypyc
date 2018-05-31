@@ -39,6 +39,7 @@ from mypyc.ops import (
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import list_len_op, list_get_item_op
+from mypyc.ops_dict import new_dict_op
 from mypyc.ops_misc import none_op
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
@@ -936,7 +937,7 @@ class IRBuilder(NodeVisitor[Register]):
     def visit_dict_expr(self, expr: DictExpr) -> Register:
         assert not expr.items  # TODO
         target = self.alloc_target(dict_rprimitive)
-        self.add(PrimitiveOp(target, PrimitiveOp.NEW_DICT, [], expr.line))
+        self.add(PrimitiveOp2(target, [], new_dict_op, expr.line))
         return target
 
     # Conditional expressions
