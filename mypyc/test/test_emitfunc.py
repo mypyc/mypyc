@@ -155,16 +155,16 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                             }
                          """)
 
-    def test_new_list(self) -> None:
-        self.assert_emit(PrimitiveOp(self.l, PrimitiveOp.NEW_LIST, [self.n, self.m], 55),
-                         """cpy_r_l = PyList_New(2);
-                            Py_INCREF(cpy_r_n);
-                            Py_INCREF(cpy_r_m);
-                            if (cpy_r_l != NULL) {
-                                PyList_SET_ITEM(cpy_r_l, 0, cpy_r_n);
-                                PyList_SET_ITEM(cpy_r_l, 1, cpy_r_m);
-                            }
-                         """)
+    #def test_new_list(self) -> None:
+    #    self.assert_emit(PrimitiveOp(self.l, PrimitiveOp.NEW_LIST, [self.n, self.m], 55),
+    #                     """cpy_r_l = PyList_New(2);
+    #                        Py_INCREF(cpy_r_n);
+    #                        Py_INCREF(cpy_r_m);
+    #                        if (cpy_r_l != NULL) {
+    #                            PyList_SET_ITEM(cpy_r_l, 0, cpy_r_n);
+    #                            PyList_SET_ITEM(cpy_r_l, 1, cpy_r_m);
+    #                        }
+    #                     """)
 
     #def test_list_append(self) -> None:
     #    self.assert_emit(PrimitiveOp(self.b, PrimitiveOp.LIST_APPEND, [self.l, self.o], 1),

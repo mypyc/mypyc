@@ -882,10 +882,6 @@ class PrimitiveOp(RegisterOp):
     specific operand types.
     """
 
-    # List
-    NEW_LIST = make_op('new', VAR_ARG, 'list', format_str='{dest} = [{comma_args}]',
-                       error_kind=ERR_MAGIC)
-
     # Tuple
     NEW_TUPLE = make_op('new', VAR_ARG, 'tuple', format_str='{dest} = ({comma_args})',
                         error_kind=ERR_MAGIC)

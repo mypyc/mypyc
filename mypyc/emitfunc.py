@@ -137,18 +137,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         assert op.dest is not None
         dest = self.reg(op.dest)
 
-        if op.desc is PrimitiveOp.NEW_LIST:
-            # TODO: This would be better split into multiple smaller ops.
-            self.emit_line('%s = PyList_New(%d); ' % (dest, len(op.args)))
-            for arg in op.args:
-                self.emit_line('Py_INCREF(%s);' % self.reg(arg))
-            self.emit_line('if (%s != NULL) {' % dest)
-            for i, arg in enumerate(op.args):
-                reg = self.reg(arg)
-                self.emit_line('PyList_SET_ITEM(%s, %s, %s);' % (dest, i, reg))
-            self.emit_line('}')
-
-        elif op.desc is PrimitiveOp.NEW_TUPLE:
+        if op.desc is PrimitiveOp.NEW_TUPLE:
             tuple_type = self.env.types[op.dest]
             assert isinstance(tuple_type, RTuple)
             self.emitter.declare_tuple_struct(tuple_type)
