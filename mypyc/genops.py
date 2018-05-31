@@ -1096,7 +1096,7 @@ class IRBuilder(NodeVisitor[Register]):
         return self.alloc_temp(type, self.cur_target())
 
     def alloc_temp(self, type: RType, target: Register = INVALID_REGISTER) -> Register:
-        if target < 0:
+        if target == INVALID_REGISTER:
             return self.environment.add_temp(type)
         else:
             return target

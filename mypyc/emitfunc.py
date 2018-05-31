@@ -7,7 +7,7 @@ from mypyc.emit import Emitter
 from mypyc.ops import (
     FuncIR, OpVisitor, Goto, Branch, Return, Assign, LoadInt, LoadErrorValue, GetAttr,
     SetAttr, LoadStatic, TupleGet, TupleSet, Call, PyCall, PyGetAttr, IncRef, DecRef, Box, Cast,
-    Unbox, Label, Register, RType, RTuple, MethodCall, PyMethodCall,
+    Unbox, Label, Register, CRegister, RType, RTuple, MethodCall, PyMethodCall,
     PrimitiveOp, EmitterInterface,
 )
 
@@ -39,10 +39,11 @@ def generate_native_function(fn: FuncIR, emitter: Emitter, source_path: str) -> 
     body.indent()
 
     for i in range(len(fn.args), fn.env.num_regs()):
-        ctype = fn.env.types[i].ctype
+        r = CRegister(i)
+        ctype = fn.env.types[r].ctype
         declarations.emit_line('{ctype} {prefix}{name};'.format(ctype=ctype,
                                                                 prefix=REG_PREFIX,
-                                                                name=fn.env.names[i]))
+                                                                name=fn.env.names[r]))
 
     for block in fn.blocks:
         body.emit_label(block.label)

@@ -3,7 +3,7 @@
 import os.path
 import re
 import shutil
-from typing import List
+from typing import List, Set
 
 from mypy import build
 from mypy.test.data import parse_test_cases, DataDrivenTestCase
@@ -14,7 +14,7 @@ from mypy import experiments
 
 from mypyc import analysis
 from mypyc import genops
-from mypyc.ops import format_func, Register
+from mypyc.ops import format_func, CRegister, Register
 from mypyc.test.testutil import (
     ICODE_GEN_BUILTINS, use_custom_builtins, MypycDataSuite, assert_test_output
 )
@@ -60,7 +60,7 @@ class TestAnalysis(MypycDataSuite):
                     actual = actual[actual.index('L0:'):]
                     cfg = analysis.get_cfg(fn.blocks)
 
-                    args = set([Register(i) for i in range(len(fn.args))])
+                    args = set([CRegister(i) for i in range(len(fn.args))])  # type: Set[Register]
                     name = testcase.name
                     if name.endswith('_MaybeDefined'):
                         # Forward, maybe

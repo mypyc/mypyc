@@ -5,9 +5,10 @@ from abc import abstractmethod
 from typing import Dict, Tuple, List, Set, TypeVar, Iterator, Generic, Optional
 
 from mypyc.ops import (
+    Register, CRegister,
     BasicBlock, OpVisitor, Assign, LoadInt, LoadErrorValue, RegisterOp, Goto,
     Branch, Return, Call, Environment, Box, Unbox, Cast, Op, Unreachable,
-    TupleGet, TupleSet, GetAttr, SetAttr, PyCall, LoadStatic, PyGetAttr, Label, Register,
+    TupleGet, TupleSet, GetAttr, SetAttr, PyCall, LoadStatic, PyGetAttr, Label,
     PyMethodCall, PrimitiveOp, MethodCall,
 )
 
@@ -204,7 +205,7 @@ def analyze_must_defined_regs(
                         initial=initial_defined,
                         backward=False,
                         kind=MUST_ANALYSIS,
-                        universe=set([Register(r) for r in range(num_regs)]))
+                        universe=set([CRegister(r) for r in range(num_regs)]))
 
 
 class BorrowedArgumentsVisitor(BaseAnalysisVisitor):
@@ -266,9 +267,9 @@ def analyze_undefined_regs(blocks: List[BasicBlock],
     A register is undefined if there is some path from initial block
     where it has an undefined value.
     """
-    initial_undefined = {Register(reg)
+    initial_undefined = {CRegister(reg)
                          for reg in range(len(env.names))
-                         if Register(reg) not in initial_defined}
+                         if CRegister(reg) not in initial_defined}  # type: Set[Register]
     return run_analysis(blocks=blocks,
                         cfg=cfg,
                         gen_and_kill=UndefinedVisitor(),

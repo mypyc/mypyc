@@ -27,7 +27,8 @@ from mypyc.analysis import (
 )
 from mypyc.ops import (
     FuncIR, BasicBlock, Assign, RegisterOp, DecRef, IncRef, Branch, Goto, Environment,
-    Return, Op, Register, Label, Cast, Box, Unbox, LoadStatic, RType,
+    Return, Op, Label, Cast, Box, Unbox, LoadStatic, RType,
+    Register, CRegister,
 )
 
 
@@ -37,7 +38,7 @@ def insert_ref_count_opcodes(ir: FuncIR) -> None:
     This is the entry point to this module.
     """
     cfg = get_cfg(ir.blocks)
-    args = set([Register(i) for i in range(len(ir.args))])
+    args = set([CRegister(i) for i in range(len(ir.args))])  # type: Set[Register]
     live = analyze_live_regs(ir.blocks, cfg)
     borrow = analyze_borrowed_arguments(ir.blocks, cfg, args)
     for block in ir.blocks[:]:

@@ -13,7 +13,7 @@ can hold various things:
 from abc import abstractmethod, abstractproperty
 import re
 from typing import (
-    List, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType, Callable
+    List, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType, Callable, Union,
 )
 
 from mypy.nodes import Var
@@ -21,8 +21,9 @@ from mypy.nodes import Var
 
 T = TypeVar('T')
 
-Register = NewType('Register', int)
+CRegister = NewType('CRegister', int)
 Label = NewType('Label', int)
+Register = Union[CRegister,  'Op']
 
 
 # Unfortunately we have visitors which are statement-like rather than expression-like.
@@ -32,7 +33,7 @@ Label = NewType('Label', int)
 # Eventually we may want to separate expression visitors and statement-like visitors at
 # the type level but until then returning INVALID_REGISTER from a statement-like visitor
 # seems acceptable.
-INVALID_REGISTER = Register(-99999)
+INVALID_REGISTER = CRegister(-99999)
 
 
 # Similarly this is used for placeholder labels which aren't assigned yet (but will
@@ -317,8 +318,8 @@ class Environment:
     """Keep track of names and types of registers."""
 
     def __init__(self) -> None:
-        self.names = []  # type: List[str]
-        self.types = []  # type: List[RType]
+        self.names = {}  # type: Dict[Register, str]
+        self.types = {}  # type: Dict[Register, RType]
         self.symtable = {}  # type: Dict[Var, Register]
         self.temp_index = 0
 
@@ -327,12 +328,10 @@ class Environment:
 
     def add_local(self, var: Var, typ: RType) -> Register:
         assert isinstance(var, Var)
-        self.names.append(var.name())
-        self.types.append(typ)
+        reg = CRegister(len(self.names))
 
-        i = len(self.names) - 1
-
-        reg = Register(i)
+        self.names[reg] = var.name()
+        self.types[reg] = typ
         self.symtable[var] = reg
         return reg
 
@@ -341,10 +340,11 @@ class Environment:
 
     def add_temp(self, typ: RType) -> Register:
         assert isinstance(typ, RType)
-        self.names.append('r%d' % self.temp_index)
+        reg = CRegister(len(self.names))
+        self.names[reg] = ('r%d' % self.temp_index)
+        self.types[reg] = typ
         self.temp_index += 1
-        self.types.append(typ)
-        return Register(len(self.names) - 1)
+        return reg
 
     def format(self, fmt: str, *args: Any) -> str:
         result = []
@@ -376,13 +376,19 @@ class Environment:
     def to_lines(self) -> List[str]:
         result = []
         i = 0
-        n = len(self.names)
+        keys = list(self.names.keys())
+        names = [self.names[k] for k in keys]
+        types = [self.types[k] for k in keys]
+
+        n = len(names)
         while i < n:
             i0 = i
-            while i + 1 < n and self.types[i + 1] == self.types[i0]:
+            group = [names[i0]]
+            while i + 1 < n and types[i + 1] == types[i0]:
                 i += 1
+                group.append(names[i])
             i += 1
-            result.append('%s :: %s' % (', '.join(self.names[i0:i]), self.types[i0]))
+            result.append('%s :: %s' % (', '.join(group), types[i0]))
         return result
 
 
@@ -638,7 +644,7 @@ class DecRef(StrictRegisterOp):
         self.target_type = typ
 
     def __repr__(self) -> str:
-        return '<DecRef %d>' % self.dest
+        return '<DecRef %r>' % self.dest
 
     def to_str(self, env: Environment) -> str:
         s = env.format('dec_ref %r', self.dest)
