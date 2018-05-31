@@ -1,4 +1,8 @@
-"""Primitive (varying-length) tuple ops."""
+"""Primitive tuple ops.
+
+These are for varying-length tuples represented as Python tuple objects
+(RPrimitive, not RTuple).
+"""
 
 from mypyc.ops import (
     EmitterInterface, PrimitiveOp2, tuple_rprimitive, int_rprimitive, list_rprimitive,
