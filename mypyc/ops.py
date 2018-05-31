@@ -880,11 +880,6 @@ class PrimitiveOp(RegisterOp):
     specific operand types.
     """
 
-    # Other
-    NONE = make_op('None', 0, 'None', format_str='{dest} = None', error_kind=ERR_NEVER)
-    TRUE = make_op('True', 0, 'True', format_str='{dest} = True', error_kind=ERR_NEVER)
-    FALSE = make_op('False', 0, 'False', format_str='{dest} = False', error_kind=ERR_NEVER)
-
     # List
     NEW_LIST = make_op('new', VAR_ARG, 'list', format_str='{dest} = [{comma_args}]',
                        error_kind=ERR_MAGIC)

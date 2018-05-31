@@ -137,19 +137,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         assert op.dest is not None
         dest = self.reg(op.dest)
 
-        if op.desc is PrimitiveOp.NONE:
-            self.emit_lines(
-                '{} = Py_None;'.format(dest),
-                'Py_INCREF({});'.format(dest),
-            )
-
-        elif op.desc is PrimitiveOp.TRUE:
-            self.emit_line('{} = 1;'.format(dest))
-
-        elif op.desc is PrimitiveOp.FALSE:
-            self.emit_line('{} = 0;'.format(dest))
-
-        elif op.desc is PrimitiveOp.NEW_LIST:
+        if op.desc is PrimitiveOp.NEW_LIST:
             # TODO: This would be better split into multiple smaller ops.
             self.emit_line('%s = PyList_New(%d); ' % (dest, len(op.args)))
             for arg in op.args:

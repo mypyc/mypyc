@@ -45,17 +45,17 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
     def test_tuple_get(self) -> None:
         self.assert_emit(TupleGet(self.m, self.n, 1, bool_rprimitive, 0), 'cpy_r_m = cpy_r_n.f1;')
 
-    def test_load_None(self) -> None:
-        self.assert_emit(PrimitiveOp(self.m, PrimitiveOp.NONE, [], 0),
-                         """cpy_r_m = Py_None;
-                            Py_INCREF(cpy_r_m);
-                         """)
+    #def test_load_None(self) -> None:
+    #    self.assert_emit(PrimitiveOp(self.m, PrimitiveOp.NONE, [], 0),
+    #                     """cpy_r_m = Py_None;
+    #                        Py_INCREF(cpy_r_m);
+    #                     """)
 
-    def test_load_True(self) -> None:
-        self.assert_emit(PrimitiveOp(self.m, PrimitiveOp.TRUE, [], 0), "cpy_r_m = 1;")
+    #def test_load_True(self) -> None:
+    #    self.assert_emit(PrimitiveOp(self.m, PrimitiveOp.TRUE, [], 0), "cpy_r_m = 1;")
 
-    def test_load_False(self) -> None:
-        self.assert_emit(PrimitiveOp(self.m, PrimitiveOp.FALSE, [], 0), "cpy_r_m = 0;")
+    #def test_load_False(self) -> None:
+    #    self.assert_emit(PrimitiveOp(self.m, PrimitiveOp.FALSE, [], 0), "cpy_r_m = 0;")
 
     def test_assign_int(self) -> None:
         self.assert_emit(Assign(self.m, self.n),
