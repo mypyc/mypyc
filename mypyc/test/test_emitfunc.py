@@ -185,8 +185,8 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         ir = ClassIR('A', [('x', bool_rprimitive),
                            ('y', int_rprimitive)])
         rtype = RInstance(ir)
-        self.assert_emit(GetAttr(self.n, self.m, 'y', rtype, 1),
-                         """cpy_r_n = CPY_GET_ATTR(cpy_r_m, 2, AObject, CPyTagged);""")
+        self.assert_emit(GetAttr(self.m, 'y', rtype, 1),
+                         """cpy_r_r0 = CPY_GET_ATTR(cpy_r_m, 2, AObject, CPyTagged);""")
 
     def test_set_attr(self) -> None:
         ir = ClassIR('A', [('x', bool_rprimitive),
@@ -229,6 +229,9 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
     def assert_emit(self, op: Op, expected: str) -> None:
         self.emitter.fragments = []
         self.declarations.fragments = []
+        self.env.temp_index = 0
+        if op.no_reg:
+            self.env.add_op(op)
         op.accept(self.visitor)
         frags = self.declarations.fragments + self.emitter.fragments
         actual_lines = [line.strip(' ') for line in frags]

@@ -185,7 +185,7 @@ def after_branch_decrefs(label: Label,
     decref = source_live_regs - target_pre_live - source_borrowed
     if decref:
         return [DecRef(reg, env.types[reg])
-                for reg in sorted(decref)
+                for reg in sorted(decref, key=lambda r: env.indexes[r])
                 if env.types[reg].is_refcounted and reg not in omitted]
     return []
 
@@ -198,7 +198,7 @@ def after_branch_increfs(label: Label,
     incref = source_borrowed - target_borrowed
     if incref:
         return [IncRef(reg, env.types[reg])
-                for reg in sorted(incref)
+                for reg in sorted(incref, key=lambda r: env.indexes[r])
                 if env.types[reg].is_refcounted]
     return []
 

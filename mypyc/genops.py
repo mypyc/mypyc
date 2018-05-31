@@ -173,19 +173,18 @@ class IRBuilder(NodeVisitor[Register]):
         self.mapper.type_to_ir[cdef.info] = ir
 
     def visit_class_def(self, cdef: ClassDef) -> Register:
-        attributes = []
-        methods = []
+        # We want to collect the attributes first so they are available
+        # while generating the methods
+        ir = self.mapper.type_to_ir[cdef.info]
         for name, node in cdef.info.names.items():
             if isinstance(node.node, Var):
                 assert node.node.type, "Class member missing type"
-                attributes.append((name, self.type_to_rtype(node.node.type)))
-            elif isinstance(node.node, FuncDef):
+                ir.attributes.append((name, self.type_to_rtype(node.node.type)))
+        for name, node in cdef.info.names.items():
+            if isinstance(node.node, FuncDef):
                 func = self.gen_func_def(node.node, cdef.name)
                 self.functions.append(func)
-                methods.append(func)
-        ir = self.mapper.type_to_ir[cdef.info]
-        ir.attributes = attributes
-        ir.methods = methods
+                ir.methods.append(func)
         return INVALID_REGISTER
 
     def visit_import(self, node: Import) -> Register:
@@ -701,12 +700,9 @@ class IRBuilder(NodeVisitor[Register]):
 
         else:
             obj_reg = self.accept(expr.expr)
-            attr_type = self.node_type(expr)
-            target = self.alloc_target(attr_type)
             obj_type = self.node_type(expr.expr)
             assert isinstance(obj_type, RInstance), 'Attribute access not supported: %s' % obj_type
-            self.add(GetAttr(target, obj_reg, expr.name, obj_type, expr.line))
-            return target
+            return self.add(GetAttr(obj_reg, expr.name, obj_type, expr.line))
 
     def load_static_module_attr(self, expr: RefExpr) -> Register:
         assert expr.node, "RefExpr not resolved"
@@ -1056,8 +1052,11 @@ class IRBuilder(NodeVisitor[Register]):
         self.environment = self.environments[-1]
         return blocks, env
 
-    def add(self, op: Op) -> None:
+    def add(self, op: Op) -> Register:
         self.blocks[-1][-1].ops.append(op)
+        if op.no_reg:
+            self.environment.add_op(op)
+        return op
 
     def primitive_op(self, desc: OpDescription, args: List[Register], line: int) -> Register:
         assert desc.result_type is not None

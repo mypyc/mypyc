@@ -72,7 +72,7 @@ class TestAnalysis(MypycDataSuite):
                         # Forward, must
                         analysis_result = analysis.analyze_must_defined_regs(
                             fn.blocks, cfg, args,
-                            num_regs=fn.env.num_regs())
+                            regs=fn.env.regs())
                     elif name.endswith('_BorrowedArgument'):
                         # Forward, must
                         analysis_result = analysis.analyze_borrowed_arguments(fn.blocks, cfg, args)

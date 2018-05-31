@@ -2,7 +2,7 @@
 
 from abc import abstractmethod
 
-from typing import Dict, Tuple, List, Set, TypeVar, Iterator, Generic, Optional
+from typing import Dict, Tuple, List, Set, TypeVar, Iterator, Generic, Optional, Iterable
 
 from mypyc.ops import (
     Register, CRegister,
@@ -194,7 +194,7 @@ def analyze_must_defined_regs(
         blocks: List[BasicBlock],
         cfg: CFG,
         initial_defined: Set[Register],
-        num_regs: int) -> AnalysisResult[Register]:
+        regs: Iterable[Register]) -> AnalysisResult[Register]:
     """Calculate always defined registers at each CFG location.
 
     A register is defined if it has a value along all paths from the initial location.
@@ -205,7 +205,7 @@ def analyze_must_defined_regs(
                         initial=initial_defined,
                         backward=False,
                         kind=MUST_ANALYSIS,
-                        universe=set([CRegister(r) for r in range(num_regs)]))
+                        universe=set(regs))
 
 
 class BorrowedArgumentsVisitor(BaseAnalysisVisitor):
@@ -267,9 +267,9 @@ def analyze_undefined_regs(blocks: List[BasicBlock],
     A register is undefined if there is some path from initial block
     where it has an undefined value.
     """
-    initial_undefined = {CRegister(reg)
-                         for reg in range(len(env.names))
-                         if CRegister(reg) not in initial_defined}  # type: Set[Register]
+    initial_undefined = {reg
+                         for reg in env.names.keys()
+                         if reg not in initial_defined}
     return run_analysis(blocks=blocks,
                         cfg=cfg,
                         gen_and_kill=UndefinedVisitor(),

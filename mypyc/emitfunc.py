@@ -38,8 +38,9 @@ def generate_native_function(fn: FuncIR, emitter: Emitter, source_path: str) -> 
     declarations.emit_line('{} {{'.format(native_function_header(fn)))
     body.indent()
 
-    for i in range(len(fn.args), fn.env.num_regs()):
-        r = CRegister(i)
+    for r in fn.env.names.keys():
+        if fn.env.indexes[r] < len(fn.args):
+            continue  # skip the arguments
         ctype = fn.env.types[r].ctype
         declarations.emit_line('{ctype} {prefix}{name};'.format(ctype=ctype,
                                                                 prefix=REG_PREFIX,
@@ -168,6 +169,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
             self.emit_line('%s %s = { %s };' % (op.type.ctype, tmp, ', '.join(values)))
             self.emit_line('%s = %s;' % (self.reg(op.dest), tmp))
         else:
+            assert op.type is not None
             self.emit_line('%s = %s;' % (self.reg(op.dest),
                                          op.type.c_error_value()))
 
@@ -267,6 +269,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         self.emitter.emit_cast(self.reg(op.src), self.reg(op.dest), op.typ)
 
     def visit_unbox(self, op: Unbox) -> None:
+        assert op.type is not None
         self.emitter.emit_unbox(self.reg(op.src), self.reg(op.dest), op.type)
 
     # Helpers

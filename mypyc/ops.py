@@ -14,6 +14,7 @@ from abc import abstractmethod, abstractproperty
 import re
 from typing import (
     List, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType, Callable, Union,
+    Iterable,
 )
 
 from mypy.nodes import Var
@@ -23,7 +24,7 @@ T = TypeVar('T')
 
 CRegister = NewType('CRegister', int)
 Label = NewType('Label', int)
-Register = Union[CRegister,  'Op']
+Register = Union[CRegister, 'Op']
 
 
 # Unfortunately we have visitors which are statement-like rather than expression-like.
@@ -318,21 +319,26 @@ class Environment:
     """Keep track of names and types of registers."""
 
     def __init__(self) -> None:
+        self.indexes = {}  # type: Dict[Register, int]
         self.names = {}  # type: Dict[Register, str]
         self.types = {}  # type: Dict[Register, RType]
         self.symtable = {}  # type: Dict[Var, Register]
         self.temp_index = 0
 
-    def num_regs(self) -> int:
-        return len(self.names)
+    def regs(self) -> Iterable[Register]:
+        return self.names.keys()
+
+    def add(self, reg: Register, name: str, typ: RType) -> None:
+        self.indexes[reg] = len(self.names)
+        self.names[reg] = name
+        self.types[reg] = typ
 
     def add_local(self, var: Var, typ: RType) -> Register:
         assert isinstance(var, Var)
         reg = CRegister(len(self.names))
 
-        self.names[reg] = var.name()
-        self.types[reg] = typ
         self.symtable[var] = reg
+        self.add(reg, var.name(), typ)
         return reg
 
     def lookup(self, var: Var) -> Register:
@@ -341,10 +347,15 @@ class Environment:
     def add_temp(self, typ: RType) -> Register:
         assert isinstance(typ, RType)
         reg = CRegister(len(self.names))
-        self.names[reg] = ('r%d' % self.temp_index)
-        self.types[reg] = typ
+        self.add(reg, 'r%d' % self.temp_index, typ)
         self.temp_index += 1
         return reg
+
+    def add_op(self, reg: 'Op') -> None:
+        if reg.type is None:
+            return
+        self.add(reg, 'r%d' % self.temp_index, reg.type)
+        self.temp_index += 1
 
     def format(self, fmt: str, *args: Any) -> str:
         result = []
@@ -376,9 +387,8 @@ class Environment:
     def to_lines(self) -> List[str]:
         result = []
         i = 0
-        keys = list(self.names.keys())
-        names = [self.names[k] for k in keys]
-        types = [self.types[k] for k in keys]
+        names = [self.names[k] for k in self.regs()]
+        types = [self.types[k] for k in self.regs()]
 
         n = len(names)
         while i < n:
@@ -400,6 +410,10 @@ ERR_FALSE = 2  # Generates false (bool) on exception
 class Op:
     # Source line number
     line = -1
+
+    no_reg = False
+
+    type = None  # type: Optional[RType]
 
     def __init__(self, line: int) -> None:
         self.line = line
@@ -948,13 +962,16 @@ class GetAttr(StrictRegisterOp):
 
     error_kind = ERR_MAGIC
 
-    def __init__(self, dest: Register, obj: Register, attr: str,
+    no_reg = True
+
+    def __init__(self, obj: Register, attr: str,
                  class_type: RInstance,
                  line: int) -> None:
-        super().__init__(dest, line)
+        super().__init__(self, line)
         self.obj = obj
         self.attr = attr
         self.class_type = class_type
+        self.type = class_type.attr_type(attr)
 
     def sources(self) -> List[Register]:
         return [self.obj]
