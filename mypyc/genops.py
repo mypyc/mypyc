@@ -706,14 +706,11 @@ class IRBuilder(NodeVisitor[Register]):
 
     def load_static_module_attr(self, expr: RefExpr) -> Register:
         assert expr.node, "RefExpr not resolved"
-        target = self.alloc_target(self.node_type(expr))
         module = '.'.join(expr.node.fullname().split('.')[:-1])
         right = expr.node.fullname().split('.')[-1]
         left = self.alloc_temp(object_rprimitive)
         self.add(LoadStatic(left, c_module_name(module)))
-        self.add(PyGetAttr(target, left, right, expr.line))
-
-        return target
+        return self.add(PyGetAttr(self.node_type(expr), left, right, expr.line))
 
     def py_call(self, function: Register, args: List[Register],
                 target_type: RType, line: int) -> Register:

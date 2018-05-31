@@ -802,11 +802,13 @@ class PyGetAttr(StrictRegisterOp):
     """dest = left.right :: py"""
 
     error_kind = ERR_MAGIC
+    no_reg = True
 
-    def __init__(self, dest: Register, left: Register, right: str, line: int) -> None:
-        super().__init__(dest, line)
+    def __init__(self, type: RType, left: Register, right: str, line: int) -> None:
+        super().__init__(self, line)
         self.left = left
         self.right = right
+        self.type = type
 
     def sources(self) -> List[Register]:
         return [self.left]
@@ -961,7 +963,6 @@ class GetAttr(StrictRegisterOp):
     """dest = obj.attr (for a native object)"""
 
     error_kind = ERR_MAGIC
-
     no_reg = True
 
     def __init__(self, obj: Register, attr: str,
