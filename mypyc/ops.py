@@ -892,9 +892,6 @@ class PrimitiveOp(RegisterOp):
     # Dict
     NEW_DICT = make_op('new', 0, 'dict', format_str='{dest} = {{}}', error_kind=ERR_MAGIC)
 
-    # Sequence Tuple
-    HOMOGENOUS_TUPLE_GET = make_op('[]', 2, 'sequence_tuple', kind=OP_BINARY, error_kind=ERR_MAGIC)
-
     # Tuple
     NEW_TUPLE = make_op('new', VAR_ARG, 'tuple', format_str='{dest} = ({comma_args})',
                         error_kind=ERR_MAGIC)

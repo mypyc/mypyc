@@ -642,15 +642,6 @@ class IRBuilder(NodeVisitor[Register]):
         if target_reg is not None:
             return target_reg
 
-        if is_tuple_rprimitive(base_rtype):
-            index_type = self.node_type(expr.index)
-            assert is_int_rprimitive(index_type), 'Unsupported indexing operation'  # TODO
-            op = PrimitiveOp.HOMOGENOUS_TUPLE_GET
-            tmp = self.alloc_temp(object_rprimitive)
-            self.add(PrimitiveOp(tmp, op, [base_reg, index_reg], expr.line))
-            target = self.alloc_target(target_type)
-            return self.unbox_or_cast(tmp, target_type, expr.line, target)
-
         assert False, 'Unsupported indexing operation'
 
     def visit_int_expr(self, expr: IntExpr) -> Register:

@@ -137,15 +137,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         assert op.dest is not None
         dest = self.reg(op.dest)
 
-        if op.desc.kind == OP_BINARY:
-            left = self.reg(op.args[0])
-            right = self.reg(op.args[1])
-            if op.desc is PrimitiveOp.HOMOGENOUS_TUPLE_GET:
-                self.emit_line('%s = CPySequenceTuple_GetItem(%s, %s);' % (dest, left, right))
-            else:
-                assert False, op.desc
-
-        elif op.desc is PrimitiveOp.NONE:
+        if op.desc is PrimitiveOp.NONE:
             self.emit_lines(
                 '{} = Py_None;'.format(dest),
                 'Py_INCREF({});'.format(dest),

@@ -1,10 +1,24 @@
 """Primitive (varying-length) tuple ops."""
 
 from mypyc.ops import (
-    EmitterInterface, PrimitiveOp2, tuple_rprimitive, int_rprimitive, list_rprimitive, ERR_NEVER,
-    ERR_MAGIC
+    EmitterInterface, PrimitiveOp2, tuple_rprimitive, int_rprimitive, list_rprimitive,
+    object_rprimitive, ERR_NEVER, ERR_MAGIC
 )
-from mypyc.ops_primitive import func_op
+from mypyc.ops_primitive import method_op, func_op
+
+
+def emit_get_item(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+    assert op.dest is not None
+    emitter.emit_line('%s = CPySequenceTuple_GetItem(%s, %s);' % (emitter.reg(op.dest),
+                                                                  emitter.reg(op.args[0]),
+                                                                  emitter.reg(op.args[1])))
+
+
+tuple_get_item_op = method_op(name='builtins.tuple.__getitem__',
+                              arg_types=[tuple_rprimitive, int_rprimitive],
+                              result_type=object_rprimitive,
+                              error_kind=ERR_MAGIC,
+                              emit=emit_get_item)
 
 
 def emit_len(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
