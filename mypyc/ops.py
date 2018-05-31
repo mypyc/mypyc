@@ -789,6 +789,7 @@ OpDescription = NamedTuple(
     'OpDescription', [('name', str),
                       ('arg_types', List[RType]),
                       ('result_type', Optional[RType]),
+                      ('is_var_arg', bool),
                       ('error_kind', int),
                       ('format_str', str),
                       ('emit', Callable[[EmitterInterface, 'PrimitiveOp2'], None])])
@@ -800,7 +801,8 @@ class PrimitiveOp2(RegisterOp):
                   args: List[Register],
                   desc: OpDescription,
                   line: int) -> None:
-        assert len(args) == len(desc.arg_types)
+        if not desc.is_var_arg:
+            assert len(args) == len(desc.arg_types)
         self.error_kind = desc.error_kind
         super().__init__(dest, line)
         self.args = args

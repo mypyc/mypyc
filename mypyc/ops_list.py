@@ -6,7 +6,29 @@ from mypyc.ops import (
     int_rprimitive, list_rprimitive, object_rprimitive, bool_rprimitive, ERR_MAGIC, ERR_NEVER,
     ERR_FALSE, EmitterInterface, PrimitiveOp2, Register
 )
-from mypyc.ops_primitive import binary_op, func_op, method_op
+from mypyc.ops_primitive import binary_op, func_op, method_op, custom_op
+
+
+def emit_new(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+    # TODO: This would be better split into multiple smaller ops.
+    assert op.dest is not None
+    dest = emitter.reg(op.dest)
+    emitter.emit_line('%s = PyList_New(%d); ' % (dest, len(op.args)))
+    for arg in op.args:
+        emitter.emit_line('Py_INCREF(%s);' % emitter.reg(arg))
+    emitter.emit_line('if (%s != NULL) {' % dest)
+    for i, arg in enumerate(op.args):
+        reg = emitter.reg(arg)
+        emitter.emit_line('PyList_SET_ITEM(%s, %s, %s);' % (dest, i, reg))
+    emitter.emit_line('}')
+
+
+new_list_op = custom_op(arg_types=[object_rprimitive],
+                        result_type=list_rprimitive,
+                        is_var_arg=True,
+                        error_kind=ERR_MAGIC,
+                        format_str = '{dest} = [{comma_args}]',
+                        emit=emit_new)
 
 
 def emit_get_item(emitter: EmitterInterface, op: PrimitiveOp2) -> None:

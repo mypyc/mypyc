@@ -35,10 +35,10 @@ from mypyc.ops import (
     INVALID_LABEL, int_rprimitive, is_int_rprimitive, bool_rprimitive, list_rprimitive,
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp2,
-    ERR_FALSE
+    ERR_FALSE, OpDescription
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
-from mypyc.ops_list import list_len_op, list_get_item_op
+from mypyc.ops_list import list_len_op, list_get_item_op, new_list_op
 from mypyc.ops_dict import new_dict_op
 from mypyc.ops_misc import none_op
 from mypyc.subtype import is_subtype
@@ -913,17 +913,8 @@ class IRBuilder(NodeVisitor[Register]):
         return None
 
     def visit_list_expr(self, expr: ListExpr) -> Register:
-        list_type = self.types[expr]
-        assert isinstance(list_type, Instance)
-        item_type = self.type_to_rtype(list_type.args[0])
-        target = self.alloc_target(list_rprimitive)
-        items = []
-        for item in expr.items:
-            item_reg = self.accept(item)
-            boxed = self.box(item_reg, item_type)
-            items.append(boxed)
-        self.add(PrimitiveOp(target, PrimitiveOp.NEW_LIST, items, expr.line))
-        return target
+        items = [self.accept(item) for item in expr.items]
+        return self.primitive_op(new_list_op, items, expr.line)
 
     def visit_tuple_expr(self, expr: TupleExpr) -> Register:
         tuple_type = self.types[expr]
@@ -1056,6 +1047,23 @@ class IRBuilder(NodeVisitor[Register]):
 
     def add(self, op: Op) -> None:
         self.blocks[-1][-1].ops.append(op)
+
+    def primitive_op(self, desc: OpDescription, args: List[Register], line: int) -> Register:
+        assert desc.result_type is not None
+        target = self.alloc_target(desc.result_type)
+        coerced = []
+        for i, arg in enumerate(args):
+            formal_type = self.op_arg_type(desc, i)
+            arg = self.coerce(arg, self.environment.types[arg], formal_type, line)
+            coerced.append(arg)
+        self.add(PrimitiveOp2(target, coerced, desc, line))
+        return target
+
+    def op_arg_type(self, desc: OpDescription, n: int) -> RType:
+        if n >= len(desc.arg_types):
+            assert desc.is_var_arg
+            return desc.arg_types[-1]
+        return desc.arg_types[n]
 
     def accept(self, node: Node, target: Register = INVALID_REGISTER) -> Register:
         self.targets.append(target)

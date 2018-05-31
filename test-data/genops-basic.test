@@ -527,16 +527,16 @@ def g(y: object) -> None:
 def g(y):
     y :: object
     r0 :: None
-    r1 :: list
-    r2 :: int
+    r1 :: int
+    r2 :: list
     r3 :: object
     r4, r5, r6, r7 :: None
 L0:
     r0 = g(y)
-    r2 = 1
-    r3 = box(int, r2)
-    r1 = [r3]
-    r4 = g(r1)
+    r1 = 1
+    r3 = box(int, r1)
+    r2 = [r3]
+    r4 = g(r2)
     r5 = None
     r6 = g(r5)
     r7 = None
