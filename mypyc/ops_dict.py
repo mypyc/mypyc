@@ -6,7 +6,7 @@ from mypyc.ops import (
     EmitterInterface, PrimitiveOp, dict_rprimitive, object_rprimitive, bool_rprimitive, ERR_FALSE,
     ERR_MAGIC
 )
-from mypyc.ops_primitive import method_op, binary_op, func_op
+from mypyc.ops_primitive import method_op, binary_op, func_op, simple_emit
 
 
 def emit_get_item(emitter: EmitterInterface, args: List[str], dest: str) -> None:
@@ -17,22 +17,20 @@ def emit_get_item(emitter: EmitterInterface, args: List[str], dest: str) -> None
                        '    Py_INCREF(%s);' % dest)
 
 
-dict_get_item_op = method_op('builtins.dict.__getitem__',
-                             arg_types=[dict_rprimitive, object_rprimitive],
-                             result_type=object_rprimitive,
-                             error_kind=ERR_MAGIC,
-                             emit=emit_get_item)
+dict_get_item_op = method_op(
+    name='builtins.dict.__getitem__',
+    arg_types=[dict_rprimitive, object_rprimitive],
+    result_type=object_rprimitive,
+    error_kind=ERR_MAGIC,
+    emit=emit_get_item)
 
 
-def emit_set_item(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-    emitter.emit_line('%s = PyDict_SetItem(%s, %s, %s) >= 0;' % (dest, args[0], args[1], args[2]))
-
-
-dict_set_item_op = method_op(name='builtins.dict.__setitem__',
-                             arg_types=[dict_rprimitive, object_rprimitive, object_rprimitive],
-                             result_type=bool_rprimitive,
-                             error_kind=ERR_FALSE,
-                             emit=emit_set_item)
+dict_set_item_op = method_op(
+    name='builtins.dict.__setitem__',
+    arg_types=[dict_rprimitive, object_rprimitive, object_rprimitive],
+    result_type=bool_rprimitive,
+    error_kind=ERR_FALSE,
+    emit=simple_emit('{dest} = PyDict_SetItem({args[0]}, {args[1]}, {args[2]}) >= 0;'))
 
 
 def emit_in(emitter: EmitterInterface, args: List[str], dest: str) -> None:
@@ -52,28 +50,21 @@ binary_op(op='in',
           emit=emit_in)
 
 
-def emit_update(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-    # NOTE: PyDict_Update is technically not equivalent to update, but the cases where it
-    # differs (when the second argument has no keys) should never typecheck for us, so the
-    # difference is irrelevant.
-    emitter.emit_line(
-        '%s = PyDict_Update(%s, %s) != -1;' % (dest, args[0], args[1]))
+# NOTE: PyDict_Update is technically not equivalent to update, but the cases where it
+# differs (when the second argument has no keys) should never typecheck for us, so the
+# difference is irrelevant.
+dict_update_op = method_op(
+    name='builtins.dict.update',
+    arg_types=[dict_rprimitive, object_rprimitive],
+    result_type=None,
+    error_kind=ERR_FALSE,
+    emit=simple_emit('{dest} = PyDict_Update({args[0]}, {args[1]}) != -1;'))
 
 
-dict_update_op = method_op(name='builtins.dict.update',
-                           arg_types=[dict_rprimitive, object_rprimitive],
-                           result_type=None,
-                           error_kind=ERR_FALSE,
-                           emit=emit_update)
-
-
-def emit_new(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-    emitter.emit_line('%s = PyDict_New();' % dest)
-
-
-new_dict_op = func_op(name='builtins.dict',
-                      arg_types=[],
-                      result_type=dict_rprimitive,
-                      error_kind=ERR_MAGIC,
-                      emit=emit_new,
-                      format_str='{dest} = {{}}')
+new_dict_op = func_op(
+    name='builtins.dict',
+    arg_types=[],
+    result_type=dict_rprimitive,
+    error_kind=ERR_MAGIC,
+    format_str='{dest} = {{}}',
+    emit=simple_emit('{dest} = PyDict_New();'))
