@@ -37,8 +37,9 @@ from mypyc.ops import (
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp2,
     ERR_FALSE
 )
-from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops
+from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import list_len_op, list_get_item_op
+from mypyc.ops_misc import none_op
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
 
@@ -253,7 +254,7 @@ class IRBuilder(NodeVisitor[Register]):
         block = self.blocks[-1][-1]
         if not block.ops or not isinstance(block.ops[-1], Return):
             retval = self.environment.add_temp(none_rprimitive)
-            self.add(PrimitiveOp(retval, PrimitiveOp.NONE, [], line=-1))
+            self.add(PrimitiveOp2(retval, [], none_op, line=-1))
             self.add(Return(retval))
 
     def add_implicit_unreachable(self) -> None:
@@ -276,7 +277,7 @@ class IRBuilder(NodeVisitor[Register]):
             retval = self.coerce(retval, self.node_type(stmt.expr), self.ret_type, stmt.line)
         else:
             retval = self.environment.add_temp(none_rprimitive)
-            self.add(PrimitiveOp(retval, PrimitiveOp.NONE, [], line=-1))
+            self.add(PrimitiveOp2(retval, [], none_op, line=-1))
         self.add(Return(retval))
         return INVALID_REGISTER
 
@@ -660,17 +661,13 @@ class IRBuilder(NodeVisitor[Register]):
 
     def visit_name_expr(self, expr: NameExpr) -> Register:
         assert expr.node, "RefExpr not resolved"
-        if expr.node.fullname() == 'builtins.None':
-            target = self.alloc_target(none_rprimitive)
-            self.add(PrimitiveOp(target, PrimitiveOp.NONE, [], expr.line))
-            return target
-        elif expr.node.fullname() == 'builtins.True':
-            target = self.alloc_target(bool_rprimitive)
-            self.add(PrimitiveOp(target, PrimitiveOp.TRUE, [], expr.line))
-            return target
-        elif expr.node.fullname() == 'builtins.False':
-            target = self.alloc_target(bool_rprimitive)
-            self.add(PrimitiveOp(target, PrimitiveOp.FALSE, [], expr.line))
+        fullname = expr.node.fullname()
+        if fullname in name_ref_ops:
+            # Use special access op for this particular name.
+            desc = name_ref_ops[fullname]
+            assert desc.result_type is not None
+            target = self.alloc_target(desc.result_type)
+            self.add(PrimitiveOp2(target, [], desc, expr.line))
             return target
 
         if not self.is_native_name_expr(expr):

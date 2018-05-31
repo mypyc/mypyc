@@ -7,10 +7,16 @@ from mypyc.ops import (
 )
 
 
+# Primitive binary ops (key is operator such as '+')
 binary_ops = {}  # type: Dict[str, List[OpDescription]]
+# Primitive unary ops (key is operator such as '-')
 unary_ops = {}  # type: Dict[str, List[OpDescription]]
+# Primitive ops for built-in functions (key is function name such as 'builtins.len')
 func_ops = {}  # type: Dict[str, List[OpDescription]]
+# Primitive ops for built-in methods (key is method name such as 'builtins.list.append')
 method_ops = {}  # type: Dict[str, List[OpDescription]]
+# Primitive ops for reading module attributes (key is name such as 'builtins.None')
+name_ref_ops = {}  # type: Dict[str, OpDescription]
 
 EmitCallback = Callable[[EmitterInterface, PrimitiveOp2], None]
 
@@ -72,4 +78,20 @@ def method_op(name: str,
         format_str = '{dest} = {args[0]}.%s(%s)' % (method_name, args)
     desc = OpDescription(method_name, arg_types, result_type, error_kind, format_str, emit)
     ops.append(desc)
+    return desc
+
+
+def name_ref_op(name: str,
+                result_type: RType,
+                error_kind: int,
+                emit: EmitCallback) -> OpDescription:
+    """Define an op that is used to implement reading a module attribute.
+
+    Args:
+        name: fully-qualified name (e.g. 'builtins.None')
+    """
+    assert name not in name_ref_ops, 'already defined: %s' % name
+    format_str = '{dest} = %s' % short_name(name)
+    desc = OpDescription(name, [], result_type, error_kind, format_str, emit)
+    name_ref_ops[name] = desc
     return desc

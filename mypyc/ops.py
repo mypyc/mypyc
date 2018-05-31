@@ -1367,3 +1367,4 @@ import mypyc.ops_int
 import mypyc.ops_list
 import mypyc.ops_dict
 import mypyc.ops_tuple
+import mypyc.ops_misc
