@@ -4,7 +4,7 @@ from mypyc.ops import (
     EmitterInterface, PrimitiveOp2, dict_rprimitive, object_rprimitive, bool_rprimitive, ERR_FALSE,
     ERR_MAGIC
 )
-from mypyc.ops_primitive import method_op
+from mypyc.ops_primitive import method_op, binary_op
 
 
 def emit_get_item(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
@@ -39,6 +39,26 @@ dict_set_item_op = method_op(name='builtins.dict.__setitem__',
                              result_type=bool_rprimitive,
                              error_kind=ERR_FALSE,
                              emit=emit_set_item)
+
+
+def emit_in(emitter: EmitterInterface, op: PrimitiveOp2) -> None:
+    assert op.dest is not None
+    temp = emitter.temp_name()
+    dest = emitter.reg(op.dest)
+    emitter.emit_lines('int %s = PyDict_Contains(%s, %s);' % (temp, emitter.reg(op.args[1]),
+                                                              emitter.reg(op.args[0])),
+                       'if (%s < 0)' % temp,
+                       '    %s = %s;' % (dest, bool_rprimitive.c_error_value()),
+                       'else',
+                       '    %s = %s;' % (dest, temp))
+
+
+binary_op(op='in',
+          arg_types=[object_rprimitive, dict_rprimitive],
+          result_type=bool_rprimitive,
+          error_kind=ERR_MAGIC,
+          format_str='{dest} = {args[0]} in {args[1]} :: dict',
+          emit=emit_in)
 
 
 def emit_update(emitter: EmitterInterface, op: PrimitiveOp2) -> None:

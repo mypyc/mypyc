@@ -142,12 +142,6 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
             right = self.reg(op.args[1])
             if op.desc is PrimitiveOp.HOMOGENOUS_TUPLE_GET:
                 self.emit_line('%s = CPySequenceTuple_GetItem(%s, %s);' % (dest, left, right))
-            elif op.desc is PrimitiveOp.DICT_CONTAINS:
-                temp = self.temp_name()
-                self.emit_lines('int %s = PyDict_Contains(%s, %s);' % (temp, right, left),
-                                'if (%s < 0)' % temp,
-                                '    abort();',  # TODO: Error handling
-                                '%s = %s;' % (dest, temp))
             else:
                 assert False, op.desc
 

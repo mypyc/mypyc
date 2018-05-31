@@ -609,24 +609,16 @@ class IRBuilder(NodeVisitor[Register]):
         for desc in binary_ops.get(expr_op, []):
             if (is_subtype(ltype, desc.arg_types[0])
                     and is_subtype(rtype, desc.arg_types[1])):
+                lreg = self.coerce(lreg, ltype, desc.arg_types[0], line)
+                rreg = self.coerce(rreg, rtype, desc.arg_types[1], line)
                 if target is None:
                     assert desc.result_type is not None
                     target = self.alloc_target(desc.result_type)
                 self.add(PrimitiveOp2(target, [lreg, rreg], desc, line))
                 return target
 
-        if is_dict_rprimitive(rtype):
-            if expr_op == 'in':
-                if target is None:
-                    target = self.alloc_target(bool_rprimitive)
-                lreg = self.box(lreg, ltype)
-                op = PrimitiveOp.DICT_CONTAINS
-            else:
-                assert False, 'Unsupported binary operation'
-        else:
-            assert False, 'Unsupported binary operation'
-        self.add(PrimitiveOp(target, op, [lreg, rreg], line))
-        return target
+        # TODO: Fall back to generic operation
+        assert False, 'Unsupported binary operation'
 
     def visit_index_expr(self, expr: IndexExpr) -> Register:
         base_rtype = self.node_type(expr.base)

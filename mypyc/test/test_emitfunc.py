@@ -205,13 +205,13 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.assert_emit(PrimitiveOp(self.d, PrimitiveOp.NEW_DICT, [], 1),
                          """cpy_r_d = PyDict_New();""")
 
-    def test_dict_contains(self) -> None:
-        self.assert_emit(PrimitiveOp(self.b, PrimitiveOp.DICT_CONTAINS, [self.o, self.d], 1),
-                         """int __tmp1 = PyDict_Contains(cpy_r_d, cpy_r_o);
-                            if (__tmp1 < 0)
-                                abort();
-                            cpy_r_b = __tmp1;
-                         """)
+    #def test_dict_contains(self) -> None:
+    #    self.assert_emit(PrimitiveOp(self.b, PrimitiveOp.DICT_CONTAINS, [self.o, self.d], 1),
+    #                     """int __tmp1 = PyDict_Contains(cpy_r_d, cpy_r_o);
+    #                        if (__tmp1 < 0)
+    #                            abort();
+    #                        cpy_r_b = __tmp1;
+    #                     """)
 
     def assert_emit(self, op: Op, expected: str) -> None:
         self.emitter.fragments = []
