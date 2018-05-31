@@ -1,20 +1,16 @@
 from typing import List
 
 from mypyc.ops import PrimitiveOp, int_rprimitive, RType, EmitterInterface, ERR_NEVER
-from mypyc.ops_primitive import binary_op, unary_op
+from mypyc.ops_primitive import binary_op, unary_op, simple_emit
 
 
 def int_binary_op(op: str, c_func_name: str) -> None:
-    def emit(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-        line = '%s = %s(%s, %s);' % (dest, c_func_name, args[0], args[1])
-        emitter.emit_line(line)
-
     binary_op(op=op,
               arg_types=[int_rprimitive, int_rprimitive],
               result_type=int_rprimitive,
               error_kind=ERR_NEVER,
               format_str='{dest} = {args[0]} %s {args[1]} :: int' % op,
-              emit=emit)
+              emit=simple_emit('{dest} = %s({args[0]}, {args[1]});' % c_func_name))
 
 
 int_binary_op('+', 'CPyTagged_Add')
@@ -25,15 +21,12 @@ int_binary_op('%', 'CPyTagged_Remainder')
 
 
 def int_unary_op(op: str, c_func_name: str) -> None:
-    def emit(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-        emitter.emit_line('%s = %s(%s);' % (dest, c_func_name, args[0]))
-
     unary_op(op=op,
              arg_type=int_rprimitive,
              result_type=int_rprimitive,
              error_kind=ERR_NEVER,
              format_str='{dest} = %s{args[0]} :: int' % op,
-             emit=emit)
+             emit=simple_emit('{dest} = %s({args[0]});' % c_func_name))
 
 
 int_unary_op('-', 'CPyTagged_Negate')
