@@ -3,9 +3,9 @@
 from mypyc.common import REG_PREFIX, NATIVE_PREFIX
 from mypyc.emit import Emitter
 from mypyc.ops import (
-    FuncIR, OpVisitor, Goto, Branch, Return, PrimitiveOp, Assign, LoadInt, LoadErrorValue, GetAttr,
+    FuncIR, OpVisitor, Goto, Branch, Return, Assign, LoadInt, LoadErrorValue, GetAttr,
     SetAttr, LoadStatic, TupleGet, TupleSet, Call, PyCall, PyGetAttr, IncRef, DecRef, Box, Cast,
-    Unbox, Label, Register, RType, OP_BINARY, RTuple, PyMethodCall, PrimitiveOp2, EmitterInterface
+    Unbox, Label, Register, RType, RTuple, PyMethodCall, PrimitiveOp2, EmitterInterface
 )
 
 

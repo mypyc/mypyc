@@ -5,7 +5,7 @@ from mypy.test.helpers import assert_string_arrays_equal
 
 from mypyc.ops import (
     Environment, BasicBlock, FuncIR, RuntimeArg, RType, Goto, Return, LoadInt, Assign,
-    PrimitiveOp, IncRef, DecRef, Branch, Call, Unbox, Box, RTuple, TupleGet, GetAttr,
+    IncRef, DecRef, Branch, Call, Unbox, Box, RTuple, TupleGet, GetAttr,
     ClassIR, RInstance, SetAttr, Op, Label, int_rprimitive, bool_rprimitive, list_rprimitive,
     dict_rprimitive, object_rprimitive
 )

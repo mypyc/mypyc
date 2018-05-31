@@ -29,7 +29,7 @@ from mypy.subtypes import is_named_instance
 
 from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Register, Label, Return, FuncIR, Assign,
-    PrimitiveOp, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple,
+    Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple,
     Unreachable, TupleGet, TupleSet, ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic,
     PyGetAttr, PyCall, ROptional, c_module_name, PyMethodCall, INVALID_REGISTER,
     INVALID_LABEL, int_rprimitive, is_int_rprimitive, bool_rprimitive, list_rprimitive,

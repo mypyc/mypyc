@@ -5,7 +5,7 @@ from abc import abstractmethod
 from typing import Dict, Tuple, List, Set, TypeVar, Iterator, Generic, Optional
 
 from mypyc.ops import (
-    BasicBlock, OpVisitor, PrimitiveOp, Assign, LoadInt, LoadErrorValue, RegisterOp, Goto,
+    BasicBlock, OpVisitor, Assign, LoadInt, LoadErrorValue, RegisterOp, Goto,
     Branch, Return, Call, Environment, Box, Unbox, Cast, Op, Unreachable,
     TupleGet, TupleSet, GetAttr, SetAttr, PyCall, LoadStatic, PyGetAttr, Label, Register,
     PyMethodCall, PrimitiveOp2
@@ -96,9 +96,6 @@ class BaseAnalysisVisitor(OpVisitor[GenAndKill]):
         return self.visit_register_op(op)
 
     def visit_primitive_op2(self, op: PrimitiveOp2) -> GenAndKill:
-        return self.visit_register_op(op)
-
-    def visit_primitive_op(self, op: PrimitiveOp) -> GenAndKill:
         return self.visit_register_op(op)
 
     def visit_assign(self, op: Assign) -> GenAndKill:

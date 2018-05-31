@@ -796,6 +796,17 @@ OpDescription = NamedTuple(
 
 
 class PrimitiveOp2(RegisterOp):
+    """reg = op(reg, ...)
+
+    These are register-based primitive operations that work on specific
+    operand types.
+
+    The details of the operation are defined by the 'desc'
+    attribute. The mypyc.ops_* modules define the supported
+    operations. mypyc.genops uses the descriptions to look for suitable
+    primitive ops.
+    """
+
     def __init__(self,
                   dest: Optional[Register],
                   args: List[Register],
@@ -827,94 +838,6 @@ class PrimitiveOp2(RegisterOp):
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_primitive_op2(self)
-
-
-VAR_ARG = -1
-
-# Primitive op inds
-OP_MISC = 0    # No specific kind
-OP_BINARY = 1  # Regular binary operation such as +
-OP_SPECIAL_METHOD_CALL = 2
-
-OpDesc = NamedTuple('OpDesc', [('name', str),        # Symbolic name of the operation
-                               ('num_args', int),    # Number of args (or VAR_ARG for any number)
-                               ('type', str),        # Type string, used for disambiguation
-                               ('format_str', str),  # Format string for pretty printing
-                               ('is_void', bool),    # Is this a void op (no value produced)?
-                               ('kind', int),
-                               ('error_kind', int)])
-
-
-def make_op(name: str, num_args: int, typ: str, format_str: Optional[str] = None,
-            is_void: bool = False, kind: int = OP_MISC, error_kind: int = ERR_NEVER) -> OpDesc:
-    if format_str is None:
-        # Default format strings for some common things.
-        if name == '[]':
-            format_str = '{dest} = {args[0]}[{args[1]}] :: %s' % typ
-        elif name == '[]=':
-            if not is_void:
-                assert error_kind == ERR_FALSE
-                format_str = '{args[0]}[{args[1]}] = {args[2]} :: %s; {dest} = is_error' % typ
-            else:
-                format_str = '{args[0]}[{args[1]}] = {args[2]} :: %s' % typ
-        elif kind == OP_BINARY:
-            assert not is_void
-            format_str = '{dest} = {args[0]} %s {args[1]} :: %s' % (name, typ)
-        elif kind == OP_SPECIAL_METHOD_CALL:
-            args_joined = ', '.join(['{args[%d]}' % i for i in range (1, num_args)])
-            if is_void:
-                format_str = ('{args[0]}.%s ' + args_joined + ' :: %s') % (name, typ)
-            else:
-                format_str = ('{dest} = {args[0]}.%s ' + args_joined + ' :: %s') % (name, typ)
-        elif num_args == 1:
-            if name[-1].isalpha():
-                name += ' '
-            format_str = '{dest} = %s{args[0]} :: %s' % (name, typ)
-        else:
-            assert False, 'format_str must be defined; no default format available'
-    return OpDesc(name, num_args, typ, format_str, is_void, kind, error_kind)
-
-
-class PrimitiveOp(RegisterOp):
-    """dest = op(reg, ...)
-
-    These are register-based primitive operations that typically work on
-    specific operand types.
-    """
-
-    def __init__(self, dest: Optional[Register], desc: OpDesc, args: List[Register],
-                 line: int) -> None:
-        """Create a primitive op.
-
-        If desc.is_void is true, dest should be None.
-        """
-        self.error_kind = desc.error_kind
-        super().__init__(dest, line)
-        if desc.num_args != VAR_ARG:
-            assert len(args) == desc.num_args
-        self.desc = desc
-        self.args = args
-
-    def sources(self) -> List[Register]:
-        return list(self.args)
-
-    def __repr__(self) -> str:
-        return '<PrimiveOp name=%r type=%s dest=%s args=%s>' % (self.desc.name,
-                                                                self.desc.type,
-                                                                self.dest,
-                                                                self.args)
-
-    def to_str(self, env: Environment) -> str:
-        params = {}  # type: Dict[str, Any]
-        if self.dest is not None and self.dest != INVALID_REGISTER:
-            params['dest'] = env.format('%r', self.dest)
-        args = [env.format('%r', arg) for arg in self.args]
-        params['args'] = args
-        params['comma_args'] = ', '.join(args)
-        return self.desc.format_str.format(**params)
-
-    def accept(self, visitor: 'OpVisitor[T]') -> T:
-        return visitor.visit_primitive_op(self)
 
 
 class Assign(StrictRegisterOp):
@@ -1265,9 +1188,6 @@ class OpVisitor(Generic[T]):
         pass
 
     def visit_primitive_op2(self, op: PrimitiveOp2) -> T:
-        pass
-
-    def visit_primitive_op(self, op: PrimitiveOp) -> T:
         pass
 
     def visit_assign(self, op: Assign) -> T:
