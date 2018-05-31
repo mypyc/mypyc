@@ -6,7 +6,7 @@ from mypyc.ops import (
     int_rprimitive, list_rprimitive, object_rprimitive, bool_rprimitive, ERR_MAGIC, ERR_NEVER,
     ERR_FALSE, EmitterInterface, PrimitiveOp, Register
 )
-from mypyc.ops_primitive import binary_op, func_op, method_op, custom_op
+from mypyc.ops_primitive import binary_op, func_op, method_op, custom_op, simple_emit
 
 
 def emit_new(emitter: EmitterInterface, args: List[str], dest: str) -> None:
@@ -28,38 +28,28 @@ new_list_op = custom_op(arg_types=[object_rprimitive],
                         emit=emit_new)
 
 
-def emit_get_item(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-    emitter.emit_line('%s = CPyList_GetItem(%s, %s);' % (dest, args[0], args[1]))
+list_get_item_op = method_op(
+    name='builtins.list.__getitem__',
+    arg_types=[list_rprimitive, int_rprimitive],
+    result_type=object_rprimitive,
+    error_kind=ERR_MAGIC,
+    emit=simple_emit('{dest} = CPyList_GetItem({args[0]}, {args[1]});'))
 
 
-list_get_item_op = method_op(name='builtins.list.__getitem__',
-                             arg_types=[list_rprimitive, int_rprimitive],
-                             result_type=object_rprimitive,
-                             error_kind=ERR_MAGIC,
-                             emit=emit_get_item)
+list_set_item_op = method_op(
+    name='builtins.list.__setitem__',
+    arg_types=[list_rprimitive, int_rprimitive, object_rprimitive],
+    result_type=bool_rprimitive,
+    error_kind=ERR_FALSE,
+    emit=simple_emit('{dest} = CPyList_SetItem({args[0]}, {args[1]}, {args[2]}) != 0;'))
 
 
-def emit_set_item(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-    emitter.emit_line(
-        '%s = CPyList_SetItem(%s, %s, %s) != 0;' % (dest, args[0], args[1], args[2]))
-
-
-list_set_item_op = method_op(name='builtins.list.__setitem__',
-                             arg_types=[list_rprimitive, int_rprimitive, object_rprimitive],
-                             result_type=bool_rprimitive,
-                             error_kind=ERR_FALSE,
-                             emit=emit_set_item)
-
-
-def emit_append(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-    emitter.emit_line('%s = PyList_Append(%s, %s) != -1;' % (dest, args[0], args[1]))
-
-
-list_append_op = method_op(name='builtins.list.append',
-                           arg_types=[list_rprimitive, object_rprimitive],
-                           result_type=None,
-                           error_kind=ERR_FALSE,
-                           emit=emit_append)
+list_append_op = method_op(
+    name='builtins.list.append',
+    arg_types=[list_rprimitive, object_rprimitive],
+    result_type=None,
+    error_kind=ERR_FALSE,
+    emit=simple_emit('{dest} = PyList_Append({args[0]}, {args[1]}) != -1;'))
 
 
 def emit_multiply_helper(emitter: EmitterInterface, dest: str, lst: str, num: str) -> None:
