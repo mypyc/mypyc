@@ -246,7 +246,8 @@ def generate_init_for_class(cl: ClassIR,
 
     tp_init needs to be a function that returns an int, and our
     __init__ methods return a PyObject. Translate NULL to -1,
-    everything else to 0."""
+    everything else to 0.
+    """
     emitter.emit_line('static int')
     emitter.emit_line(
         '{}(PyObject *self, PyObject *args, PyObject *kwds)'.format(func_name))
@@ -254,6 +255,7 @@ def generate_init_for_class(cl: ClassIR,
     emitter.emit_line('return {}{}(self, args, kwds) != NULL ? 0 : -1;'.format(
         PREFIX, init_fn.cname))
     emitter.emit_line('}')
+
 
 def generate_new_for_class(cl: ClassIR,
                            func_name: str,
