@@ -34,10 +34,10 @@ def insert_exception_handling(ir: FuncIR) -> None:
 
 def add_handler_block(ir: FuncIR) -> Label:
     block = BasicBlock(Label(len(ir.blocks)))
-    rtype = ir.ret_type
-    reg = ir.env.add_temp(rtype)
-    block.ops.append(LoadErrorValue(reg, rtype))
-    block.ops.append(Return(reg))
+    op = LoadErrorValue(ir.ret_type)
+    block.ops.append(op)
+    ir.env.add_op(op)
+    block.ops.append(Return(op))
     ir.blocks.append(block)
     return block.label
 

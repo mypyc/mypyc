@@ -944,9 +944,10 @@ class LoadErrorValue(StrictRegisterOp):
     """dest = <error value for type>"""
 
     error_kind = ERR_NEVER
+    no_reg = True
 
-    def __init__(self, dest: Register, rtype: RType, line: int = -1) -> None:
-        super().__init__(dest, line)
+    def __init__(self, rtype: RType, line: int = -1) -> None:
+        super().__init__(self, line)
         self.type = rtype
 
     def sources(self) -> List[Register]:
