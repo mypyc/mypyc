@@ -56,10 +56,11 @@ def unary_op(op: str,
              result_type: RType,
              error_kind: int,
              format_str: str,
-             emit: EmitCallback) -> None:
+             emit: EmitCallback) -> OpDescription:
     ops = unary_ops.setdefault(op, [])
     desc = OpDescription(op, [arg_type], result_type, False, error_kind, format_str, emit)
     ops.append(desc)
+    return desc
 
 
 def func_op(name: str,
