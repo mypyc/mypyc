@@ -89,24 +89,24 @@ def transform_block(block: BasicBlock,
         elif isinstance(op, RegisterOp):
             # These operations construct a new reference.
             tmp_reg = None  # type: Optional[Value]
-            if (op.dest not in pre_borrow[key] and
-                    op.dest in pre_live[key]):
-                if op.dest not in op.sources():
-                    maybe_append_dec_ref(ops, op.dest, env)
+            if (op not in pre_borrow[key] and
+                    op in pre_live[key]):
+                if op not in op.sources():
+                    maybe_append_dec_ref(ops, op, env)
                 else:
-                    tmp_reg = env.add_temp(env.types[op.dest])
-                    ops.append(Assign(tmp_reg, op.dest))
+                    tmp_reg = env.add_temp(env.types[op])
+                    ops.append(Assign(tmp_reg, op))
             ops.append(op)
             for src in op.unique_sources():
                 # Decrement source that won't be live afterwards.
                 if src not in post_live[key] and src not in pre_borrow[key]:
-                    if src != op.dest:
+                    if src != op:
                         maybe_append_dec_ref(ops, src, env)
             # TODO: Analyze LoadStatics as being borrowed! (#66)
             if isinstance(op, LoadStatic):
-                maybe_append_inc_ref(ops, op.dest, env)
-            if op.dest is not None and op.dest not in post_live[key]:
-                maybe_append_dec_ref(ops, op.dest, env)
+                maybe_append_inc_ref(ops, op, env)
+            if not op.is_void and op not in post_live[key]:
+                maybe_append_dec_ref(ops, op, env)
             if tmp_reg is not None:
                 maybe_append_dec_ref(ops, tmp_reg, env)
         elif isinstance(op, Return) and op.reg in pre_borrow[key]:

@@ -151,8 +151,8 @@ class MaybeDefinedVisitor(BaseAnalysisVisitor):
         return set(), set()
 
     def visit_register_op(self, op: RegisterOp) -> GenAndKill:
-        if op.dest is not None:
-            return {op.dest}, set()
+        if not op.is_void:
+            return {op}, set()
         else:
             return set(), set()
 
@@ -188,8 +188,8 @@ class MustDefinedVisitor(BaseAnalysisVisitor):
         return set(), set()
 
     def visit_register_op(self, op: RegisterOp) -> GenAndKill:
-        if op.dest is not None:
-            return {op.dest}, set()
+        if not op.is_void:
+            return {op}, set()
         else:
             return set(), set()
 
@@ -264,7 +264,7 @@ class UndefinedVisitor(BaseAnalysisVisitor):
         return set(), set()
 
     def visit_register_op(self, op: RegisterOp) -> GenAndKill:
-        return set(), {op.dest} if op.dest is not None else set()
+        return set(), {op} if not op.is_void else set()
 
     def visit_assign(self, op: Assign) -> GenAndKill:
         return set(), {op.target}
@@ -301,8 +301,8 @@ class LivenessVisitor(BaseAnalysisVisitor):
 
     def visit_register_op(self, op: RegisterOp) -> GenAndKill:
         gen = set(op.sources())
-        if op.dest is not None:
-            return gen, {op.dest}
+        if not op.is_void:
+            return gen, {op}
         else:
             return gen, set()
 

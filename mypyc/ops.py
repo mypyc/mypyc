@@ -405,6 +405,9 @@ class Value:
     def to_str(self, env: Environment) -> str:
         raise NotImplementedError
 
+    @property
+    def is_void(self) -> bool:
+        return True
 
 class Register(Value):
     # TODO: have an intrinsic name?
@@ -415,6 +418,9 @@ class Register(Value):
     def to_str(self, env: Environment) -> str:
         return env.names[self]
 
+    @property
+    def is_void(self) -> bool:
+        return False
 
 # Unfortunately we have visitors which are statement-like rather than expression-like.
 # It doesn't make sense to have the visitor return Optional[Value] because every
@@ -590,20 +596,19 @@ class RegisterOp(Op):
 
     _type = None  # type: Optional[RType]
 
-    def __init__(self, dest: Optional[Value], line: int) -> None:
+    def __init__(self, line: int) -> None:
         super().__init__(line)
-        assert dest != INVALID_VALUE
         assert self.error_kind != -1, 'error_kind not defined'
-        self._dest = dest
 
     # These are read-only property so that subclasses can override them
     # without the Optional.
     @property
-    def dest(self) -> Optional[Value]:
-        return self._dest
-    @property
     def type(self) -> Optional[RType]:
         return self._type
+
+    @property
+    def is_void(self) -> bool:
+        return self._type is None
 
     @abstractmethod
     def sources(self) -> List[Value]:
@@ -627,14 +632,10 @@ class StrictRegisterOp(RegisterOp):
     """
 
     def __init__(self, line: int) -> None:
-        super().__init__(self, line)
+        super().__init__(line)
 
     # We could do this soundly without any checks by duplicating
     # the fields, but that is kind of silly...
-    @property
-    def dest(self) -> Value:
-        assert self._dest is not None
-        return self._dest
     @property
     def type(self) -> RType:
         assert self._type is not None
@@ -648,7 +649,7 @@ class IncRef(RegisterOp):
 
     def __init__(self, src: Value, typ: RType, line: int = -1) -> None:
         assert typ.is_refcounted
-        super().__init__(None, line)
+        super().__init__(line)
         self.src = src
         self.target_type = typ
 
@@ -672,7 +673,7 @@ class DecRef(RegisterOp):
 
     def __init__(self, src: Value, typ: RType, line: int = -1) -> None:
         assert typ.is_refcounted
-        super().__init__(None, line)
+        super().__init__(line)
         self.src = src
         self.target_type = typ
 
@@ -701,7 +702,7 @@ class Call(RegisterOp):
     error_kind = ERR_MAGIC
 
     def __init__(self, ret_type: RType, fn: str, args: List[Value], line: int) -> None:
-        super().__init__(self, line)
+        super().__init__(line)
         self.fn = fn
         self.args = args
         self._type = ret_type
@@ -709,8 +710,8 @@ class Call(RegisterOp):
     def to_str(self, env: Environment) -> str:
         args = ', '.join(env.format('%r', arg) for arg in self.args)
         s = '%s(%s)' % (self.fn, args)
-        if self.dest is not None:
-            s = env.format('%r = ', self.dest) + s
+        if not self.is_void:
+            s = env.format('%r = ', self) + s
         return s
 
     def sources(self) -> List[Value]:
@@ -732,7 +733,7 @@ class MethodCall(RegisterOp):
                  args: List[Value],
                  receiver_type: RInstance,
                  line: int = -1) -> None:
-        super().__init__(self, line)
+        super().__init__(line)
         self.obj = obj
         self.method = method
         self.args = args
@@ -742,8 +743,8 @@ class MethodCall(RegisterOp):
     def to_str(self, env: Environment) -> str:
         args = ', '.join(env.format('%r', arg) for arg in self.args)
         s = env.format('%r.%s(%s)', self.obj, self.method, args)
-        if self.dest is not None:
-            s = env.format('%r = ', self.dest) + s
+        if not self.is_void:
+            s = env.format('%r = ', self) + s
         return s
 
     def sources(self) -> List[Value]:
@@ -768,7 +769,7 @@ class PyCall(RegisterOp):
 
     def __init__(self, function: Value, args: List[Value],
                  line: int) -> None:
-        super().__init__(self, line)
+        super().__init__(line)
         self.function = function
         self.args = args
         self._type = object_rprimitive
@@ -776,8 +777,8 @@ class PyCall(RegisterOp):
     def to_str(self, env: Environment) -> str:
         args = ', '.join(env.format('%r', arg) for arg in self.args)
         s = env.format('%r(%s)', self.function, args)
-        if self.dest is not None:
-            s = env.format('%r = ', self.dest) + s
+        if not self.is_void:
+            s = env.format('%r = ', self) + s
         return s + ' :: py'
 
     def sources(self) -> List[Value]:
@@ -800,7 +801,7 @@ class PyMethodCall(RegisterOp):
                  method: Value,
                  args: List[Value],
                  line: int = -1) -> None:
-        super().__init__(self, line)
+        super().__init__(line)
         self.obj = obj
         self.method = method
         self.args = args
@@ -809,8 +810,8 @@ class PyMethodCall(RegisterOp):
     def to_str(self, env: Environment) -> str:
         args = ', '.join(env.format('%r', arg) for arg in self.args)
         s = env.format('%r.%r(%s)', self.obj, self.method, args)
-        if self.dest is not None:
-            s = env.format('%r = ', self.dest) + s
+        if not self.is_void:
+            s = env.format('%r = ', self) + s
         return s + ' :: py'
 
     def sources(self) -> List[Value]:
@@ -835,7 +836,7 @@ class PyGetAttr(StrictRegisterOp):
         return [self.left]
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = %r.%s', self.dest, self.left, self.right)
+        return env.format('%r = %r.%s', self, self.left, self.right)
 
     def can_raise(self) -> bool:
         return True
@@ -898,7 +899,7 @@ class PrimitiveOp(RegisterOp):
         if not desc.is_var_arg:
             assert len(args) == len(desc.arg_types)
         self.error_kind = desc.error_kind
-        super().__init__(self, line)
+        super().__init__(line)
         self.args = args
         self.desc = desc
         if desc.result_type is None:
@@ -916,8 +917,8 @@ class PrimitiveOp(RegisterOp):
 
     def to_str(self, env: Environment) -> str:
         params = {}  # type: Dict[str, Any]
-        if self.dest is not None and self.dest != INVALID_VALUE:
-            params['dest'] = env.format('%r', self.dest)
+        if not self.is_void:
+            params['dest'] = env.format('%r', self)
         args = [env.format('%r', arg) for arg in self.args]
         params['args'] = args
         params['comma_args'] = ', '.join(args)
@@ -961,7 +962,7 @@ class LoadInt(StrictRegisterOp):
         return []
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = %d', self.dest, self.value)
+        return env.format('%r = %d', self, self.value)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_load_int(self)
@@ -980,7 +981,7 @@ class LoadErrorValue(StrictRegisterOp):
         return []
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = <error> :: %s', self.dest, self.type)
+        return env.format('%r = <error> :: %s', self, self.type)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_load_error_value(self)
@@ -1004,7 +1005,7 @@ class GetAttr(StrictRegisterOp):
         return [self.obj]
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = %r.%s', self.dest, self.obj, self.attr)
+        return env.format('%r = %r.%s', self, self.obj, self.attr)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_get_attr(self)
@@ -1029,7 +1030,7 @@ class SetAttr(StrictRegisterOp):
         return [self.obj, self.src]
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r.%s = %r; %r = is_error', self.obj, self.attr, self.src, self.dest)
+        return env.format('%r.%s = %r; %r = is_error', self.obj, self.attr, self.src, self)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_set_attr(self)
@@ -1049,7 +1050,7 @@ class LoadStatic(StrictRegisterOp):
         return []
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = %s :: static', self.dest, self.identifier)
+        return env.format('%r = %s :: static', self, self.identifier)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_load_static(self)
@@ -1071,7 +1072,7 @@ class TupleSet(StrictRegisterOp):
 
     def to_str(self, env: Environment) -> str:
         item_str = ', '.join(env.format('%r', item) for item in self.items)
-        return env.format('%r = (%s)', self.dest, item_str)
+        return env.format('%r = (%s)', self, item_str)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_tuple_set(self)
@@ -1093,7 +1094,7 @@ class TupleGet(StrictRegisterOp):
         return [self.src]
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = %r[%d]', self.dest, self.src, self.index)
+        return env.format('%r = %r[%d]', self, self.src, self.index)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_tuple_get(self)
@@ -1118,7 +1119,7 @@ class Cast(StrictRegisterOp):
         return [self.src]
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = cast(%s, %r)', self.dest, self.type, self.src)
+        return env.format('%r = cast(%s, %r)', self, self.type, self.src)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_cast(self)
@@ -1143,7 +1144,7 @@ class Box(StrictRegisterOp):
         return [self.src]
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = box(%s, %r)', self.dest, self.src_type, self.src)
+        return env.format('%r = box(%s, %r)', self, self.src_type, self.src)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_box(self)
@@ -1167,7 +1168,7 @@ class Unbox(StrictRegisterOp):
         return [self.src]
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = unbox(%s, %r)', self.dest, self.type, self.src)
+        return env.format('%r = unbox(%s, %r)', self, self.type, self.src)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_unbox(self)
