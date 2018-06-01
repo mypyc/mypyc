@@ -83,6 +83,7 @@ def transform_block(block: BasicBlock,
                     maybe_append_dec_ref(ops, op.dest, env)
             ops.append(op)
             if op.dest not in post_live[key]:
+                assert op.dest is not None
                 maybe_append_dec_ref(ops, op.dest, env)
         elif isinstance(op, RegisterOp):
             # These operations construct a new reference.

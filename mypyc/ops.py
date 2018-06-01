@@ -615,8 +615,10 @@ class StrictRegisterOp(RegisterOp):
     Like RegisterOp but without the option of r1 being None.
     """
 
-    def __init__(self, dest: Register, line: int) -> None:
-        super().__init__(dest, line)
+    no_reg = True
+
+    def __init__(self, line: int) -> None:
+        super().__init__(self, line)
 
     # We could do this soundly without any checks by duplicating
     # the fields, but that is kind of silly...
@@ -630,50 +632,52 @@ class StrictRegisterOp(RegisterOp):
         return self._type
 
 
-class IncRef(StrictRegisterOp):
+class IncRef(RegisterOp):
     """inc_ref r"""
 
     error_kind = ERR_NEVER
 
-    def __init__(self, dest: Register, typ: RType, line: int = -1) -> None:
+    def __init__(self, src: Register, typ: RType, line: int = -1) -> None:
         assert typ.is_refcounted
-        super().__init__(dest, line)
+        super().__init__(None, line)
+        self.src = src
         self.target_type = typ
 
     def to_str(self, env: Environment) -> str:
-        s = env.format('inc_ref %r', self.dest)
+        s = env.format('inc_ref %r', self.src)
         if is_bool_rprimitive(self.target_type) or is_int_rprimitive(self.target_type):
             s += ' :: {}'.format(short_name(self.target_type.name))
         return s
 
     def sources(self) -> List[Register]:
-        return [self.dest]
+        return [self.src]
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_inc_ref(self)
 
 
-class DecRef(StrictRegisterOp):
+class DecRef(RegisterOp):
     """dec_ref r"""
 
     error_kind = ERR_NEVER
 
-    def __init__(self, dest: Register, typ: RType, line: int = -1) -> None:
+    def __init__(self, src: Register, typ: RType, line: int = -1) -> None:
         assert typ.is_refcounted
-        super().__init__(dest, line)
+        super().__init__(None, line)
+        self.src = src
         self.target_type = typ
 
     def __repr__(self) -> str:
-        return '<DecRef %r>' % self.dest
+        return '<DecRef %r>' % self.src
 
     def to_str(self, env: Environment) -> str:
-        s = env.format('dec_ref %r', self.dest)
+        s = env.format('dec_ref %r', self.src)
         if is_bool_rprimitive(self.target_type) or is_int_rprimitive(self.target_type):
             s += ' :: {}'.format(short_name(self.target_type.name))
         return s
 
     def sources(self) -> List[Register]:
-        return [self.dest]
+        return [self.src]
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_dec_ref(self)
@@ -808,10 +812,9 @@ class PyGetAttr(StrictRegisterOp):
     """dest = left.right :: py"""
 
     error_kind = ERR_MAGIC
-    no_reg = True
 
     def __init__(self, type: RType, left: Register, right: str, line: int) -> None:
-        super().__init__(self, line)
+        super().__init__(line)
         self.left = left
         self.right = right
         self._type = type
@@ -908,7 +911,7 @@ class PrimitiveOp(RegisterOp):
         return visitor.visit_primitive_op(self)
 
 
-class Assign(StrictRegisterOp):
+class Assign(RegisterOp):
     """dest = int"""
 
     error_kind = ERR_NEVER
@@ -932,9 +935,10 @@ class LoadInt(StrictRegisterOp):
 
     error_kind = ERR_NEVER
 
-    def __init__(self, dest: Register, value: int, line: int = -1) -> None:
-        super().__init__(dest, line)
+    def __init__(self, value: int, line: int = -1) -> None:
+        super().__init__(line)
         self.value = value
+        self._type = int_rprimitive
 
     def sources(self) -> List[Register]:
         return []
@@ -950,10 +954,9 @@ class LoadErrorValue(StrictRegisterOp):
     """dest = <error value for type>"""
 
     error_kind = ERR_NEVER
-    no_reg = True
 
     def __init__(self, rtype: RType, line: int = -1) -> None:
-        super().__init__(self, line)
+        super().__init__(line)
         self._type = rtype
 
     def sources(self) -> List[Register]:
@@ -970,12 +973,11 @@ class GetAttr(StrictRegisterOp):
     """dest = obj.attr (for a native object)"""
 
     error_kind = ERR_MAGIC
-    no_reg = True
 
     def __init__(self, obj: Register, attr: str,
                  class_type: RInstance,
                  line: int) -> None:
-        super().__init__(self, line)
+        super().__init__(line)
         self.obj = obj
         self.attr = attr
         self.class_type = class_type
@@ -995,12 +997,11 @@ class SetAttr(StrictRegisterOp):
     """obj.attr = src (for a native object)"""
 
     error_kind = ERR_FALSE
-    no_reg = True
 
     def __init__(self, obj: Register, attr: str, src: Register,
                  class_type: RInstance,
                  line: int) -> None:
-        super().__init__(self, line)
+        super().__init__(line)
         self.obj = obj
         self.attr = attr
         self.src = src
@@ -1021,10 +1022,9 @@ class LoadStatic(StrictRegisterOp):
     """dest = name :: static"""
 
     error_kind = ERR_NEVER
-    no_reg = True
 
     def __init__(self, type: RType, identifier: str, line: int = -1) -> None:
-        super().__init__(self, line)
+        super().__init__(line)
         self.identifier = identifier
         self._type = type
 
@@ -1042,10 +1042,9 @@ class TupleSet(StrictRegisterOp):
     """dest = (reg, ...) (for fixed-length tuple)"""
 
     error_kind = ERR_NEVER
-    no_reg = True
 
     def __init__(self, items: List[Register], typ: RTuple, line: int) -> None:
-        super().__init__(self, line)
+        super().__init__(line)
         self.items = items
         self.tuple_type = typ
         self._type = typ
@@ -1065,11 +1064,10 @@ class TupleGet(StrictRegisterOp):
     """dest = src[n] (for fixed-length tuple)"""
 
     error_kind = ERR_NEVER
-    no_reg = True
 
     def __init__(self, src: Register, index: int, target_type: RType,
                  line: int) -> None:
-        super().__init__(self, line)
+        super().__init__(line)
         self.src = src
         self.index = index
         self._type = target_type
@@ -1093,10 +1091,9 @@ class Cast(StrictRegisterOp):
     """
 
     error_kind = ERR_MAGIC
-    no_reg = True
 
     def __init__(self, src: Register, typ: RType, line: int) -> None:
-        super().__init__(self, line)
+        super().__init__(line)
         self.src = src
         self._type = typ
 
@@ -1118,10 +1115,9 @@ class Box(StrictRegisterOp):
     """
 
     error_kind = ERR_NEVER
-    no_reg = True
 
     def __init__(self, src: Register, typ: RType, line: int = -1) -> None:
-        super().__init__(self, line)
+        super().__init__(line)
         self.src = src
         self.src_type = typ
         self._type = object_rprimitive
@@ -1144,10 +1140,9 @@ class Unbox(StrictRegisterOp):
     """
 
     error_kind = ERR_MAGIC
-    no_reg = True
 
     def __init__(self, src: Register, typ: RType, line: int) -> None:
-        super().__init__(self, line)
+        super().__init__(line)
         self.src = src
         self._type = typ
 

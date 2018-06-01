@@ -48,8 +48,8 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          "return cpy_r_m;")
 
     def test_load_int(self) -> None:
-        self.assert_emit(LoadInt(self.m, 5),
-                         "cpy_r_m = 10;")
+        self.assert_emit(LoadInt(5),
+                         "cpy_r_r0 = 10;")
 
     def test_tuple_get(self) -> None:
         self.assert_emit(TupleGet(self.n, 1, bool_rprimitive, 0), 'cpy_r_r0 = cpy_r_n.f1;')
@@ -285,8 +285,10 @@ class TestGenerateFunction(unittest.TestCase):
             result, msg='Generated code invalid')
 
     def test_register(self) -> None:
-        self.temp = self.env.add_temp(int_rprimitive)
-        self.block.ops.append(LoadInt(self.temp, 5))
+        self.env.temp_index = 0
+        op = LoadInt(5)
+        self.block.ops.append(op)
+        self.env.add_op(op)
         fn = FuncIR('myfunc', None, [self.arg], list_rprimitive, [self.block], self.env)
         emitter = Emitter(EmitterContext())
         generate_native_function(fn, emitter, 'prog.py')

@@ -497,8 +497,7 @@ class IRBuilder(NodeVisitor[Register]):
             end_goto.label = end_block.label
 
             # Increment index register.
-            one_reg = self.alloc_temp(int_rprimitive)
-            self.add(LoadInt(one_reg, 1))
+            one_reg = self.add(LoadInt(1))
             self.binary_op(int_rprimitive, index_reg, int_rprimitive, one_reg, '+', s.line,
                            target=index_reg)
 
@@ -515,11 +514,9 @@ class IRBuilder(NodeVisitor[Register]):
 
             expr_reg = self.accept(s.expr)
 
-            index_reg = self.alloc_temp(int_rprimitive)
-            self.add(LoadInt(index_reg, 0))
+            index_reg = self.add(LoadInt(0))
 
-            one_reg = self.alloc_temp(int_rprimitive)
-            self.add(LoadInt(one_reg, 1))
+            one_reg = self.add(LoadInt(1))
 
             assert isinstance(s.index, NameExpr)
             assert isinstance(s.index.node, Var)
@@ -641,9 +638,7 @@ class IRBuilder(NodeVisitor[Register]):
         assert False, 'Unsupported indexing operation'
 
     def visit_int_expr(self, expr: IntExpr) -> Register:
-        reg = self.alloc_target(int_rprimitive)
-        self.add(LoadInt(reg, expr.value))
-        return reg
+        return self.add(LoadInt(expr.value))
 
     def is_native_name_expr(self, expr: NameExpr) -> bool:
         # TODO later we want to support cross-module native calls too
@@ -792,9 +787,7 @@ class IRBuilder(NodeVisitor[Register]):
             expr_rtype = arg_types[0]
             if isinstance(expr_rtype, RTuple):
                 # len() of fixed-length tuple can be trivially determined statically.
-                target = self.alloc_target(int_rprimitive)
-                self.add(LoadInt(target, len(expr_rtype.types)))
-                return target
+                return self.add(LoadInt(len(expr_rtype.types)))
 
         # Handle data-driven special-cased primitive call ops.
         if fullname is not None:

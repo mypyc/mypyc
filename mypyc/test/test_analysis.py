@@ -81,7 +81,9 @@ class TestAnalysis(MypycDataSuite):
 
                     actual.append('')
                     for key in sorted(analysis_result.before.keys()):
-                        pre = ', '.join(fn.env.names[reg] for reg in analysis_result.before[key])
-                        post = ', '.join(fn.env.names[reg] for reg in analysis_result.after[key])
+                        pre = ', '.join(sorted(fn.env.names[reg]
+                                               for reg in analysis_result.before[key]))
+                        post = ', '.join(sorted(fn.env.names[reg]
+                                                for reg in analysis_result.after[key]))
                         actual.append('%-8s %-23s %s' % (key, '{%s}' % pre, '{%s}' % post))
             assert_test_output(testcase, actual, 'Invalid source code output')

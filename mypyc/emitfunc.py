@@ -154,6 +154,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         self.emit_inc_ref(dest, tuple_type)
 
     def visit_assign(self, op: Assign) -> None:
+        assert op.dest is not None
         dest = self.reg(op.dest)
         src = self.reg(op.src)
         self.emit_line('%s = %s;' % (dest, src))
@@ -256,12 +257,12 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
             dest, obj, method, args))
 
     def visit_inc_ref(self, op: IncRef) -> None:
-        dest = self.reg(op.dest)
-        self.emit_inc_ref(dest, op.target_type)
+        src = self.reg(op.src)
+        self.emit_inc_ref(src, op.target_type)
 
     def visit_dec_ref(self, op: DecRef) -> None:
-        dest = self.reg(op.dest)
-        self.emit_dec_ref(dest, op.target_type)
+        src = self.reg(op.src)
+        self.emit_dec_ref(src, op.target_type)
 
     def visit_box(self, op: Box) -> None:
         self.emitter.emit_box(self.reg(op.src), self.reg(op.dest), op.src_type)

@@ -44,9 +44,10 @@ def f() -> int:
     return y
 [out]
 def f():
-    x, y :: int
+    x, r0, y :: int
 L0:
-    x = 1
+    r0 = 1
+    x = r0
     y = x
     return y
 
@@ -57,13 +58,14 @@ def f(x: int) -> None:
     return
 [out]
 def f(x):
-    x, y :: int
-    r0 :: None
+    x, y, r0 :: int
+    r1 :: None
 L0:
-    y = 1
+    r0 = 1
+    y = r0
     y = x
-    r0 = None
-    return r0
+    r1 = None
+    return r1
 
 [case testIntArithmetic]
 def f(x: int, y: int) -> int:
@@ -84,11 +86,12 @@ def f(x: int, y: int) -> int:
     return x
 [out]
 def f(x, y):
-    x, y :: int
+    x, y, r0 :: int
 L0:
     if x < y goto L1 else goto L2 :: int
 L1:
-    x = 1
+    r0 = 1
+    x = r0
 L2:
     return x
 
@@ -101,14 +104,16 @@ def f(x: int, y: int) -> int:
     return x
 [out]
 def f(x, y):
-    x, y :: int
+    x, y, r0, r1 :: int
 L0:
     if x < y goto L1 else goto L2 :: int
 L1:
-    x = 1
+    r0 = 1
+    x = r0
     goto L3
 L2:
-    x = 2
+    r1 = 2
+    x = r1
 L3:
     return x
 
@@ -121,16 +126,18 @@ def f(x: int, y: int) -> int:
     return x
 [out]
 def f(x, y):
-    x, y :: int
+    x, y, r0, r1 :: int
 L0:
     if x < y goto L1 else goto L3 :: int
 L1:
     if x > y goto L2 else goto L3 :: int
 L2:
-    x = 1
+    r0 = 1
+    x = r0
     goto L4
 L3:
-    x = 2
+    r1 = 2
+    x = r1
 L4:
     return x
 
@@ -143,16 +150,18 @@ def f(x: int, y: int) -> int:
     return x
 [out]
 def f(x, y):
-    x, y :: int
+    x, y, r0, r1 :: int
 L0:
     if x < y goto L2 else goto L1 :: int
 L1:
     if x > y goto L2 else goto L3 :: int
 L2:
-    x = 1
+    r0 = 1
+    x = r0
     goto L4
 L3:
-    x = 2
+    r1 = 2
+    x = r1
 L4:
     return x
 
@@ -163,11 +172,12 @@ def f(x: int, y: int) -> int:
     return x
 [out]
 def f(x, y):
-    x, y :: int
+    x, y, r0 :: int
 L0:
     if not x < y goto L1 else goto L2 :: int
 L1:
-    x = 1
+    r0 = 1
+    x = r0
 L2:
     return x
 
@@ -178,13 +188,14 @@ def f(x: int, y: int) -> int:
     return x
 [out]
 def f(x, y):
-    x, y :: int
+    x, y, r0 :: int
 L0:
     if not x < y goto L2 else goto L1 :: int
 L1:
     if not x > y goto L2 else goto L3 :: int
 L2:
-    x = 1
+    r0 = 1
+    x = r0
 L3:
     return x
 
@@ -213,9 +224,10 @@ def f(x: int, y: int) -> int:
     return x
 [out]
 def f(x, y):
-    x, y :: int
+    x, y, r0 :: int
 L0:
-    x = 1
+    r0 = 1
+    x = r0
 L1:
     if x > y goto L2 else goto L3 :: int
 L2:
@@ -239,12 +251,13 @@ def f() -> None:
     x = 1
 [out]
 def f():
-    x :: int
-    r0 :: None
+    x, r0 :: int
+    r1 :: None
 L0:
-    x = 1
-    r0 = None
-    return r0
+    r0 = 1
+    x = r0
+    r1 = None
+    return r1
 
 [case testImplicitNoneReturnAndIf]
 def f(x: int, y: int) -> None:
@@ -254,18 +267,20 @@ def f(x: int, y: int) -> None:
         y = 2
 [out]
 def f(x, y):
-    x, y :: int
-    r0 :: None
+    x, y, r0, r1 :: int
+    r2 :: None
 L0:
     if x < y goto L1 else goto L2 :: int
 L1:
-    x = 1
+    r0 = 1
+    x = r0
     goto L3
 L2:
-    y = 2
+    r1 = 2
+    y = r1
 L3:
-    r0 = None
-    return r0
+    r2 = None
+    return r2
 
 [case testRecursion]
 def f(n: int) -> int:
@@ -316,21 +331,24 @@ def f(n: int) -> int:
     return x
 [out]
 def f(n):
-    n, r0, x, r1 :: int
+    n, r0, x, r1, r2, r3, r4 :: int
 L0:
     r0 = 0
     if n < r0 goto L1 else goto L2 :: int
 L1:
-    x = 1
+    r1 = 1
+    x = r1
     goto L6
 L2:
-    r1 = 0
-    if n == r1 goto L3 else goto L4 :: int
+    r2 = 0
+    if n == r2 goto L3 else goto L4 :: int
 L3:
-    x = 1
+    r3 = 1
+    x = r3
     goto L5
 L4:
-    x = 2
+    r4 = 2
+    x = r4
 L5:
 L6:
     return x
@@ -351,15 +369,17 @@ def f(n: int) -> int:
     return 0 if n == 0 else 1
 [out]
 def f(n):
-    n, r0, r1 :: int
+    n, r0, r1, r2, r3 :: int
 L0:
     r0 = 0
     if n == r0 goto L1 else goto L2 :: int
 L1:
-    r1 = 0
+    r2 = 0
+    r1 = r2
     goto L3
 L2:
-    r1 = 1
+    r3 = 1
+    r1 = r3
 L3:
     return r1
 
@@ -370,11 +390,12 @@ def f() -> int:
     return x
 [out]
 def f():
-    x, r0 :: int
+    x, r0, r1 :: int
 L0:
-    x = 0
-    r0 = 1
-    x = x + r0 :: int
+    r0 = 0
+    x = r0
+    r1 = 1
+    x = x + r1 :: int
     return x
 
 [case testTrue]
