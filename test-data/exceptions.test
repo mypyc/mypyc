@@ -13,15 +13,14 @@ L0:
     dec_ref r0 :: int
     if is_error(r1) goto L3 (error at f:3) else goto L1
 L1:
-    r3 = unbox(int, r1)
+    r2 = unbox(int, r1)
     dec_ref r1
-    if is_error(r3) goto L3 (error at f:3) else goto L2
+    if is_error(r2) goto L3 (error at f:3) else goto L2
 L2:
-    r2 = r3
     return r2
 L3:
-    r4 = <error> :: int
-    return r4
+    r3 = <error> :: int
+    return r3
 
 [case testListAppendAndSetItemError]
 from typing import List
@@ -106,26 +105,25 @@ L2:
     r0 = a[i] :: list
     if is_error(r0) goto L8 (error at sum:6) else goto L3
 L3:
-    r2 = unbox(int, r0)
+    r1 = unbox(int, r0)
     dec_ref r0
-    if is_error(r2) goto L9 (error at sum:6) else goto L4
+    if is_error(r1) goto L9 (error at sum:6) else goto L4
 L4:
-    r1 = r2
-    r5 = sum
+    r4 = sum
     sum = sum + r1 :: int
     dec_ref r1 :: int
+    dec_ref r4 :: int
+    r2 = 1
+    r5 = i
+    i = i + r2 :: int
+    dec_ref r2 :: int
     dec_ref r5 :: int
-    r3 = 1
-    r6 = i
-    i = i + r3 :: int
-    dec_ref r3 :: int
-    dec_ref r6 :: int
     goto L1
 L5:
     return sum
 L6:
-    r4 = <error> :: int
-    return r4
+    r3 = <error> :: int
+    return r3
 L7:
     dec_ref i :: int
     goto L5

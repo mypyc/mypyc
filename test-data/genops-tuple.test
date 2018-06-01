@@ -56,13 +56,12 @@ def f(x):
     r0 :: tuple
     r1 :: int
     r2 :: object
-    r3, r4 :: bool
+    r3 :: bool
 L0:
     r0 = tuple x :: list
     r1 = 1
     r2 = r0[r1] :: tuple
-    r4 = unbox(bool, r2)
-    r3 = r4
+    r3 = unbox(bool, r2)
     return r3
 
 [case testSequenceTupleLen]
@@ -90,7 +89,7 @@ def f():
     r3 :: object
     r4 :: int
     r5 :: object
-    r6, r7 :: int
+    r6 :: int
 L0:
     r0 = 1
     r1 = 2
@@ -99,7 +98,6 @@ L0:
     t = r3
     r4 = 1
     r5 = t[r4] :: tuple
-    r7 = unbox(int, r5)
-    r6 = r7
+    r6 = unbox(int, r5)
     return r6
 

@@ -7,13 +7,12 @@ def f(d):
     d :: dict
     r0 :: int
     r1, r2 :: object
-    r3, r4 :: bool
+    r3 :: bool
 L0:
     r0 = 0
     r1 = box(int, r0)
     r2 = d[r1] :: dict
-    r4 = unbox(bool, r2)
-    r3 = r4
+    r3 = unbox(bool, r2)
     return r3
 
 [case testDictSet]

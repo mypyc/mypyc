@@ -656,21 +656,20 @@ def f(o, n, t):
     a, r0 :: A
     m :: bool
     r1 :: object
-    r2, r3 :: bool
+    r2 :: bool
     tt :: tuple[int, int]
-    r4 :: object
-    r5 :: None
+    r3 :: object
+    r4 :: None
 L0:
     r0 = cast(A, o)
     a = r0
     r1 = box(int, n)
     r2 = unbox(bool, r1)
-    r3 = unbox(bool, r2)
-    m = r3
-    r4 = box(tuple[int, int], tt)
-    t = r4
-    r5 = None
-    return r5
+    m = r2
+    r3 = box(tuple[int, int], tt)
+    t = r3
+    r4 = None
+    return r4
 
 [case testSuccessfulCast]
 from typing import cast, Optional, Tuple, List, Dict
@@ -710,15 +709,8 @@ def f(o, p, n, b, t, s, a, l, d):
     d2 :: dict
     r1 :: None
 L0:
-    o = o
-    p = p
-    n = n
-    b = b
-    t = t
-    s = s
     r0 = box(int, n)
     o = r0
-    a = a
     l2 = l
     d2 = d
     r1 = None

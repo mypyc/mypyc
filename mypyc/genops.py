@@ -379,8 +379,7 @@ class IRBuilder(NodeVisitor[Register]):
                 '__setitem__',
                 [target.index_reg, item_reg],
                 None,
-                rvalue.line,
-                temp_result=True)
+                rvalue.line)
             if target_reg2 is not None:
                 return target_reg2
 
@@ -827,8 +826,7 @@ class IRBuilder(NodeVisitor[Register]):
         src = self.accept(expr.expr)
         target_type = self.type_to_rtype(expr.type)
         source_type = self.node_type(expr.expr)
-        target = self.alloc_target(target_type)
-        return self.coerce(src, source_type, target_type, expr.line, target=target)
+        return self.coerce(src, source_type, target_type, expr.line)
 
     def visit_conditional_expr(self, expr: ConditionalExpr) -> Register:
         branches = self.process_conditional(expr.cond)
@@ -857,8 +855,7 @@ class IRBuilder(NodeVisitor[Register]):
                                       name: str,
                                       args: List[Register],
                                       result_type: Optional[RType],
-                                      line: int,
-                                      temp_result: bool = False) -> Optional[Register]:
+                                      line: int) -> Optional[Register]:
         """Translate a method call which is handled nongenerically.
 
         These are special in the sense that we have code generated specifically for them.
@@ -892,17 +889,14 @@ class IRBuilder(NodeVisitor[Register]):
                 if coercion:
                     assert desc.result_type is not None
                     op_target = self.alloc_temp(desc.result_type)
-                if temp_result:
-                    target = self.alloc_temp(result_type)
                 else:
-                    target = self.alloc_target(result_type)
-                if not coercion:
-                    op_target = target
+                    op_target = self.alloc_temp(result_type)
                 self.add(PrimitiveOp(op_target, [base_reg] + coerced_args, desc, line))
                 if coercion:
                     assert desc.result_type is not None
-                    self.coerce(op_target, desc.result_type, result_type, line, target=target)
-                return target
+                    return self.coerce(op_target, desc.result_type, result_type, line)
+                else:
+                    return op_target
 
         return None
 
@@ -1126,8 +1120,7 @@ class IRBuilder(NodeVisitor[Register]):
         static_symbol = self.unicode_literals[value]
         return self.add(LoadStatic(str_rprimitive, static_symbol))
 
-    def coerce(self, src: Register, src_type: RType, target_type: RType, line: int,
-               target: Optional[Register] = None) -> Register:
+    def coerce(self, src: Register, src_type: RType, target_type: RType, line: int) -> Register:
         """Generate a coercion/cast from one type to other (only if needed).
 
         For example, int -> object boxes the source int; int -> int emits nothing;
@@ -1136,18 +1129,14 @@ class IRBuilder(NodeVisitor[Register]):
         Returns the register with the converted value (may be same as src).
         """
         if src_type.is_unboxed and not target_type.is_unboxed:
-            src = self.box(src, src_type)
+            return self.box(src, src_type)
         if ((src_type.is_unboxed and target_type.is_unboxed)
                 and not is_same_type(src_type, target_type)):
             # To go from one unboxed type to another, we go through a boxed
             # in-between value, for simplicity.
             tmp = self.box(src, src_type)
-            src = self.unbox_or_cast(tmp, target_type, line)
+            return self.unbox_or_cast(tmp, target_type, line)
         if ((not src_type.is_unboxed and target_type.is_unboxed)
                 or not is_subtype(src_type, target_type)):
-            src = self.unbox_or_cast(src, target_type, line)
-        if target is None:
-            return src
-        else:
-            self.add(Assign(target, src))
-            return target
+            return self.unbox_or_cast(src, target_type, line)
+        return src

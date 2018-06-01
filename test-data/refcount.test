@@ -470,15 +470,14 @@ L0:
     r1 = 0
     r2 = b[r1] :: list
     dec_ref r1 :: int
-    r4 = unbox(int, r2)
+    r3 = unbox(int, r2)
     dec_ref r2
-    r3 = r4
-    r5 = box(int, r3)
-    r6 = a.__setitem__(r0, r5)
+    r4 = box(int, r3)
+    r5 = a.__setitem__(r0, r4)
     dec_ref r0 :: int
-    dec_ref r5
-    r7 = None
-    return r7
+    dec_ref r4
+    r6 = None
+    return r6
 
 [case testTupleRefcount]
 from typing import Tuple
