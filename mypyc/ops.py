@@ -870,7 +870,8 @@ OpDescription = NamedTuple(
                       ('is_var_arg', bool),
                       ('error_kind', int),
                       ('format_str', str),
-                      ('emit', EmitCallback)])
+                      ('emit', EmitCallback),
+                      ('priority', int)])  # To resolve ambiguities, highest priority wins
 
 
 class PrimitiveOp(RegisterOp):
@@ -1394,6 +1395,7 @@ class RTypeVisitor(Generic[T]):
 
 # Import various modules that set up global state.
 import mypyc.ops_int
+import mypyc.ops_str
 import mypyc.ops_list
 import mypyc.ops_dict
 import mypyc.ops_tuple

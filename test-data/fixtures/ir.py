@@ -8,9 +8,10 @@ S = TypeVar('S')
 
 class object:
     def __init__(self) -> None: pass
+    def __eq__(self, x: object) -> bool: pass
+    def __ne__(self, x: object) -> bool: pass
 
 class type: pass
-class str: pass
 
 # Primitive types are special in generated code.
 
@@ -22,12 +23,18 @@ class int:
     def __mod__(self, x: int) -> int: pass
     def __neg__(self) -> int: pass
     def __pos__(self) -> int: pass
-    def __eq__(self, n: int) -> bool: pass
-    def __ne__(self, n: int) -> bool: pass
+    def __eq__(self, n: object) -> bool: pass
+    def __ne__(self, n: object) -> bool: pass
     def __lt__(self, n: int) -> bool: pass
     def __gt__(self, n: int) -> bool: pass
     def __le__(self, n: int) -> bool: pass
     def __ge__(self, n: int) -> bool: pass
+
+class str:
+    def __init__(self, x: object) -> None: pass
+    def __add__(self, x: str) -> str: pass
+    def __eq__(self, x: object) -> bool: pass
+    def __ne__(self, x: object) -> bool: pass
 
 class float: pass
 class bool: pass

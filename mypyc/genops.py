@@ -598,13 +598,20 @@ class IRBuilder(NodeVisitor[Register]):
                   rreg: Register,
                   expr_op: str,
                   line: int) -> Register:
+        # Find the highest-priority primitive op that matches.
+        matching = None  # type: Optional[OpDescription]
         for desc in binary_ops.get(expr_op, []):
             if (is_subtype(ltype, desc.arg_types[0])
                     and is_subtype(rtype, desc.arg_types[1])):
-                lreg = self.coerce(lreg, ltype, desc.arg_types[0], line)
-                rreg = self.coerce(rreg, rtype, desc.arg_types[1], line)
-                assert desc.result_type is not None
-                return self.add(PrimitiveOp([lreg, rreg], desc, line))
+                if matching:
+                    assert matching.priority != desc.priority, 'Ambiguous: %s, %s'  % (matching,
+                                                                                       desc)
+                    if desc.priority > matching.priority:
+                        matching = desc
+                else:
+                    matching = desc
+        if matching:
+            return self.primitive_op(matching, [lreg, rreg], line)
 
         # TODO: Fall back to generic operation
         assert False, 'Unsupported binary operation'
@@ -776,6 +783,7 @@ class IRBuilder(NodeVisitor[Register]):
                 return self.add(LoadInt(len(expr_rtype.types)))
 
         # Handle data-driven special-cased primitive call ops.
+        target_type = self.node_type(expr)
         if fullname is not None:
             for desc in func_ops.get(fullname, []):
                 if len(args) == len(desc.arg_types) and expr.arg_kinds == [ARG_POS] * len(args):
@@ -784,10 +792,9 @@ class IRBuilder(NodeVisitor[Register]):
                             break
                     else:
                         assert desc.result_type is not None  # TODO: Support no return value
-                        return self.add(PrimitiveOp(args, desc, expr.line))
+                        return self.primitive_op(desc, args, expr.line)
 
         fn = expr.callee.name  # TODO: fullname
-        target_type = self.node_type(expr)
         if not self.is_native_name_expr(expr.callee):
             # Python call
             function = self.accept(expr.callee)
@@ -905,36 +912,7 @@ class IRBuilder(NodeVisitor[Register]):
 
     def process_conditional(self, e: Node) -> List[Branch]:
         if isinstance(e, ComparisonExpr):
-            # TODO: Verify operand types.
-            assert len(e.operators) == 1, 'more than 1 operator not supported'
-            op = e.operators[0]
-            if op in ['==', '!=', '<', '<=', '>', '>=']:
-                # TODO: check operand types
-                left = self.accept(e.operands[0])
-                right = self.accept(e.operands[1])
-                opcode = self.int_relative_ops[op]
-                branch = Branch(left, right, INVALID_LABEL, INVALID_LABEL, opcode)
-            elif op in ['is', 'is not']:
-                # TODO: check if right operand is None
-                left = self.accept(e.operands[0])
-                branch = Branch(left, INVALID_REGISTER, INVALID_LABEL, INVALID_LABEL,
-                                Branch.IS_NONE)
-                if op == 'is not':
-                    branch.negated = True
-            elif op in ['in', 'not in']:
-                left = self.accept(e.operands[0])
-                ltype = self.node_type(e.operands[0])
-                right = self.accept(e.operands[1])
-                rtype = self.node_type(e.operands[1])
-                target = self.binary_op(ltype, left, rtype, right, 'in', e.line)
-                branch = Branch(target, INVALID_REGISTER, INVALID_LABEL, INVALID_LABEL,
-                                Branch.BOOL_EXPR)
-                if op == 'not in':
-                    branch.negated = True
-            else:
-                assert False, "unsupported comparison epxression"
-            self.add(branch)
-            return [branch]
+            return self.process_comparison(e)
         elif isinstance(e, OpExpr) and e.op in ['and', 'or']:
             if e.op == 'and':
                 # Short circuit 'and' in a conditional context.
@@ -961,6 +939,46 @@ class IRBuilder(NodeVisitor[Register]):
             branch = Branch(reg, INVALID_REGISTER, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
             self.add(branch)
             return [branch]
+
+    def process_comparison(self, e: ComparisonExpr) -> List[Branch]:
+        # TODO: Verify operand types.
+        assert len(e.operators) == 1, 'more than 1 operator not supported'
+        op = e.operators[0]
+        if op in ['is', 'is not']:
+            # Special case 'is' checks.
+            # TODO: check if right operand is None
+            left = self.accept(e.operands[0])
+            branch = Branch(left, INVALID_REGISTER, INVALID_LABEL, INVALID_LABEL,
+                            Branch.IS_NONE)
+            if op == 'is not':
+                branch.negated = True
+        else:
+            # General comparison -- evaluate both operands.
+            left = self.accept(e.operands[0])
+            ltype = self.node_type(e.operands[0])
+            right = self.accept(e.operands[1])
+            rtype = self.node_type(e.operands[1])
+            if (op in ['==', '!=', '<', '<=', '>', '>=']
+                    and is_same_type(ltype, int_rprimitive)
+                    and is_same_type(rtype, int_rprimitive)):
+                # Special op for int comparison.
+                opcode = self.int_relative_ops[op]
+                branch = Branch(left, right, INVALID_LABEL, INVALID_LABEL, opcode)
+            else:
+                # For other comparisons, generate a bool value and branch based on it. We need
+                # this to handle exceptions in the comparison op.
+                if op in ['in', 'not in']:
+                    target = self.binary_op(ltype, left, rtype, right, 'in', e.line)
+                else:
+                    target = self.binary_op(ltype, left, rtype, right, op, e.line)
+                target = self.coerce(target, self.environment.types[target],
+                                     bool_rprimitive, e.line)
+                branch = Branch(target, INVALID_REGISTER, INVALID_LABEL, INVALID_LABEL,
+                                Branch.BOOL_EXPR)
+                if op == 'not in':
+                    branch.negated = True
+        self.add(branch)
+        return [branch]
 
     def set_branches(self, branches: List[Branch], condition: bool,
                      target: BasicBlock) -> None:
