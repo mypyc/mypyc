@@ -1036,11 +1036,13 @@ class TupleSet(StrictRegisterOp):
     """dest = (reg, ...) (for fixed-length tuple)"""
 
     error_kind = ERR_NEVER
+    no_reg = True
 
-    def __init__(self, dest: Register, items: List[Register], typ: RTuple, line: int) -> None:
-        super().__init__(dest, line)
+    def __init__(self, items: List[Register], typ: RTuple, line: int) -> None:
+        super().__init__(self, line)
         self.items = items
         self.tuple_type = typ
+        self.type = typ
 
     def sources(self) -> List[Register]:
         return self.items[:]

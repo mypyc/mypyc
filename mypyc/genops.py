@@ -917,14 +917,12 @@ class IRBuilder(NodeVisitor[Register]):
         tuple_type = self.node_type(expr)
         assert isinstance(tuple_type, RTuple)
 
-        target = self.alloc_target(tuple_type)
         items = []
         for item_expr, item_type in zip(expr.items, tuple_type.types):
             reg = self.accept(item_expr)
             reg = self.coerce(reg, self.environment.types[reg], item_type, item_expr.line)
             items.append(reg)
-        self.add(TupleSet(target, items, tuple_type, expr.line))
-        return target
+        return self.add(TupleSet(items, tuple_type, expr.line))
 
     def visit_dict_expr(self, expr: DictExpr) -> Register:
         assert not expr.items  # TODO

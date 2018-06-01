@@ -556,9 +556,8 @@ def g(y):
     r0 :: int
     r1, r2 :: object
     a :: list
-    r3 :: int
-    r4 :: tuple[int, int]
-    r5, r6 :: int
+    r3, r4, r5 :: int
+    r6 :: tuple[int, int]
     r7 :: object
     r8, r9 :: bool
     r10 :: int
@@ -569,10 +568,10 @@ L0:
     r1 = g(r2)
     a = [y]
     r3 = 0
-    r5 = 1
-    r6 = 2
-    r4 = (r5, r6)
-    r7 = box(tuple[int, int], r4)
+    r4 = 1
+    r5 = 2
+    r6 = (r4, r5)
+    r7 = box(tuple[int, int], r6)
     r8 = a.__setitem__(r3, r7)
     r9 = True
     y = box(bool, r9)
