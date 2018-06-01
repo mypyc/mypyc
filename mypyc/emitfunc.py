@@ -154,8 +154,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         self.emit_inc_ref(dest, tuple_type)
 
     def visit_assign(self, op: Assign) -> None:
-        assert op.dest is not None
-        dest = self.reg(op.dest)
+        dest = self.reg(op.target)
         src = self.reg(op.src)
         self.emit_line('%s = %s;' % (dest, src))
 

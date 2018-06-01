@@ -924,20 +924,21 @@ class PrimitiveOp(RegisterOp):
         return visitor.visit_primitive_op(self)
 
 
-class Assign(RegisterOp):
+class Assign(Op):
     """dest = int"""
 
     error_kind = ERR_NEVER
 
     def __init__(self, dest: Register, src: Register, line: int = -1) -> None:
-        super().__init__(dest, line)
+        super().__init__(line)
         self.src = src
+        self.target = dest
 
     def sources(self) -> List[Register]:
         return [self.src]
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = %r', self.dest, self.src)
+        return env.format('%r = %r', self.target, self.src)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_assign(self)

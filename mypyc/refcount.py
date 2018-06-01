@@ -74,17 +74,18 @@ def transform_block(block: BasicBlock,
     for i, op in enumerate(old_ops):
         key = (block.label, i)
         if isinstance(op, (Assign, Cast, Box)):
+            dest = op.target if isinstance(op, Assign) else op
             # These operations just copy/steal a reference and don't create new
             # references.
             if op.src in post_live[key] or op.src in pre_borrow[key]:
                 maybe_append_inc_ref(ops, op.src, env)
-                if (op.dest not in pre_borrow[key] and
-                        op.dest in pre_live[key]):
-                    maybe_append_dec_ref(ops, op.dest, env)
+                if (dest not in pre_borrow[key] and
+                        dest in pre_live[key]):
+                    maybe_append_dec_ref(ops, dest, env)
             ops.append(op)
-            if op.dest not in post_live[key]:
-                assert op.dest is not None
-                maybe_append_dec_ref(ops, op.dest, env)
+            if dest not in post_live[key]:
+                assert dest is not None
+                maybe_append_dec_ref(ops, dest, env)
         elif isinstance(op, RegisterOp):
             # These operations construct a new reference.
             tmp_reg = None  # type: Optional[Register]

@@ -87,6 +87,10 @@ class BaseAnalysisVisitor(OpVisitor[GenAndKill]):
     def visit_register_op(self, op: RegisterOp) -> GenAndKill:
         raise NotImplementedError
 
+    @abstractmethod
+    def visit_assign(self, op: Assign) -> GenAndKill:
+        raise NotImplementedError
+
     def visit_call(self, op: Call) -> GenAndKill:
         return self.visit_register_op(op)
 
@@ -100,9 +104,6 @@ class BaseAnalysisVisitor(OpVisitor[GenAndKill]):
         return self.visit_register_op(op)
 
     def visit_primitive_op(self, op: PrimitiveOp) -> GenAndKill:
-        return self.visit_register_op(op)
-
-    def visit_assign(self, op: Assign) -> GenAndKill:
         return self.visit_register_op(op)
 
     def visit_load_int(self, op: LoadInt) -> GenAndKill:
@@ -155,6 +156,9 @@ class MaybeDefinedVisitor(BaseAnalysisVisitor):
         else:
             return set(), set()
 
+    def visit_assign(self, op: Assign) -> GenAndKill:
+        return {op.target}, set()
+
 
 def analyze_maybe_defined_regs(blocks: List[BasicBlock],
                                cfg: CFG,
@@ -189,6 +193,9 @@ class MustDefinedVisitor(BaseAnalysisVisitor):
         else:
             return set(), set()
 
+    def visit_assign(self, op: Assign) -> GenAndKill:
+        return {op.target}, set()
+
 
 def analyze_must_defined_regs(
         blocks: List[BasicBlock],
@@ -222,10 +229,12 @@ class BorrowedArgumentsVisitor(BaseAnalysisVisitor):
         return set(), set()
 
     def visit_register_op(self, op: RegisterOp) -> GenAndKill:
-        if op.dest in self.args:
-            return set(), {op.dest}
         return set(), set()
 
+    def visit_assign(self, op: Assign) -> GenAndKill:
+        if op.target in self.args:
+            return set(), {op.target}
+        return set(), set()
 
 def analyze_borrowed_arguments(
         blocks: List[BasicBlock],
@@ -257,6 +266,8 @@ class UndefinedVisitor(BaseAnalysisVisitor):
     def visit_register_op(self, op: RegisterOp) -> GenAndKill:
         return set(), {op.dest} if op.dest is not None else set()
 
+    def visit_assign(self, op: Assign) -> GenAndKill:
+        return set(), {op.target}
 
 def analyze_undefined_regs(blocks: List[BasicBlock],
                            cfg: CFG,
@@ -294,6 +305,9 @@ class LivenessVisitor(BaseAnalysisVisitor):
             return gen, {op.dest}
         else:
             return gen, set()
+
+    def visit_assign(self, op: Assign) -> GenAndKill:
+        return set(op.sources()), {op.target}
 
 
 def analyze_live_regs(blocks: List[BasicBlock],
