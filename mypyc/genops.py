@@ -1024,7 +1024,7 @@ class IRBuilder(NodeVisitor[Register]):
 
     def add(self, op: Op) -> Register:
         self.blocks[-1][-1].ops.append(op)
-        if isinstance(op, RegisterOp) and op.no_reg:
+        if isinstance(op, RegisterOp):
             self.environment.add_op(op)
         return op
 

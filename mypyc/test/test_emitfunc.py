@@ -227,7 +227,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.emitter.fragments = []
         self.declarations.fragments = []
         self.env.temp_index = 0
-        if isinstance(op, RegisterOp) and op.no_reg:
+        if isinstance(op, RegisterOp):
             self.env.add_op(op)
         op.accept(self.visitor)
         frags = self.declarations.fragments + self.emitter.fragments

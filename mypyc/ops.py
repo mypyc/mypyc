@@ -576,7 +576,6 @@ class RegisterOp(Op):
 
     error_kind = -1  # Can this raise exception and how is it signalled; one of ERR_*
 
-    no_reg = False
     _type = None  # type: Optional[RType]
 
     def __init__(self, dest: Optional[Register], line: int) -> None:
@@ -614,8 +613,6 @@ class StrictRegisterOp(RegisterOp):
 
     Like RegisterOp but without the option of r1 being None.
     """
-
-    no_reg = True
 
     def __init__(self, line: int) -> None:
         super().__init__(self, line)
@@ -690,7 +687,6 @@ class Call(RegisterOp):
     """
 
     error_kind = ERR_MAGIC
-    no_reg = True
 
     def __init__(self, ret_type: RType, fn: str, args: List[Register], line: int) -> None:
         super().__init__(self, line)
@@ -716,7 +712,6 @@ class MethodCall(RegisterOp):
     """Native method call obj.m(arg, ...) """
 
     error_kind = ERR_MAGIC
-    no_reg = True
 
     def __init__(self,
                  ret_type: RType,
@@ -758,7 +753,6 @@ class PyCall(RegisterOp):
     """
 
     error_kind = ERR_MAGIC
-    no_reg = True
 
     def __init__(self, function: Register, args: List[Register],
                  line: int) -> None:
@@ -788,7 +782,6 @@ class PyMethodCall(RegisterOp):
     """
 
     error_kind = ERR_MAGIC
-    no_reg = True
 
     def __init__(self,
                  obj: Register,
@@ -885,8 +878,6 @@ class PrimitiveOp(RegisterOp):
     operations. mypyc.genops uses the descriptions to look for suitable
     primitive ops.
     """
-
-    no_reg = True
 
     def __init__(self,
                  args: List[Register],
