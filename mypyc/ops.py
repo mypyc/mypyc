@@ -309,7 +309,7 @@ class Environment:
         self.indexes = {}  # type: Dict[Register, int]
         self.names = {}  # type: Dict[Register, str]
         self.types = {}  # type: Dict[Register, RType]
-        self.symtable = {}  # type: Dict[Var, Register]
+        self.symtable = {}  # type: Dict[Var, CRegister]
         self.temp_index = 0
 
     def regs(self) -> Iterable['Register']:
@@ -320,7 +320,7 @@ class Environment:
         self.names[reg] = name
         self.types[reg] = typ
 
-    def add_local(self, var: Var, typ: RType) -> 'Register':
+    def add_local(self, var: Var, typ: RType) -> 'CRegister':
         assert isinstance(var, Var)
         reg = CRegister(typ, var.line)
 
@@ -328,10 +328,10 @@ class Environment:
         self.add(reg, var.name(), typ)
         return reg
 
-    def lookup(self, var: Var) -> 'Register':
+    def lookup(self, var: Var) -> 'CRegister':
         return self.symtable[var]
 
-    def add_temp(self, typ: RType) -> 'Register':
+    def add_temp(self, typ: RType) -> 'CRegister':
         assert isinstance(typ, RType)
         reg = CRegister(typ)
         self.add(reg, 'r%d' % self.temp_index, typ)
@@ -914,9 +914,8 @@ class PrimitiveOp(RegisterOp):
         return list(self.args)
 
     def __repr__(self) -> str:
-        return '<PrimitiveOp name=%r dest=%s args=%s>' % (self.desc.name,
-                                                          self.dest,
-                                                          self.args)
+        return '<PrimitiveOp name=%r args=%s>' % (self.desc.name,
+                                                  self.args)
 
     def to_str(self, env: Environment) -> str:
         params = {}  # type: Dict[str, Any]
@@ -936,7 +935,7 @@ class Assign(Op):
 
     error_kind = ERR_NEVER
 
-    def __init__(self, dest: Register, src: Register, line: int = -1) -> None:
+    def __init__(self, dest: CRegister, src: Register, line: int = -1) -> None:
         super().__init__(line)
         self.src = src
         self.target = dest

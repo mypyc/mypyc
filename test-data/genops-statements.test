@@ -194,26 +194,27 @@ def f(ls: List[int]) -> int:
 [out]
 def f(ls):
     ls :: list
-    y, r0, r1, r2, x, r3 :: int
-    r4 :: object
-    r5, r6, r7 :: int
+    y, r0, r1, r2, r3, x, r4 :: int
+    r5 :: object
+    r6, r7, r8 :: int
 L0:
     r0 = 0
     y = r0
-    r1 = 0
-    r2 = 1
+    r2 = 0
+    r1 = r2
+    r3 = 1
 L1:
-    r3 = len ls :: list
-    if r1 < r3 goto L2 else goto L4 :: int
+    r4 = len ls :: list
+    if r1 < r4 goto L2 else goto L4 :: int
 L2:
-    r4 = ls[r1] :: list
-    r5 = unbox(int, r4)
-    x = r5
-    r6 = y + x :: int
-    y = r6
+    r5 = ls[r1] :: list
+    r6 = unbox(int, r5)
+    x = r6
+    r7 = y + x :: int
+    y = r7
 L3:
-    r7 = r1 + r2 :: int
-    r1 = r7
+    r8 = r1 + r3 :: int
+    r1 = r8
     goto L1
 L4:
     return y

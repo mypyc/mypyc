@@ -28,7 +28,8 @@ from mypy.visitor import NodeVisitor
 from mypy.subtypes import is_named_instance
 
 from mypyc.ops import (
-    BasicBlock, Environment, Op, LoadInt, RType, Register, Label, Return, FuncIR, Assign,
+    BasicBlock, Environment, Op, LoadInt, RType, Register, CRegister, Label, Return, FuncIR,
+    Assign,
     Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple,
     Unreachable, TupleGet, TupleSet, ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic,
     PyGetAttr, PyCall, ROptional, c_module_name, PyMethodCall, MethodCall, INVALID_REGISTER,
@@ -101,7 +102,7 @@ class AssignmentTarget(object):
 class AssignmentTargetRegister(AssignmentTarget):
     """Register as assignment target"""
 
-    def __init__(self, register: Register) -> None:
+    def __init__(self, register: CRegister) -> None:
         self.register = register
 
 
@@ -515,7 +516,8 @@ class IRBuilder(NodeVisitor[Register]):
 
             expr_reg = self.accept(s.expr)
 
-            index_reg = self.add(LoadInt(0))
+            index_reg = self.alloc_temp(int_rprimitive)
+            self.add(Assign(index_reg, self.add(LoadInt(0))))
 
             one_reg = self.add(LoadInt(1))
 
@@ -1046,7 +1048,7 @@ class IRBuilder(NodeVisitor[Register]):
     def accept(self, node: Node) -> Register:
         return node.accept(self)
 
-    def alloc_temp(self, type: RType) -> Register:
+    def alloc_temp(self, type: RType) -> CRegister:
         return self.environment.add_temp(type)
 
     def type_to_rtype(self, typ: Type) -> RType:
