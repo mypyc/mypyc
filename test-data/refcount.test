@@ -526,13 +526,14 @@ def f() -> None:
     c.x = C()
 [out]
 L0:
-    c = C()
     r0 = C()
-    c.x = r0; r1 = is_error
+    c = r0
+    r1 = C()
+    c.x = r1; r2 = is_error
     dec_ref c
-    dec_ref r0
-    r2 = None
-    return r2
+    dec_ref r1
+    r3 = None
+    return r3
 
 [case testCastRefCount]
 class C: pass

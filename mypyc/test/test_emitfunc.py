@@ -118,16 +118,12 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """)
 
     def test_call(self) -> None:
-        self.assert_emit(Call(self.n, 'myfn', [self.m], 55),
-                         "cpy_r_n = CPyDef_myfn(cpy_r_m);")
+        self.assert_emit(Call(int_rprimitive, 'myfn', [self.m], 55),
+                         "cpy_r_r0 = CPyDef_myfn(cpy_r_m);")
 
     def test_call_two_args(self) -> None:
-        self.assert_emit(Call(self.n, 'myfn', [self.m, self.k], 55),
-                         "cpy_r_n = CPyDef_myfn(cpy_r_m, cpy_r_k);")
-
-    def test_call_no_return(self) -> None:
-        self.assert_emit(Call(None, 'myfn', [self.m, self.k], 55),
-                         "CPyDef_myfn(cpy_r_m, cpy_r_k);")
+        self.assert_emit(Call(int_rprimitive, 'myfn', [self.m, self.k], 55),
+                         "cpy_r_r0 = CPyDef_myfn(cpy_r_m, cpy_r_k);")
 
     def test_inc_ref(self) -> None:
         self.assert_emit(IncRef(self.m, int_rprimitive),

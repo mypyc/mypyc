@@ -702,13 +702,11 @@ class IRBuilder(NodeVisitor[Register]):
 
     def py_call(self, function: Register, args: List[Register],
                 target_type: RType, line: int) -> Register:
-        target_box = self.alloc_temp(object_rprimitive)
-
         arg_boxes = [] # type: List[Register]
         for arg_reg in args:
             arg_boxes.append(self.box(arg_reg, self.environment.types[arg_reg]))
 
-        self.add(PyCall(target_box, function, arg_boxes, line))
+        target_box = self.add(PyCall(function, arg_boxes, line))
         return self.unbox_or_cast(target_box, target_type, line)
 
     def py_method_call(self,
@@ -717,13 +715,11 @@ class IRBuilder(NodeVisitor[Register]):
                        args: List[Register],
                        target_type: RType,
                        line: int) -> Register:
-        target_box = self.alloc_temp(object_rprimitive)
-
         arg_boxes = [] # type: List[Register]
         for arg_reg in args:
             arg_boxes.append(self.box(arg_reg, self.environment.types[arg_reg]))
 
-        self.add(PyMethodCall(target_box, obj, method, arg_boxes))
+        target_box = self.add(PyMethodCall(obj, method, arg_boxes))
         return self.unbox_or_cast(target_box, target_type, line)
 
     def coerce_native_call_args(self,
@@ -765,12 +761,10 @@ class IRBuilder(NodeVisitor[Register]):
             # If the base type is one of ours, do a MethodCall, otherwise fall back
             # to a PyMethodCall
             if isinstance(receiver_rtype, RInstance):
-                target = self.alloc_target(self.node_type(expr))
                 arg_regs = self.coerce_native_call_args(
                     args, self.types[expr.callee], expr.line)
-                self.add(MethodCall(target, obj, expr.callee.name,
-                                    arg_regs, receiver_rtype, expr.line))
-                return target
+                return self.add(MethodCall(self.node_type(expr), obj, expr.callee.name,
+                                           arg_regs, receiver_rtype, expr.line))
             else:
                 method = self.load_static_unicode(expr.callee.name)
                 return self.py_method_call(
@@ -810,10 +804,8 @@ class IRBuilder(NodeVisitor[Register]):
             return self.py_call(function, args, target_type, expr.line)
         else:
             # Native call
-            target = self.alloc_target(target_type)
             args = self.coerce_native_call_args(args, self.types[expr.callee], expr.line)
-            self.add(Call(target, fn, args, expr.line))
-        return target
+            return self.add(Call(target_type, fn, args, expr.line))
 
     def translate_cast_expr(self, expr: CastExpr) -> Register:
         src = self.accept(expr.expr)

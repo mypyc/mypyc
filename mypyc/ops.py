@@ -690,11 +690,13 @@ class Call(RegisterOp):
     """
 
     error_kind = ERR_MAGIC
+    no_reg = True
 
-    def __init__(self, dest: Optional[Register], fn: str, args: List[Register], line: int) -> None:
-        super().__init__(dest, line)
+    def __init__(self, ret_type: RType, fn: str, args: List[Register], line: int) -> None:
+        super().__init__(self, line)
         self.fn = fn
         self.args = args
+        self._type = ret_type
 
     def to_str(self, env: Environment) -> str:
         args = ', '.join(env.format('%r', arg) for arg in self.args)
@@ -714,19 +716,21 @@ class MethodCall(RegisterOp):
     """Native method call obj.m(arg, ...) """
 
     error_kind = ERR_MAGIC
+    no_reg = True
 
     def __init__(self,
-                 dest: Optional[Register],
+                 ret_type: RType,
                  obj: Register,
                  method: str,
                  args: List[Register],
                  receiver_type: RInstance,
                  line: int = -1) -> None:
-        super().__init__(dest, line)
+        super().__init__(self, line)
         self.obj = obj
         self.method = method
         self.args = args
         self.receiver_type = receiver_type
+        self._type = ret_type
 
     def to_str(self, env: Environment) -> str:
         args = ', '.join(env.format('%r', arg) for arg in self.args)
@@ -754,12 +758,14 @@ class PyCall(RegisterOp):
     """
 
     error_kind = ERR_MAGIC
+    no_reg = True
 
-    def __init__(self, dest: Optional[Register], function: Register, args: List[Register],
+    def __init__(self, function: Register, args: List[Register],
                  line: int) -> None:
-        super().__init__(dest, line)
+        super().__init__(self, line)
         self.function = function
         self.args = args
+        self._type = object_rprimitive
 
     def to_str(self, env: Environment) -> str:
         args = ', '.join(env.format('%r', arg) for arg in self.args)
@@ -782,17 +788,18 @@ class PyMethodCall(RegisterOp):
     """
 
     error_kind = ERR_MAGIC
+    no_reg = True
 
     def __init__(self,
-            dest: Optional[Register],
-            obj: Register,
-            method: Register,
-            args: List[Register],
-            line: int = -1) -> None:
-        super().__init__(dest, line)
+                 obj: Register,
+                 method: Register,
+                 args: List[Register],
+                 line: int = -1) -> None:
+        super().__init__(self, line)
         self.obj = obj
         self.method = method
         self.args = args
+        self._type = object_rprimitive
 
     def to_str(self, env: Environment) -> str:
         args = ', '.join(env.format('%r', arg) for arg in self.args)
