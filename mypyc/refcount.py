@@ -74,7 +74,7 @@ def transform_block(block: BasicBlock,
     for i, op in enumerate(old_ops):
         key = (block.label, i)
         if isinstance(op, (Assign, Cast, Box)):
-            dest = op.target if isinstance(op, Assign) else op
+            dest = op.dest if isinstance(op, Assign) else op
             # These operations just copy/steal a reference and don't create new
             # references.
             if op.src in post_live[key] or op.src in pre_borrow[key]:

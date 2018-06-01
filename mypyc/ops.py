@@ -936,13 +936,13 @@ class Assign(Op):
     def __init__(self, dest: Register, src: Value, line: int = -1) -> None:
         super().__init__(line)
         self.src = src
-        self.target = dest
+        self.dest = dest
 
     def sources(self) -> List[Value]:
         return [self.src]
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = %r', self.target, self.src)
+        return env.format('%r = %r', self.dest, self.src)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_assign(self)

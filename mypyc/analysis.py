@@ -157,7 +157,7 @@ class MaybeDefinedVisitor(BaseAnalysisVisitor):
             return set(), set()
 
     def visit_assign(self, op: Assign) -> GenAndKill:
-        return {op.target}, set()
+        return {op.dest}, set()
 
 
 def analyze_maybe_defined_regs(blocks: List[BasicBlock],
@@ -194,7 +194,7 @@ class MustDefinedVisitor(BaseAnalysisVisitor):
             return set(), set()
 
     def visit_assign(self, op: Assign) -> GenAndKill:
-        return {op.target}, set()
+        return {op.dest}, set()
 
 
 def analyze_must_defined_regs(
@@ -232,8 +232,8 @@ class BorrowedArgumentsVisitor(BaseAnalysisVisitor):
         return set(), set()
 
     def visit_assign(self, op: Assign) -> GenAndKill:
-        if op.target in self.args:
-            return set(), {op.target}
+        if op.dest in self.args:
+            return set(), {op.dest}
         return set(), set()
 
 def analyze_borrowed_arguments(
@@ -267,7 +267,7 @@ class UndefinedVisitor(BaseAnalysisVisitor):
         return set(), {op} if not op.is_void else set()
 
     def visit_assign(self, op: Assign) -> GenAndKill:
-        return set(), {op.target}
+        return set(), {op.dest}
 
 def analyze_undefined_regs(blocks: List[BasicBlock],
                            cfg: CFG,
@@ -307,7 +307,7 @@ class LivenessVisitor(BaseAnalysisVisitor):
             return gen, set()
 
     def visit_assign(self, op: Assign) -> GenAndKill:
-        return set(op.sources()), {op.target}
+        return set(op.sources()), {op.dest}
 
 
 def analyze_live_regs(blocks: List[BasicBlock],
