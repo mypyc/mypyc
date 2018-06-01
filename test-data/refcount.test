@@ -252,12 +252,19 @@ def f(a: int) -> int:
     x = 1
     x = x
     return x + a
+-- This is correct but bad code
 [out]
 L0:
+    inc_ref a :: int
+    a = a
     r0 = 1
     x = r0
+    inc_ref x :: int
+    dec_ref x :: int
+    x = x
     r1 = x + a :: int
     dec_ref x :: int
+    dec_ref a :: int
     return r1
 
 [case testIncrement1]

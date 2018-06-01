@@ -14,14 +14,14 @@ L0:
     r2 = 0
     i = r2
 L1:
-    if r2 < r1 goto L2 else goto L4 :: int
+    if i < r1 goto L2 else goto L4 :: int
 L2:
     r3 = x + i :: int
     x = r3
 L3:
     r4 = 1
-    r5 = r2 + r4 :: int
-    r2 = r5
+    r5 = i + r4 :: int
+    i = r5
     goto L1
 L4:
     r6 = None
@@ -62,13 +62,13 @@ L0:
     r1 = 0
     n = r1
 L1:
-    if r1 < r0 goto L2 else goto L4 :: int
+    if n < r0 goto L2 else goto L4 :: int
 L2:
     goto L4
 L3:
     r2 = 1
-    r3 = r1 + r2 :: int
-    r1 = r3
+    r3 = n + r2 :: int
+    n = r3
     goto L1
 L4:
     r4 = None
@@ -140,13 +140,13 @@ L0:
     r1 = 0
     n = r1
 L1:
-    if r1 < r0 goto L2 else goto L4 :: int
+    if n < r0 goto L2 else goto L4 :: int
 L2:
     goto L3
 L3:
     r2 = 1
-    r3 = r1 + r2 :: int
-    r1 = r3
+    r3 = n + r2 :: int
+    n = r3
     goto L1
 L4:
     r4 = None

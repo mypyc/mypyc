@@ -131,7 +131,6 @@ class IRBuilder(NodeVisitor[Register]):
         self.blocks = []  # type: List[List[BasicBlock]]
         self.functions = []  # type: List[FuncIR]
         self.classes = []  # type: List[ClassIR]
-        self.targets = []  # type: List[Register]
 
         # These lists operate as stack frames for loops. Each loop adds a new
         # frame (i.e. adds a new empty list [] to the outermost list). Each
@@ -298,8 +297,9 @@ class IRBuilder(NodeVisitor[Register]):
             else:
                 lvalue_type = self.node_type(lvalue)
         rvalue_type = self.node_type(stmt.rvalue)
-        return self.assign(lvalue, stmt.rvalue, rvalue_type, lvalue_type,
-                           declare_new=(stmt.type is not None))
+        self.assign(lvalue, stmt.rvalue, rvalue_type, lvalue_type,
+                    declare_new=(stmt.type is not None))
+        return INVALID_REGISTER
 
     def visit_operator_assignment_stmt(self, stmt: OperatorAssignmentStmt) -> Register:
         target = self.get_assignment_target(stmt.lvalue, declare_new=False)
@@ -359,11 +359,10 @@ class IRBuilder(NodeVisitor[Register]):
         rvalue_type = rvalue_type or self.node_type(rvalue)
 
         if isinstance(target, AssignmentTargetRegister):
+            rvalue_reg = self.accept(rvalue)
             if needs_box:
-                unboxed = self.accept(rvalue)
-                return self.add(Assign(target.register, self.box(unboxed, rvalue_type)))
-            else:
-                return self.accept(rvalue, target=target.register)
+                rvalue_reg = self.box(rvalue_reg, rvalue_type)
+            return self.add(Assign(target.register, rvalue_reg))
         elif isinstance(target, AssignmentTargetAttr):
             rvalue_reg = self.accept(rvalue)
             if needs_box:
@@ -391,10 +390,11 @@ class IRBuilder(NodeVisitor[Register]):
                rvalue: Expression,
                rvalue_type: RType,
                lvalue_type: RType,
-               declare_new: bool) -> Register:
+               declare_new: bool = False) -> AssignmentTarget:
         target = self.get_assignment_target(lvalue, declare_new)
         needs_box = rvalue_type.is_unboxed and not lvalue_type.is_unboxed
-        return self.assign_to_target(target, rvalue, rvalue_type, needs_box)
+        self.assign_to_target(target, rvalue, rvalue_type, needs_box)
+        return target
 
     def visit_if_stmt(self, stmt: IfStmt) -> Register:
         # If statements are normalized
@@ -474,8 +474,9 @@ class IRBuilder(NodeVisitor[Register]):
             end_reg = self.accept(end)
 
             # Initialize loop index to 0.
-            index_reg = self.assign(s.index, IntExpr(0), int_rprimitive, int_rprimitive,
-                                    declare_new=True)
+            assign_target = self.assign(s.index, IntExpr(0), int_rprimitive, int_rprimitive)
+            assert isinstance(assign_target, AssignmentTargetRegister)
+            index_reg = assign_target.register
             goto = Goto(INVALID_LABEL)
             self.add(goto)
 
@@ -812,17 +813,18 @@ class IRBuilder(NodeVisitor[Register]):
 
     def visit_conditional_expr(self, expr: ConditionalExpr) -> Register:
         branches = self.process_conditional(expr.cond)
-        target = self.alloc_target(self.node_type(expr))
+        # Having actual Phi nodes would be really nice here!
+        target = self.alloc_temp(self.node_type(expr))
 
         if_body = self.new_block()
         self.set_branches(branches, True, if_body)
-        self.accept(expr.if_expr, target=target)
+        self.add(Assign(target, self.accept(expr.if_expr)))
         if_goto_next = Goto(INVALID_LABEL)
         self.add(if_goto_next)
 
         else_body = self.new_block()
         self.set_branches(branches, False, else_body)
-        self.accept(expr.else_expr, target=target)
+        self.add(Assign(target, self.accept(expr.else_expr)))
         else_goto_next = Goto(INVALID_LABEL)
         self.add(else_goto_next)
 
@@ -1041,30 +1043,11 @@ class IRBuilder(NodeVisitor[Register]):
             return desc.arg_types[-1]
         return desc.arg_types[n]
 
-    def accept(self, node: Node, target: Register = INVALID_REGISTER) -> Register:
-        self.targets.append(target)
-        actual = node.accept(self)
-        self.targets.pop()
-        if target != INVALID_REGISTER and target != actual:
-            self.add(Assign(target, actual))
+    def accept(self, node: Node) -> Register:
+        return node.accept(self)
 
-        return actual
-
-    def cur_target(self) -> Register:
-        return self.targets[-1]
-
-    def alloc_target(self, type: RType) -> Register:
-        """Get the current target, or if there is not a specified one, a temp"""
-        # XXX: This is a somewhat dangerous method!
-        # Only call it if you definitely own the target!
-        # This means generally *not* in helper methods!
-        return self.alloc_temp(type, self.cur_target())
-
-    def alloc_temp(self, type: RType, target: Register = INVALID_REGISTER) -> Register:
-        if target == INVALID_REGISTER:
-            return self.environment.add_temp(type)
-        else:
-            return target
+    def alloc_temp(self, type: RType) -> Register:
+        return self.environment.add_temp(type)
 
     def type_to_rtype(self, typ: Type) -> RType:
         return self.mapper.type_to_rtype(typ)

@@ -734,8 +734,15 @@ def f(o, p, n, b, t, s, a, l, d):
     d2 :: dict
     r1 :: None
 L0:
+    o = o
+    p = p
+    n = n
+    b = b
+    t = t
+    s = s
     r0 = box(int, n)
     o = r0
+    a = a
     l2 = l
     d2 = d
     r1 = None
