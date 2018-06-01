@@ -45,26 +45,27 @@ def f():
     c, r0 :: C
     r1 :: int
     r2 :: bool
-    a :: list
+    a, r3 :: list
     d :: C
-    r3 :: int
-    r4 :: object
-    r5 :: C
-    r6, r7, r8 :: int
+    r4 :: int
+    r5 :: object
+    r6 :: C
+    r7, r8, r9 :: int
 L0:
     r0 = C()
     c = r0
     r1 = 5
     c.x = r1; r2 = is_error
-    a = [c]
-    r3 = 0
-    r4 = a[r3] :: list
-    r5 = cast(C, r4)
-    d = r5
-    r6 = d.x
-    r7 = 1
-    r8 = r6 + r7 :: int
-    return r8
+    r3 = [c]
+    a = r3
+    r4 = 0
+    r5 = a[r4] :: list
+    r6 = cast(C, r5)
+    d = r6
+    r7 = d.x
+    r8 = 1
+    r9 = r7 + r8 :: int
+    return r9
 
 [case testMethodCall]
 class A:

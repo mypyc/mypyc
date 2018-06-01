@@ -206,12 +206,13 @@ def f(x: int, y: int) -> int:
     return x
 [out]
 def f(x, y):
-    x, y :: int
+    x, y, r0 :: int
 L0:
 L1:
     if x > y goto L2 else goto L3 :: int
 L2:
-    x = x - y :: int
+    r0 = x - y :: int
+    x = r0
     goto L1
 L3:
     return x
@@ -224,14 +225,15 @@ def f(x: int, y: int) -> int:
     return x
 [out]
 def f(x, y):
-    x, y, r0 :: int
+    x, y, r0, r1 :: int
 L0:
     r0 = 1
     x = r0
 L1:
     if x > y goto L2 else goto L3 :: int
 L2:
-    x = x - y :: int
+    r1 = x - y :: int
+    x = r1
     goto L1
 L3:
     return x
@@ -390,12 +392,13 @@ def f() -> int:
     return x
 [out]
 def f():
-    x, r0, r1 :: int
+    x, r0, r1, r2 :: int
 L0:
     r0 = 0
     x = r0
     r1 = 1
-    x = x + r1 :: int
+    r2 = x + r1 :: int
+    x = r2
     return x
 
 [case testTrue]
@@ -550,15 +553,15 @@ def g(y):
     y :: object
     r0 :: None
     r1 :: int
-    r2 :: list
-    r3 :: object
+    r2 :: object
+    r3 :: list
     r4, r5, r6, r7 :: None
 L0:
     r0 = g(y)
     r1 = 1
-    r3 = box(int, r1)
-    r2 = [r3]
-    r4 = g(r2)
+    r2 = box(int, r1)
+    r3 = [r2]
+    r4 = g(r3)
     r5 = None
     r6 = g(r5)
     r7 = None
@@ -576,31 +579,32 @@ def g(y):
     y :: object
     r0 :: int
     r1, r2 :: object
-    a :: list
-    r3, r4, r5 :: int
-    r6 :: tuple[int, int]
-    r7 :: object
-    r8, r9 :: bool
-    r10 :: object
-    r11 :: int
-    r12 :: object
+    a, r3 :: list
+    r4, r5, r6 :: int
+    r7 :: tuple[int, int]
+    r8 :: object
+    r9, r10 :: bool
+    r11 :: object
+    r12 :: int
+    r13 :: object
 L0:
     r0 = 1
     r1 = box(int, r0)
     r2 = g(r1)
-    a = [y]
-    r3 = 0
-    r4 = 1
-    r5 = 2
-    r6 = (r4, r5)
-    r7 = box(tuple[int, int], r6)
-    r8 = a.__setitem__(r3, r7)
-    r9 = True
-    r10 = box(bool, r9)
-    y = r10
-    r11 = 3
-    r12 = box(int, r11)
-    return r12
+    r3 = [y]
+    a = r3
+    r4 = 0
+    r5 = 1
+    r6 = 2
+    r7 = (r5, r6)
+    r8 = box(tuple[int, int], r7)
+    r9 = a.__setitem__(r4, r8)
+    r10 = True
+    r11 = box(bool, r10)
+    y = r11
+    r12 = 3
+    r13 = box(int, r12)
+    return r13
 
 [case testCoerceToObject2]
 class A:

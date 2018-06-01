@@ -86,10 +86,12 @@ def f(a: int, b: int) -> int:
 [out]
 L0:
     r0 = 1
-    x = a + r0 :: int
+    r1 = a + r0 :: int
     dec_ref r0 :: int
-    y = x + a :: int
+    x = r1
+    r2 = x + a :: int
     dec_ref x :: int
+    y = r2
     return y
 
 [case testArgumentsInAssign]
@@ -188,9 +190,10 @@ L2:
     goto L4
 L3:
     r2 = 1
-    y = a + r2 :: int
+    r3 = a + r2 :: int
     dec_ref a :: int
     dec_ref r2 :: int
+    y = r3
     return y
 L4:
     inc_ref a :: int
@@ -217,9 +220,10 @@ L2:
     a = r1
 L3:
     r2 = 1
-    y = a + r2 :: int
+    r3 = a + r2 :: int
     dec_ref a :: int
     dec_ref r2 :: int
+    y = r3
     return y
 L4:
     inc_ref a :: int
@@ -265,19 +269,20 @@ def f(a: int) -> int:
 [out]
 L0:
     r0 = 1
-    a = a + r0 :: int
+    r1 = a + r0 :: int
     dec_ref r0 :: int
-    r1 = 1
-    x = r1
+    a = r1
     r2 = 1
-    r4 = x
-    x = x + r2 :: int
-    dec_ref r2 :: int
-    dec_ref r4 :: int
-    r3 = a + x :: int
+    x = r2
+    r3 = 1
+    r4 = x + r3 :: int
+    dec_ref x :: int
+    dec_ref r3 :: int
+    x = r4
+    r5 = a + x :: int
     dec_ref a :: int
     dec_ref x :: int
-    return r3
+    return r5
 
 [case testIncrement2]
 def f() -> None:
@@ -288,13 +293,13 @@ L0:
     r0 = 1
     x = r0
     r1 = 1
-    r3 = x
-    x = x + r1 :: int
-    dec_ref r1 :: int
+    r2 = x + r1 :: int
     dec_ref x :: int
-    dec_ref r3 :: int
-    r2 = None
-    return r2
+    dec_ref r1 :: int
+    x = r2
+    dec_ref x :: int
+    r3 = None
+    return r3
 
 [case testAdd1]
 def f() -> None:
@@ -305,12 +310,13 @@ L0:
     r0 = 1
     y = r0
     r1 = 1
-    x = y + r1 :: int
+    r2 = y + r1 :: int
     dec_ref y :: int
     dec_ref r1 :: int
+    x = r2
     dec_ref x :: int
-    r2 = None
-    return r2
+    r3 = None
+    return r3
 
 [case testAdd2]
 def f(a: int) -> int:
@@ -320,11 +326,12 @@ def f(a: int) -> int:
     return x
 [out]
 L0:
-    a = a + a :: int
+    r0 = a + a :: int
+    a = r0
     x = a
-    r0 = x
-    x = x + x :: int
-    dec_ref r0 :: int
+    r1 = x + x :: int
+    dec_ref x :: int
+    x = r1
     return x
 
 [case testAdd3]
@@ -334,9 +341,11 @@ def f(a: int) -> int:
     return y
 [out]
 L0:
-    x = a + a :: int
-    y = x + x :: int
+    r0 = a + a :: int
+    x = r0
+    r1 = x + x :: int
     dec_ref x :: int
+    y = r1
     return y
 
 [case testAdd4]
@@ -346,15 +355,17 @@ def f(a: int) -> None:
     z = y + y
 [out]
 L0:
-    x = a + a :: int
+    r0 = a + a :: int
+    x = r0
     dec_ref x :: int
-    r0 = 1
-    y = r0
-    z = y + y :: int
+    r1 = 1
+    y = r1
+    r2 = y + y :: int
     dec_ref y :: int
+    z = r2
     dec_ref z :: int
-    r1 = None
-    return r1
+    r3 = None
+    return r3
 
 [case testAdd5]
 def f(a: int) -> None:
@@ -363,16 +374,17 @@ def f(a: int) -> None:
     x = x + x
 [out]
 L0:
-    a = a + a :: int
+    r0 = a + a :: int
+    a = r0
     dec_ref a :: int
-    r0 = 1
-    x = r0
-    r2 = x
-    x = x + x :: int
+    r1 = 1
+    x = r1
+    r2 = x + x :: int
     dec_ref x :: int
-    dec_ref r2 :: int
-    r1 = None
-    return r1
+    x = r2
+    dec_ref x :: int
+    r3 = None
+    return r3
 
 [case testReturnInMiddleOfFunction]
 def f() -> int:
@@ -429,14 +441,14 @@ L0:
 L1:
     if i <= a goto L2 else goto L4 :: int
 L2:
-    r3 = sum
-    sum = sum + i :: int
+    r2 = sum + i :: int
+    dec_ref sum :: int
+    sum = r2
+    r3 = 1
+    r4 = i + r3 :: int
+    dec_ref i :: int
     dec_ref r3 :: int
-    r2 = 1
-    r4 = i
-    i = i + r2 :: int
-    dec_ref r2 :: int
-    dec_ref r4 :: int
+    i = r4
     goto L1
 L3:
     return sum
@@ -469,12 +481,13 @@ L0:
     r1 = 1
     r2 = box(int, r0)
     r3 = box(int, r1)
-    a = [r2, r3]
+    r4 = [r2, r3]
     dec_ref r2
     dec_ref r3
+    a = r4
     dec_ref a
-    r4 = 0
-    return r4
+    r5 = 0
+    return r5
 
 [case testReturnList]
 from typing import List
@@ -483,10 +496,10 @@ def f(x: int) -> List[int]:
 [out]
 L0:
     inc_ref x :: int
-    r1 = box(int, x)
-    r0 = [r1]
-    dec_ref r1
-    return r0
+    r0 = box(int, x)
+    r1 = [r0]
+    dec_ref r0
+    return r1
 
 [case testListSet]
 from typing import List
@@ -544,17 +557,18 @@ def f() -> None:
 [out]
 L0:
     r0 = C()
-    a = [r0]
+    r1 = [r0]
     dec_ref r0
-    r1 = 0
-    r2 = a[r1] :: list
+    a = r1
+    r2 = 0
+    r3 = a[r2] :: list
     dec_ref a
-    dec_ref r1 :: int
-    r3 = cast(C, r2)
-    d = r3
+    dec_ref r2 :: int
+    r4 = cast(C, r3)
+    d = r4
     dec_ref d
-    r4 = None
-    return r4
+    r5 = None
+    return r5
 
 [case testUnaryBranchSpecialCase]
 def f(x: bool) -> int:

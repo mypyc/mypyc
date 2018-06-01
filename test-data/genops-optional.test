@@ -60,33 +60,35 @@ def f(x: Optional[A], y: Optional[A], z: Optional[int]) -> None:
 def f(x, y, z):
     x, y :: optional[A]
     z :: optional[int]
-    r0 :: A
-    r1 :: int
-    r2 :: object
-    a, r3 :: A
-    r4 :: int
-    r5 :: object
-    r6 :: bool
-    r7 :: None
-    r8 :: bool
-    r9 :: None
+    r0 :: None
+    r1 :: A
+    r2 :: int
+    r3 :: object
+    a, r4 :: A
+    r5 :: int
+    r6 :: object
+    r7 :: bool
+    r8 :: None
+    r9 :: bool
+    r10 :: None
 L0:
-    x = None
-    r0 = A()
+    r0 = None
     x = r0
+    r1 = A()
+    x = r1
     x = y
-    r1 = 1
-    r2 = box(int, r1)
-    z = r2
-    r3 = A()
-    a = r3
-    r4 = 1
-    r5 = box(int, r4)
-    a.a = r5; r6 = is_error
-    r7 = None
-    a.a = r7; r8 = is_error
-    r9 = None
-    return r9
+    r2 = 1
+    r3 = box(int, r2)
+    z = r3
+    r4 = A()
+    a = r4
+    r5 = 1
+    r6 = box(int, r5)
+    a.a = r6; r7 = is_error
+    r8 = None
+    a.a = r8; r9 = is_error
+    r10 = None
+    return r10
 
 [case testBoxOptionalListItem]
 from typing import List, Optional

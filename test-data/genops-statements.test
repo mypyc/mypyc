@@ -5,8 +5,8 @@ def f() -> None:
         x = x + i
 [out]
 def f():
-    x, r0, r1, i, r2, r3 :: int
-    r4 :: None
+    x, r0, r1, i, r2, r3, r4, r5 :: int
+    r6 :: None
 L0:
     r0 = 0
     x = r0
@@ -16,14 +16,16 @@ L0:
 L1:
     if r2 < r1 goto L2 else goto L4 :: int
 L2:
-    x = x + i :: int
+    r3 = x + i :: int
+    x = r3
 L3:
-    r3 = 1
-    r2 = r2 + r3 :: int
+    r4 = 1
+    r5 = r2 + r4 :: int
+    r2 = r5
     goto L1
 L4:
-    r4 = None
-    return r4
+    r6 = None
+    return r6
 
 [case testBreak]
 def f() -> None:
@@ -53,8 +55,8 @@ def f() -> None:
         break
 [out]
 def f():
-    r0, n, r1, r2 :: int
-    r3 :: None
+    r0, n, r1, r2, r3 :: int
+    r4 :: None
 L0:
     r0 = 5
     r1 = 0
@@ -65,11 +67,12 @@ L2:
     goto L4
 L3:
     r2 = 1
-    r1 = r1 + r2 :: int
+    r3 = r1 + r2 :: int
+    r1 = r3
     goto L1
 L4:
-    r3 = None
-    return r3
+    r4 = None
+    return r4
 
 [case testBreakNested]
 def f() -> None:
@@ -130,8 +133,8 @@ def f() -> None:
         continue
 [out]
 def f():
-    r0, n, r1, r2 :: int
-    r3 :: None
+    r0, n, r1, r2, r3 :: int
+    r4 :: None
 L0:
     r0 = 5
     r1 = 0
@@ -142,11 +145,12 @@ L2:
     goto L3
 L3:
     r2 = 1
-    r1 = r1 + r2 :: int
+    r3 = r1 + r2 :: int
+    r1 = r3
     goto L1
 L4:
-    r3 = None
-    return r3
+    r4 = None
+    return r4
 
 [case testContinueNested]
 def f() -> None:
@@ -192,7 +196,7 @@ def f(ls):
     ls :: list
     y, r0, r1, r2, x, r3 :: int
     r4 :: object
-    r5 :: int
+    r5, r6, r7 :: int
 L0:
     r0 = 0
     y = r0
@@ -205,9 +209,11 @@ L2:
     r4 = ls[r1] :: list
     r5 = unbox(int, r4)
     x = r5
-    y = y + x :: int
+    r6 = y + x :: int
+    y = r6
 L3:
-    r1 = r1 + r2 :: int
+    r7 = r1 + r2 :: int
+    r1 = r7
     goto L1
 L4:
     return y

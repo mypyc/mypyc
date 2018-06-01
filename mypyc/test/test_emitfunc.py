@@ -55,16 +55,16 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.assert_emit(TupleGet(self.n, 1, bool_rprimitive, 0), 'cpy_r_r0 = cpy_r_n.f1;')
 
     def test_load_None(self) -> None:
-        self.assert_emit(PrimitiveOp(self.m, [], none_op, 0),
-                         """cpy_r_m = Py_None;
-                            Py_INCREF(cpy_r_m);
+        self.assert_emit(PrimitiveOp([], none_op, 0),
+                         """cpy_r_r0 = Py_None;
+                            Py_INCREF(cpy_r_r0);
                          """)
 
     def test_load_True(self) -> None:
-        self.assert_emit(PrimitiveOp(self.m, [], true_op, 0), "cpy_r_m = 1;")
+        self.assert_emit(PrimitiveOp([], true_op, 0), "cpy_r_r0 = 1;")
 
     def test_load_False(self) -> None:
-        self.assert_emit(PrimitiveOp(self.m, [], false_op, 0), "cpy_r_m = 0;")
+        self.assert_emit(PrimitiveOp([], false_op, 0), "cpy_r_r0 = 0;")
 
     def test_assign_int(self) -> None:
         self.assert_emit(Assign(self.m, self.n),
@@ -73,12 +73,12 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
     def test_int_add(self) -> None:
         self.assert_emit_binary_op(
             '+', self.n, self.m, self.k,
-            "cpy_r_n = CPyTagged_Add(cpy_r_m, cpy_r_k);")
+            "cpy_r_r0 = CPyTagged_Add(cpy_r_m, cpy_r_k);")
 
     def test_int_sub(self) -> None:
         self.assert_emit_binary_op(
             '-', self.n, self.m, self.k,
-            "cpy_r_n = CPyTagged_Subtract(cpy_r_m, cpy_r_k);")
+            "cpy_r_r0 = CPyTagged_Subtract(cpy_r_m, cpy_r_k);")
 
     def test_list_repeat(self) -> None:
         self.assert_emit_binary_op(
@@ -87,18 +87,18 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                 __tmp1 = CPyTagged_AsLongLong(cpy_r_n);
                 if (__tmp1 == -1 && PyErr_Occurred())
                     CPyError_OutOfMemory();
-                cpy_r_ll = PySequence_Repeat(cpy_r_l, __tmp1);
+                cpy_r_r0 = PySequence_Repeat(cpy_r_l, __tmp1);
              """)
 
     def test_int_neg(self) -> None:
-        self.assert_emit(PrimitiveOp(self.n, [self.m], int_neg_op, 55),
-                         "cpy_r_n = CPyTagged_Negate(cpy_r_m);")
+        self.assert_emit(PrimitiveOp([self.m], int_neg_op, 55),
+                         "cpy_r_r0 = CPyTagged_Negate(cpy_r_m);")
 
     def test_list_len(self) -> None:
-        self.assert_emit(PrimitiveOp(self.n, [self.l], list_len_op, 55),
+        self.assert_emit(PrimitiveOp([self.l], list_len_op, 55),
                          """long long __tmp1;
                             __tmp1 = PyList_GET_SIZE(cpy_r_l);
-                            cpy_r_n = CPyTagged_ShortFromLongLong(__tmp1);
+                            cpy_r_r0 = CPyTagged_ShortFromLongLong(__tmp1);
                          """)
 
     def test_branch_eq(self) -> None:
@@ -142,12 +142,12 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.assert_emit(DecRef(self.m, tuple_type), 'CPyTagged_DecRef(cpy_r_m.f0.f0);')
 
     def test_list_get_item(self) -> None:
-        self.assert_emit(PrimitiveOp(self.n, [self.m, self.k], list_get_item_op, 55),
-                         """cpy_r_n = CPyList_GetItem(cpy_r_m, cpy_r_k);""")
+        self.assert_emit(PrimitiveOp([self.m, self.k], list_get_item_op, 55),
+                         """cpy_r_r0 = CPyList_GetItem(cpy_r_m, cpy_r_k);""")
 
     def test_list_set_item(self) -> None:
-        self.assert_emit(PrimitiveOp(self.b, [self.l, self.n, self.o], list_set_item_op, 55),
-                         """cpy_r_b = CPyList_SetItem(cpy_r_l, cpy_r_n, cpy_r_o) != 0;""")
+        self.assert_emit(PrimitiveOp([self.l, self.n, self.o], list_set_item_op, 55),
+                         """cpy_r_r0 = CPyList_SetItem(cpy_r_l, cpy_r_n, cpy_r_o) != 0;""")
 
     def test_box(self) -> None:
         self.assert_emit(Box(self.n, int_rprimitive),
@@ -164,19 +164,19 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """)
 
     def test_new_list(self) -> None:
-        self.assert_emit(PrimitiveOp(self.l, [self.n, self.m], new_list_op, 55),
-                         """cpy_r_l = PyList_New(2);
+        self.assert_emit(PrimitiveOp([self.n, self.m], new_list_op, 55),
+                         """cpy_r_r0 = PyList_New(2);
                             Py_INCREF(cpy_r_n);
                             Py_INCREF(cpy_r_m);
-                            if (cpy_r_l != NULL) {
-                                PyList_SET_ITEM(cpy_r_l, 0, cpy_r_n);
-                                PyList_SET_ITEM(cpy_r_l, 1, cpy_r_m);
+                            if (cpy_r_r0 != NULL) {
+                                PyList_SET_ITEM(cpy_r_r0, 0, cpy_r_n);
+                                PyList_SET_ITEM(cpy_r_r0, 1, cpy_r_m);
                             }
                          """)
 
     def test_list_append(self) -> None:
-        self.assert_emit(PrimitiveOp(self.b, [self.l, self.o], list_append_op, 1),
-                         """cpy_r_b = PyList_Append(cpy_r_l, cpy_r_o) != -1;""")
+        self.assert_emit(PrimitiveOp([self.l, self.o], list_append_op, 1),
+                         """cpy_r_r0 = PyList_Append(cpy_r_l, cpy_r_o) != -1;""")
 
     def test_get_attr(self) -> None:
         ir = ClassIR('A', [('x', bool_rprimitive),
@@ -193,34 +193,34 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """cpy_r_r0 = CPY_SET_ATTR(cpy_r_n, 3, cpy_r_m, AObject, CPyTagged);""")
 
     def test_dict_get_item(self) -> None:
-        self.assert_emit(PrimitiveOp(self.o, [self.d, self.o2], dict_get_item_op, 1),
-                         """cpy_r_o = PyDict_GetItemWithError(cpy_r_d, cpy_r_o2);
-                            if (!cpy_r_o)
+        self.assert_emit(PrimitiveOp([self.d, self.o2], dict_get_item_op, 1),
+                         """cpy_r_r0 = PyDict_GetItemWithError(cpy_r_d, cpy_r_o2);
+                            if (!cpy_r_r0)
                                 PyErr_SetObject(PyExc_KeyError, cpy_r_o2);
                             else
-                                Py_INCREF(cpy_r_o);
+                                Py_INCREF(cpy_r_r0);
                          """)
 
     def test_dict_set_item(self) -> None:
-        self.assert_emit(PrimitiveOp(self.b, [self.d, self.o, self.o2], dict_set_item_op, 1),
-                         """cpy_r_b = PyDict_SetItem(cpy_r_d, cpy_r_o, cpy_r_o2) >= 0;""")
+        self.assert_emit(PrimitiveOp([self.d, self.o, self.o2], dict_set_item_op, 1),
+                         """cpy_r_r0 = PyDict_SetItem(cpy_r_d, cpy_r_o, cpy_r_o2) >= 0;""")
 
     def test_dict_update(self) -> None:
-        self.assert_emit(PrimitiveOp(self.b, [self.d, self.o], dict_update_op, 1),
-                        """cpy_r_b = PyDict_Update(cpy_r_d, cpy_r_o) != -1;""")
+        self.assert_emit(PrimitiveOp([self.d, self.o], dict_update_op, 1),
+                        """cpy_r_r0 = PyDict_Update(cpy_r_d, cpy_r_o) != -1;""")
 
     def test_new_dict(self) -> None:
-        self.assert_emit(PrimitiveOp(self.d, [], new_dict_op, 1),
-                         """cpy_r_d = PyDict_New();""")
+        self.assert_emit(PrimitiveOp([], new_dict_op, 1),
+                         """cpy_r_r0 = PyDict_New();""")
 
     def test_dict_contains(self) -> None:
         self.assert_emit_binary_op(
             'in', self.b, self.o, self.d,
              """int __tmp1 = PyDict_Contains(cpy_r_d, cpy_r_o);
                 if (__tmp1 < 0)
-                    cpy_r_b = 2;
+                    cpy_r_r0 = 2;
                 else
-                    cpy_r_b = __tmp1;
+                    cpy_r_r0 = __tmp1;
              """)
 
     def assert_emit(self, op: Op, expected: str) -> None:
@@ -251,7 +251,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         for desc in ops:
             if (is_subtype(left_type, desc.arg_types[0])
                     and is_subtype(right_type, desc.arg_types[1])):
-                self.assert_emit(PrimitiveOp(dest, [left, right], desc, 55), expected)
+                self.assert_emit(PrimitiveOp([left, right], desc, 55), expected)
                 break
         else:
             assert False, 'Could not find matching op'

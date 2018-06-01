@@ -885,25 +885,31 @@ class PrimitiveOp(RegisterOp):
     primitive ops.
     """
 
+    no_reg = True
+
     def __init__(self,
-                  dest: Optional[Register],
-                  args: List[Register],
-                  desc: OpDescription,
-                  line: int) -> None:
+                 args: List[Register],
+                 desc: OpDescription,
+                 line: int) -> None:
         if not desc.is_var_arg:
             assert len(args) == len(desc.arg_types)
         self.error_kind = desc.error_kind
-        super().__init__(dest, line)
+        super().__init__(self, line)
         self.args = args
         self.desc = desc
+        if desc.result_type is None:
+            assert desc.error_kind == ERR_FALSE  # TODO: No-value ops not supported yet
+            self._type = bool_rprimitive
+        else:
+            self._type = desc.result_type
 
     def sources(self) -> List[Register]:
         return list(self.args)
 
     def __repr__(self) -> str:
-        return '<PrimiveOp2 name=%r dest=%s args=%s>' % (self.desc.name,
-                                                         self.dest,
-                                                         self.args)
+        return '<PrimitiveOp name=%r dest=%s args=%s>' % (self.desc.name,
+                                                          self.dest,
+                                                          self.args)
 
     def to_str(self, env: Environment) -> str:
         params = {}  # type: Dict[str, Any]

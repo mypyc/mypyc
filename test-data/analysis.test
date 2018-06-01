@@ -169,22 +169,24 @@ L1:
     if n < r0 goto L2 else goto L3 :: int
 L2:
     r1 = 1
-    n = n + r1 :: int
+    r2 = n + r1 :: int
+    n = r2
     m = n
     goto L1
 L3:
-    r2 = None
-    return r2
+    r3 = None
+    return r3
 
 (0, 0)   {n}                     {n}
 (1, 0)   {n}                     {n, r0}
 (1, 1)   {n, r0}                 {n, r0}
 (2, 0)   {n, r0}                 {n, r0, r1}
-(2, 1)   {n, r0, r1}             {n, r0, r1}
-(2, 2)   {n, r0, r1}             {m, n, r0, r1}
-(2, 3)   {m, n, r0, r1}          {m, n, r0, r1}
-(3, 0)   {n, r0}                 {n, r0, r2}
-(3, 1)   {n, r0, r2}             {n, r0, r2}
+(2, 1)   {n, r0, r1}             {n, r0, r1, r2}
+(2, 2)   {n, r0, r1, r2}         {n, r0, r1, r2}
+(2, 3)   {n, r0, r1, r2}         {m, n, r0, r1, r2}
+(2, 4)   {m, n, r0, r1, r2}      {m, n, r0, r1, r2}
+(3, 0)   {n, r0}                 {n, r0, r3}
+(3, 1)   {n, r0, r3}             {n, r0, r3}
 
 [case testMultiPass_Liveness]
 def f(n: int) -> None:
@@ -370,9 +372,11 @@ L0:
 L1:
     if i <= a goto L2 else goto L3 :: int
 L2:
-    sum = sum + i :: int
-    r2 = 1
-    i = i + r2 :: int
+    r2 = sum + i :: int
+    sum = r2
+    r3 = 1
+    r4 = i + r3 :: int
+    i = r4
     goto L1
 L3:
     return sum
@@ -387,6 +391,8 @@ L3:
 (2, 1)   {a}                     {a}
 (2, 2)   {a}                     {a}
 (2, 3)   {a}                     {a}
+(2, 4)   {a}                     {a}
+(2, 5)   {a}                     {a}
 (3, 0)   {a}                     {a}
 
 [case testError]

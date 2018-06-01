@@ -253,8 +253,7 @@ class IRBuilder(NodeVisitor[Register]):
     def add_implicit_return(self) -> None:
         block = self.blocks[-1][-1]
         if not block.ops or not isinstance(block.ops[-1], Return):
-            retval = self.environment.add_temp(none_rprimitive)
-            self.add(PrimitiveOp(retval, [], none_op, line=-1))
+            retval = self.add(PrimitiveOp([], none_op, line=-1))
             self.add(Return(retval))
 
     def add_implicit_unreachable(self) -> None:
@@ -276,8 +275,7 @@ class IRBuilder(NodeVisitor[Register]):
             retval = self.accept(stmt.expr)
             retval = self.coerce(retval, self.node_type(stmt.expr), self.ret_type, stmt.line)
         else:
-            retval = self.environment.add_temp(none_rprimitive)
-            self.add(PrimitiveOp(retval, [], none_op, line=-1))
+            retval = self.add(PrimitiveOp([], none_op, line=-1))
         self.add(Return(retval))
         return INVALID_REGISTER
 
@@ -310,8 +308,9 @@ class IRBuilder(NodeVisitor[Register]):
             ltype = self.environment.types[target.register]
             rtype = self.node_type(stmt.rvalue)
             rreg = self.accept(stmt.rvalue)
-            return self.binary_op(ltype, target.register, rtype, rreg, stmt.op, stmt.line,
-                                  target=target.register)
+            res = self.binary_op(ltype, target.register, rtype, rreg, stmt.op, stmt.line)
+            self.add(Assign(target.register, res))
+            return INVALID_REGISTER  # XXX: is this right?
 
         # NOTE: List index not supported yet for compound assignments.
         assert False, 'Unsupported lvalue: %r'
@@ -498,8 +497,9 @@ class IRBuilder(NodeVisitor[Register]):
 
             # Increment index register.
             one_reg = self.add(LoadInt(1))
-            self.binary_op(int_rprimitive, index_reg, int_rprimitive, one_reg, '+', s.line,
-                           target=index_reg)
+            self.add(Assign(
+                index_reg,
+                self.binary_op(int_rprimitive, index_reg, int_rprimitive, one_reg, '+', s.line)))
 
             # Go back to loop condition check.
             self.add(Goto(top.label))
@@ -527,8 +527,7 @@ class IRBuilder(NodeVisitor[Register]):
 
             # For compatibility with python semantics we recalculate the length
             # at every iteration.
-            len_reg = self.alloc_temp(int_rprimitive)
-            self.add(PrimitiveOp(len_reg, [expr_reg], list_len_op, s.line))
+            len_reg = self.add(PrimitiveOp([expr_reg], list_len_op, s.line))
 
             branch = Branch(index_reg, len_reg, INVALID_LABEL, INVALID_LABEL, Branch.INT_LT)
             self.add(branch)
@@ -540,16 +539,16 @@ class IRBuilder(NodeVisitor[Register]):
             target_list_type = self.types[s.expr]
             assert isinstance(target_list_type, Instance)
             target_type = self.type_to_rtype(target_list_type.args[0])
-            value_box = self.alloc_temp(object_rprimitive)
-            self.add(PrimitiveOp(value_box, [expr_reg, index_reg], list_get_item_op, s.line))
+            value_box = self.add(PrimitiveOp([expr_reg, index_reg], list_get_item_op, s.line))
 
             self.add(Assign(lvalue_reg, self.unbox_or_cast(value_box, target_type, s.line)))
 
             s.body.accept(self)
 
             end_block = self.goto_new_block()
-            self.binary_op(int_rprimitive, index_reg, int_rprimitive, one_reg, '+', s.line,
-                           target=index_reg)
+            self.add(Assign(
+                index_reg,
+                self.binary_op(int_rprimitive, index_reg, int_rprimitive, one_reg, '+', s.line)))
             self.add(Goto(condition_block.label))
 
             next_block = self.new_block()
@@ -577,8 +576,7 @@ class IRBuilder(NodeVisitor[Register]):
         for desc in unary_ops.get(expr.op, []):
             if is_subtype(etype, desc.arg_types[0]):
                 assert desc.result_type is not None
-                target = self.alloc_target(desc.result_type)
-                self.add(PrimitiveOp(target, [ereg], desc, expr.line))
+                target = self.add(PrimitiveOp([ereg], desc, expr.line))
                 break
         else:
             # TODO: Fall back to generic C API
@@ -599,18 +597,14 @@ class IRBuilder(NodeVisitor[Register]):
                   rtype: RType,
                   rreg: Register,
                   expr_op: str,
-                  line: int,
-                  target: Optional[Register] = None) -> Register:
+                  line: int) -> Register:
         for desc in binary_ops.get(expr_op, []):
             if (is_subtype(ltype, desc.arg_types[0])
                     and is_subtype(rtype, desc.arg_types[1])):
                 lreg = self.coerce(lreg, ltype, desc.arg_types[0], line)
                 rreg = self.coerce(rreg, rtype, desc.arg_types[1], line)
-                if target is None:
-                    assert desc.result_type is not None
-                    target = self.alloc_target(desc.result_type)
-                self.add(PrimitiveOp(target, [lreg, rreg], desc, line))
-                return target
+                assert desc.result_type is not None
+                return self.add(PrimitiveOp([lreg, rreg], desc, line))
 
         # TODO: Fall back to generic operation
         assert False, 'Unsupported binary operation'
@@ -656,9 +650,7 @@ class IRBuilder(NodeVisitor[Register]):
             # Use special access op for this particular name.
             desc = name_ref_ops[fullname]
             assert desc.result_type is not None
-            target = self.alloc_target(desc.result_type)
-            self.add(PrimitiveOp(target, [], desc, expr.line))
-            return target
+            return self.add(PrimitiveOp([], desc, expr.line))
 
         if not self.is_native_name_expr(expr):
             return self.load_static_module_attr(expr)
@@ -792,9 +784,7 @@ class IRBuilder(NodeVisitor[Register]):
                             break
                     else:
                         assert desc.result_type is not None  # TODO: Support no return value
-                        target = self.alloc_target(desc.result_type)
-                        self.add(PrimitiveOp(target, args, desc, expr.line))
-                        return target
+                        return self.add(PrimitiveOp(args, desc, expr.line))
 
         fn = expr.callee.name  # TODO: fullname
         target_type = self.node_type(expr)
@@ -871,12 +861,7 @@ class IRBuilder(NodeVisitor[Register]):
                     coercion = False
                 else:
                     coercion = not is_same_type(desc.result_type, result_type)
-                if coercion:
-                    assert desc.result_type is not None
-                    op_target = self.alloc_temp(desc.result_type)
-                else:
-                    op_target = self.alloc_temp(result_type)
-                self.add(PrimitiveOp(op_target, [base_reg] + coerced_args, desc, line))
+                op_target = self.add(PrimitiveOp([base_reg] + coerced_args, desc, line))
                 if coercion:
                     assert desc.result_type is not None
                     return self.coerce(op_target, desc.result_type, result_type, line)
@@ -902,9 +887,7 @@ class IRBuilder(NodeVisitor[Register]):
 
     def visit_dict_expr(self, expr: DictExpr) -> Register:
         assert not expr.items  # TODO
-        target = self.alloc_target(dict_rprimitive)
-        self.add(PrimitiveOp(target, [], new_dict_op, expr.line))
-        return target
+        return self.add(PrimitiveOp([], new_dict_op, expr.line))
 
     # Conditional expressions
 
@@ -943,8 +926,7 @@ class IRBuilder(NodeVisitor[Register]):
                 ltype = self.node_type(e.operands[0])
                 right = self.accept(e.operands[1])
                 rtype = self.node_type(e.operands[1])
-                target = self.alloc_temp(self.node_type(e))
-                self.binary_op(ltype, left, rtype, right, 'in', e.line, target=target)
+                target = self.binary_op(ltype, left, rtype, right, 'in', e.line)
                 branch = Branch(target, INVALID_REGISTER, INVALID_LABEL, INVALID_LABEL,
                                 Branch.BOOL_EXPR)
                 if op == 'not in':
@@ -1028,14 +1010,12 @@ class IRBuilder(NodeVisitor[Register]):
 
     def primitive_op(self, desc: OpDescription, args: List[Register], line: int) -> Register:
         assert desc.result_type is not None
-        target = self.alloc_target(desc.result_type)
         coerced = []
         for i, arg in enumerate(args):
             formal_type = self.op_arg_type(desc, i)
             arg = self.coerce(arg, self.environment.types[arg], formal_type, line)
             coerced.append(arg)
-        self.add(PrimitiveOp(target, coerced, desc, line))
-        return target
+        return self.add(PrimitiveOp(coerced, desc, line))
 
     def op_arg_type(self, desc: OpDescription, n: int) -> RType:
         if n >= len(desc.arg_types):
