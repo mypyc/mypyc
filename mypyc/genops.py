@@ -362,7 +362,7 @@ class IRBuilder(NodeVisitor[Register]):
         if isinstance(target, AssignmentTargetRegister):
             if needs_box:
                 unboxed = self.accept(rvalue)
-                return self.box(unboxed, rvalue_type, target=target.register)
+                return self.add(Assign(target.register, self.box(unboxed, rvalue_type)))
             else:
                 return self.accept(rvalue, target=target.register)
         elif isinstance(target, AssignmentTargetAttr):
@@ -939,7 +939,7 @@ class IRBuilder(NodeVisitor[Register]):
     }
 
     def visit_str_expr(self, expr: StrExpr) -> Register:
-        return self.load_static_unicode(expr.value, self.cur_target())
+        return self.load_static_unicode(expr.value)
 
     def process_conditional(self, e: Node) -> List[Branch]:
         if isinstance(e, ComparisonExpr):
@@ -1099,19 +1099,11 @@ class IRBuilder(NodeVisitor[Register]):
         mypy_type = self.types[node]
         return self.type_to_rtype(mypy_type)
 
-    def box(self, src: Register, typ: RType, target: Optional[Register] = None) -> Register:
+    def box(self, src: Register, typ: RType) -> Register:
         if typ.is_unboxed:
-            if target is None:
-                target = self.alloc_temp(object_rprimitive)
-            self.add(Box(target, src, typ))
-            return target
+            return self.add(Box(src, typ))
         else:
-            # Already boxed
-            if target is not None:
-                self.add(Assign(target, src))
-                return target
-            else:
-                return src
+            return src
 
     def unbox_or_cast(self, src: Register, target_type: RType, line: int) -> Register:
         if target_type.is_unboxed:
@@ -1123,7 +1115,7 @@ class IRBuilder(NodeVisitor[Register]):
         typ = self.node_type(expr)
         return self.box(self.accept(expr), typ)
 
-    def load_static_unicode(self, value: str, target: Register = INVALID_REGISTER) -> Register:
+    def load_static_unicode(self, value: str) -> Register:
         """Loads a static unicode value into a register.
 
         This is useful for more than just unicode literals; for example, method calls
@@ -1133,7 +1125,6 @@ class IRBuilder(NodeVisitor[Register]):
             self.unicode_literals[value] = '__unicode_' + str(len(self.unicode_literals))
         static_symbol = self.unicode_literals[value]
         return self.add(LoadStatic(str_rprimitive, static_symbol))
-        return target
 
     def coerce(self, src: Register, src_type: RType, target_type: RType, line: int,
                target: Optional[Register] = None) -> Register:
@@ -1145,7 +1136,7 @@ class IRBuilder(NodeVisitor[Register]):
         Returns the register with the converted value (may be same as src).
         """
         if src_type.is_unboxed and not target_type.is_unboxed:
-            return self.box(src, src_type, target=target)
+            src = self.box(src, src_type)
         if ((src_type.is_unboxed and target_type.is_unboxed)
                 and not is_same_type(src_type, target_type)):
             # To go from one unboxed type to another, we go through a boxed

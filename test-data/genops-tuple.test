@@ -87,17 +87,19 @@ def f():
     t :: tuple
     r0, r1 :: int
     r2 :: tuple[int, int]
-    r3 :: int
-    r4 :: object
-    r5, r6 :: int
+    r3 :: object
+    r4 :: int
+    r5 :: object
+    r6, r7 :: int
 L0:
     r0 = 1
     r1 = 2
     r2 = (r0, r1)
-    t = box(tuple[int, int], r2)
-    r3 = 1
-    r4 = t[r3] :: tuple
-    r6 = unbox(int, r4)
-    r5 = r6
-    return r5
+    r3 = box(tuple[int, int], r2)
+    t = r3
+    r4 = 1
+    r5 = t[r4] :: tuple
+    r7 = unbox(int, r5)
+    r6 = r7
+    return r6
 

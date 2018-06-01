@@ -1118,11 +1118,13 @@ class Box(StrictRegisterOp):
     """
 
     error_kind = ERR_NEVER
+    no_reg = True
 
-    def __init__(self, dest: Register, src: Register, typ: RType, line: int = -1) -> None:
-        super().__init__(dest, line)
+    def __init__(self, src: Register, typ: RType, line: int = -1) -> None:
+        super().__init__(self, line)
         self.src = src
         self.src_type = typ
+        self._type = object_rprimitive
 
     def sources(self) -> List[Register]:
         return [self.src]
