@@ -6,8 +6,9 @@ from mypy.test.helpers import assert_string_arrays_equal
 from mypyc.ops import (
     Environment, BasicBlock, FuncIR, RuntimeArg, RType, Goto, Return, LoadInt, Assign,
     IncRef, DecRef, Branch, Call, Unbox, Box, RTuple, TupleGet, GetAttr, PrimitiveOp,
+    RegisterOp,
     ClassIR, RInstance, SetAttr, Op, Label, Register, int_rprimitive, bool_rprimitive,
-    list_rprimitive, dict_rprimitive, object_rprimitive
+    list_rprimitive, dict_rprimitive, object_rprimitive,
 )
 from mypyc.emit import Emitter, EmitterContext
 from mypyc.emitfunc import generate_native_function, FunctionEmitterVisitor
@@ -51,7 +52,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          "cpy_r_m = 10;")
 
     def test_tuple_get(self) -> None:
-        self.assert_emit(TupleGet(self.m, self.n, 1, bool_rprimitive, 0), 'cpy_r_m = cpy_r_n.f1;')
+        self.assert_emit(TupleGet(self.n, 1, bool_rprimitive, 0), 'cpy_r_r0 = cpy_r_n.f1;')
 
     def test_load_None(self) -> None:
         self.assert_emit(PrimitiveOp(self.m, [], none_op, 0),
@@ -157,12 +158,12 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """cpy_r_o = CPyTagged_StealAsObject(cpy_r_n);""")
 
     def test_unbox(self) -> None:
-        self.assert_emit(Unbox(self.n, self.m, int_rprimitive, 55),
+        self.assert_emit(Unbox(self.m, int_rprimitive, 55),
                          """if (PyLong_Check(cpy_r_m))
-                                cpy_r_n = CPyTagged_FromObject(cpy_r_m);
+                                cpy_r_r0 = CPyTagged_FromObject(cpy_r_m);
                             else {
                                 PyErr_SetString(PyExc_TypeError, "int object expected");
-                                cpy_r_n = CPY_INT_TAG;
+                                cpy_r_r0 = CPY_INT_TAG;
                             }
                          """)
 
@@ -230,7 +231,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.emitter.fragments = []
         self.declarations.fragments = []
         self.env.temp_index = 0
-        if op.no_reg:
+        if isinstance(op, RegisterOp) and op.no_reg:
             self.env.add_op(op)
         op.accept(self.visitor)
         frags = self.declarations.fragments + self.emitter.fragments

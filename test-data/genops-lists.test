@@ -7,11 +7,12 @@ def f(x):
     x :: list
     r0 :: int
     r1 :: object
-    r2 :: int
+    r2, r3 :: int
 L0:
     r0 = 0
     r1 = x[r0] :: list
-    r2 = unbox(int, r1)
+    r3 = unbox(int, r1)
+    r2 = r3
     return r2
 
 [case testListOfListGet]
@@ -23,11 +24,12 @@ def f(x):
     x :: list
     r0 :: int
     r1 :: object
-    r2 :: list
+    r2, r3 :: list
 L0:
     r0 = 0
     r1 = x[r0] :: list
-    r2 = cast(list, r1)
+    r3 = cast(list, r1)
+    r2 = r3
     return r2
 
 [case testListOfListGet2]
@@ -39,18 +41,20 @@ def f(x):
     x :: list
     r0 :: int
     r1 :: object
-    r2 :: list
-    r3 :: int
-    r4 :: object
-    r5 :: int
+    r2, r3 :: list
+    r4 :: int
+    r5 :: object
+    r6, r7 :: int
 L0:
     r0 = 0
     r1 = x[r0] :: list
-    r2 = cast(list, r1)
-    r3 = 1
-    r4 = r2[r3] :: list
-    r5 = unbox(int, r4)
-    return r5
+    r3 = cast(list, r1)
+    r2 = r3
+    r4 = 1
+    r5 = r2[r4] :: list
+    r7 = unbox(int, r5)
+    r6 = r7
+    return r6
 
 [case testListSet]
 from typing import List

@@ -35,7 +35,7 @@ from mypyc.ops import (
     INVALID_LABEL, int_rprimitive, is_int_rprimitive, bool_rprimitive, list_rprimitive,
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp,
-    ERR_FALSE, OpDescription
+    ERR_FALSE, OpDescription, RegisterOp,
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import list_len_op, list_get_item_op, new_list_op
@@ -547,7 +547,7 @@ class IRBuilder(NodeVisitor[Register]):
             value_box = self.alloc_temp(object_rprimitive)
             self.add(PrimitiveOp(value_box, [expr_reg, index_reg], list_get_item_op, s.line))
 
-            self.unbox_or_cast(value_box, target_type, s.line, target=lvalue_reg)
+            self.add(Assign(lvalue_reg, self.unbox_or_cast(value_box, target_type, s.line)))
 
             s.body.accept(self)
 
@@ -626,10 +626,8 @@ class IRBuilder(NodeVisitor[Register]):
 
         if isinstance(base_rtype, RTuple):
             assert isinstance(expr.index, IntExpr)  # TODO
-            target = self.alloc_target(target_type)
-            self.add(TupleGet(target, base_reg, expr.index.value,
-                              base_rtype.types[expr.index.value], expr.line))
-            return target
+            return self.add(TupleGet(base_reg, expr.index.value,
+                                     target_type, expr.line))
 
         index_reg = self.accept(expr.index)
         target_reg = self.translate_special_method_call(
@@ -683,8 +681,7 @@ class IRBuilder(NodeVisitor[Register]):
         target_type = self.node_type(expr)
         if var_type != target_type:
             # Cast/unbox to the narrower given by the binder.
-            target = self.alloc_target(target_type)
-            return self.unbox_or_cast(reg, target_type, expr.line, target)
+            return self.unbox_or_cast(reg, target_type, expr.line)
         else:
             # Regular register access -- binder is not active.
             return reg
@@ -1046,7 +1043,7 @@ class IRBuilder(NodeVisitor[Register]):
 
     def add(self, op: Op) -> Register:
         self.blocks[-1][-1].ops.append(op)
-        if op.no_reg:
+        if isinstance(op, RegisterOp) and op.no_reg:
             self.environment.add_op(op)
         return op
 
@@ -1116,16 +1113,11 @@ class IRBuilder(NodeVisitor[Register]):
             else:
                 return src
 
-    def unbox_or_cast(self, src: Register, target_type: RType, line: int,
-                      target: Optional[Register] = None) -> Register:
-        if target is None:
-            target = self.alloc_temp(target_type)
-
+    def unbox_or_cast(self, src: Register, target_type: RType, line: int) -> Register:
         if target_type.is_unboxed:
-            self.add(Unbox(target, src, target_type, line))
+            return self.add(Unbox(src, target_type, line))
         else:
-            self.add(Cast(target, src, target_type, line))
-        return target
+            return self.add(Cast(src, target_type, line))
 
     def box_expr(self, expr: Expression) -> Register:
         typ = self.node_type(expr)
@@ -1159,10 +1151,10 @@ class IRBuilder(NodeVisitor[Register]):
             # To go from one unboxed type to another, we go through a boxed
             # in-between value, for simplicity.
             tmp = self.box(src, src_type)
-            return self.unbox_or_cast(tmp, target_type, line, target=target)
+            src = self.unbox_or_cast(tmp, target_type, line)
         if ((not src_type.is_unboxed and target_type.is_unboxed)
                 or not is_subtype(src_type, target_type)):
-            return self.unbox_or_cast(src, target_type, line, target=target)
+            src = self.unbox_or_cast(src, target_type, line)
         if target is None:
             return src
         else:

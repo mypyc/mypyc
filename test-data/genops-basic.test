@@ -616,20 +616,25 @@ def f(x: object) -> None:
 [out]
 def f(x):
     x :: object
-    n :: int
-    b :: bool
-    a :: A
-    l :: list
-    t :: tuple[int, A]
-    r0 :: None
+    n, r0 :: int
+    b, r1 :: bool
+    a, r2 :: A
+    l, r3 :: list
+    t, r4 :: tuple[int, A]
+    r5 :: None
 L0:
-    n = unbox(int, x)
-    b = unbox(bool, x)
-    a = cast(A, x)
-    l = cast(list, x)
-    t = unbox(tuple[int, A], x)
-    r0 = None
-    return r0
+    r0 = unbox(int, x)
+    n = r0
+    r1 = unbox(bool, x)
+    b = r1
+    r2 = cast(A, x)
+    a = r2
+    r3 = cast(list, x)
+    l = r3
+    r4 = unbox(tuple[int, A], x)
+    t = r4
+    r5 = None
+    return r5
 
 [case testDownCastSpecialCases]
 from typing import cast, Optional, Tuple
@@ -644,18 +649,22 @@ def f(o, n, t):
     o :: optional[A]
     n :: int
     t :: tuple
-    a :: A
+    a, r0 :: A
     m :: bool
-    r0 :: object
+    r1 :: object
+    r2, r3 :: bool
     tt :: tuple[int, int]
-    r1 :: None
+    r4 :: None
 L0:
-    a = cast(A, o)
-    r0 = box(int, n)
-    m = unbox(bool, r0)
+    r0 = cast(A, o)
+    a = r0
+    r1 = box(int, n)
+    r2 = unbox(bool, r1)
+    r3 = unbox(bool, r2)
+    m = r3
     t = box(tuple[int, int], tt)
-    r1 = None
-    return r1
+    r4 = None
+    return r4
 
 [case testSuccessfulCast]
 from typing import cast, Optional, Tuple, List, Dict

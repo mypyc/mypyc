@@ -210,7 +210,8 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         dest = self.reg(op.dest)
         src = self.reg(op.src)
         self.emit_line('{} = {}.f{};'.format(dest, src, op.index))
-        self.emit_inc_ref(dest, op.target_type)
+        assert op.type is not None
+        self.emit_inc_ref(dest, op.type)
 
     def get_dest_assign(self, dest: Optional[Register]) -> str:
         if dest is not None:
@@ -266,7 +267,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         self.emitter.emit_box(self.reg(op.src), self.reg(op.dest), op.src_type)
 
     def visit_cast(self, op: Cast) -> None:
-        self.emitter.emit_cast(self.reg(op.src), self.reg(op.dest), op.typ)
+        self.emitter.emit_cast(self.reg(op.src), self.reg(op.dest), op.type)
 
     def visit_unbox(self, op: Unbox) -> None:
         assert op.type is not None

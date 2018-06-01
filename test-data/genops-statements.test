@@ -184,6 +184,7 @@ def f(ls):
     ls :: list
     y, r0, r1, x, r2 :: int
     r3 :: object
+    r4 :: int
 L0:
     y = 0
     r0 = 0
@@ -193,10 +194,12 @@ L1:
     if r0 < r2 goto L2 else goto L4 :: int
 L2:
     r3 = ls[r0] :: list
-    x = unbox(int, r3)
+    r4 = unbox(int, r3)
+    x = r4
     y = y + x :: int
 L3:
     r0 = r0 + r1 :: int
     goto L1
 L4:
     return y
+

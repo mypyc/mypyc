@@ -124,13 +124,15 @@ def f(x: Optional[A]) -> A:
 [out]
 def f(x):
     x :: optional[A]
-    y, r0 :: A
+    y, r0, r1 :: A
 L0:
     y = A()
     if not x is None goto L1 else goto L2 :: object
 L1:
-    y = cast(A, x)
     r0 = cast(A, x)
-    return r0
+    y = r0
+    r1 = cast(A, x)
+    return r1
 L2:
     return y
+
