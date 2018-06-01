@@ -38,7 +38,7 @@ def insert_ref_count_opcodes(ir: FuncIR) -> None:
     This is the entry point to this module.
     """
     cfg = get_cfg(ir.blocks)
-    args = set([CRegister(i) for i in range(len(ir.args))])  # type: Set[Register]
+    args = set(reg for reg, i in ir.env.indexes.items() if i < len(ir.args))
     live = analyze_live_regs(ir.blocks, cfg)
     borrow = analyze_borrowed_arguments(ir.blocks, cfg, args)
     for block in ir.blocks[:]:

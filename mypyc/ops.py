@@ -22,20 +22,7 @@ from mypy.nodes import Var
 
 T = TypeVar('T')
 
-CRegister = NewType('CRegister', int)
 Label = NewType('Label', int)
-Register = Union[CRegister, 'Op']
-
-
-# Unfortunately we have visitors which are statement-like rather than expression-like.
-# It doesn't make sense to have the visitor return Optional[Register] because every
-# method either always returns no register or returns a register.
-#
-# Eventually we may want to separate expression visitors and statement-like visitors at
-# the type level but until then returning INVALID_REGISTER from a statement-like visitor
-# seems acceptable.
-INVALID_REGISTER = CRegister(-99999)
-
 
 # Similarly this is used for placeholder labels which aren't assigned yet (but will
 # be eventually. Its kind of a hack.
@@ -325,28 +312,28 @@ class Environment:
         self.symtable = {}  # type: Dict[Var, Register]
         self.temp_index = 0
 
-    def regs(self) -> Iterable[Register]:
+    def regs(self) -> Iterable['Register']:
         return self.names.keys()
 
-    def add(self, reg: Register, name: str, typ: RType) -> None:
+    def add(self, reg: 'Register', name: str, typ: RType) -> None:
         self.indexes[reg] = len(self.names)
         self.names[reg] = name
         self.types[reg] = typ
 
-    def add_local(self, var: Var, typ: RType) -> Register:
+    def add_local(self, var: Var, typ: RType) -> 'Register':
         assert isinstance(var, Var)
-        reg = CRegister(len(self.names))
+        reg = CRegister(typ, var.line)
 
         self.symtable[var] = reg
         self.add(reg, var.name(), typ)
         return reg
 
-    def lookup(self, var: Var) -> Register:
+    def lookup(self, var: Var) -> 'Register':
         return self.symtable[var]
 
-    def add_temp(self, typ: RType) -> Register:
+    def add_temp(self, typ: RType) -> 'Register':
         assert isinstance(typ, RType)
-        reg = CRegister(len(self.names))
+        reg = CRegister(typ)
         self.add(reg, 'r%d' % self.temp_index, typ)
         self.temp_index += 1
         return reg
@@ -407,21 +394,49 @@ ERR_MAGIC = 1  # Generates magic value (c_error_value) based on target RType on 
 ERR_FALSE = 2  # Generates false (bool) on exception
 
 
-class Op:
+class Value:
     # Source line number
     line = -1
 
     def __init__(self, line: int) -> None:
         self.line = line
 
+    @abstractmethod
+    def to_str(self, env: Environment) -> str:
+        raise NotImplementedError
+
+
+Register = Value
+
+
+class CRegister(Value):
+    # TODO: have an intrinsic name?
+    def __init__(self, type: RType, line: int = -1) -> None:
+        super().__init__(line)
+        self.type = type
+
+    def to_str(self, env: Environment) -> str:
+        return env.names[self]
+
+
+# Unfortunately we have visitors which are statement-like rather than expression-like.
+# It doesn't make sense to have the visitor return Optional[Register] because every
+# method either always returns no register or returns a register.
+#
+# Eventually we may want to separate expression visitors and statement-like visitors at
+# the type level but until then returning INVALID_REGISTER from a statement-like visitor
+# seems acceptable.
+INVALID_REGISTER = CRegister(None)  # type: ignore
+
+
+class Op(Value):
+    def __init__(self, line: int) -> None:
+        super().__init__(line)
+
     def can_raise(self) -> bool:
         # Override this is if Op may raise an exception. Note that currently the fact that
         # only RegisterOps may raise an exception in hard coded in some places.
         return False
-
-    @abstractmethod
-    def to_str(self, env: Environment) -> str:
-        raise NotImplementedError
 
     @abstractmethod
     def accept(self, visitor: 'OpVisitor[T]') -> T:

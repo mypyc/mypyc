@@ -60,7 +60,8 @@ class TestAnalysis(MypycDataSuite):
                     actual = actual[actual.index('L0:'):]
                     cfg = analysis.get_cfg(fn.blocks)
 
-                    args = set([CRegister(i) for i in range(len(fn.args))])  # type: Set[Register]
+                    args = set(reg for reg, i in fn.env.indexes.items() if i < len(fn.args))
+
                     name = testcase.name
                     if name.endswith('_MaybeDefined'):
                         # Forward, maybe
