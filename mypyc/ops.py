@@ -306,34 +306,34 @@ class Environment:
     """Keep track of names and types of registers."""
 
     def __init__(self) -> None:
-        self.indexes = {}  # type: Dict[Register, int]
-        self.names = {}  # type: Dict[Register, str]
-        self.types = {}  # type: Dict[Register, RType]
-        self.symtable = {}  # type: Dict[Var, CRegister]
+        self.indexes = {}  # type: Dict[Value, int]
+        self.names = {}  # type: Dict[Value, str]
+        self.types = {}  # type: Dict[Value, RType]
+        self.symtable = {}  # type: Dict[Var, Register]
         self.temp_index = 0
 
-    def regs(self) -> Iterable['Register']:
+    def regs(self) -> Iterable['Value']:
         return self.names.keys()
 
-    def add(self, reg: 'Register', name: str, typ: RType) -> None:
+    def add(self, reg: 'Value', name: str, typ: RType) -> None:
         self.indexes[reg] = len(self.names)
         self.names[reg] = name
         self.types[reg] = typ
 
-    def add_local(self, var: Var, typ: RType) -> 'CRegister':
+    def add_local(self, var: Var, typ: RType) -> 'Register':
         assert isinstance(var, Var)
-        reg = CRegister(typ, var.line)
+        reg = Register(typ, var.line)
 
         self.symtable[var] = reg
         self.add(reg, var.name(), typ)
         return reg
 
-    def lookup(self, var: Var) -> 'CRegister':
+    def lookup(self, var: Var) -> 'Register':
         return self.symtable[var]
 
-    def add_temp(self, typ: RType) -> 'CRegister':
+    def add_temp(self, typ: RType) -> 'Register':
         assert isinstance(typ, RType)
-        reg = CRegister(typ)
+        reg = Register(typ)
         self.add(reg, 'r%d' % self.temp_index, typ)
         self.temp_index += 1
         return reg
@@ -406,10 +406,7 @@ class Value:
         raise NotImplementedError
 
 
-Register = Value
-
-
-class CRegister(Value):
+class Register(Value):
     # TODO: have an intrinsic name?
     def __init__(self, type: RType, line: int = -1) -> None:
         super().__init__(line)
@@ -420,13 +417,13 @@ class CRegister(Value):
 
 
 # Unfortunately we have visitors which are statement-like rather than expression-like.
-# It doesn't make sense to have the visitor return Optional[Register] because every
-# method either always returns no register or returns a register.
+# It doesn't make sense to have the visitor return Optional[Value] because every
+# method either always returns no value or returns a value.
 #
 # Eventually we may want to separate expression visitors and statement-like visitors at
-# the type level but until then returning INVALID_REGISTER from a statement-like visitor
+# the type level but until then returning INVALID_VALUE from a statement-like visitor
 # seems acceptable.
-INVALID_REGISTER = CRegister(None)  # type: ignore
+INVALID_VALUE = Register(None)  # type: ignore
 
 
 class Op(Value):
@@ -477,7 +474,7 @@ class Branch(Op):
     INT_GE = 15
 
     # Unlike the above, these are unary operations so they only uses the "left" register
-    # ("right" should be INVALID_REGISTER).
+    # ("right" should be INVALID_VALUE).
     BOOL_EXPR = 100
     IS_NONE = 101
     IS_ERROR = 102  # Check for magic c_error_value (works for arbitary types)
@@ -497,7 +494,7 @@ class Branch(Op):
         IS_ERROR: ('is_error(%r)', ''),
     }
 
-    def __init__(self, left: Register, right: Register, true_label: Label,
+    def __init__(self, left: Value, right: Value, true_label: Label,
                  false_label: Label, op: int, line: int = -1) -> None:
         super().__init__(line)
         self.left = left
@@ -509,8 +506,8 @@ class Branch(Op):
         # If not None, the true label should generate a traceback entry (func name, line number)
         self.traceback_entry = None  # type: Optional[Tuple[str, int]]
 
-    def sources(self) -> List[Register]:
-        if self.right != INVALID_REGISTER:
+    def sources(self) -> List[Value]:
+        if self.right != INVALID_VALUE:
             return [self.left, self.right]
         else:
             return [self.left]
@@ -549,7 +546,7 @@ class Branch(Op):
 class Return(Op):
     error_kind = ERR_NEVER
 
-    def __init__(self, reg: Register, line: int = -1) -> None:
+    def __init__(self, reg: Value, line: int = -1) -> None:
         super().__init__(line)
         self.reg = reg
 
@@ -593,30 +590,30 @@ class RegisterOp(Op):
 
     _type = None  # type: Optional[RType]
 
-    def __init__(self, dest: Optional[Register], line: int) -> None:
+    def __init__(self, dest: Optional[Value], line: int) -> None:
         super().__init__(line)
-        assert dest != INVALID_REGISTER
+        assert dest != INVALID_VALUE
         assert self.error_kind != -1, 'error_kind not defined'
         self._dest = dest
 
     # These are read-only property so that subclasses can override them
     # without the Optional.
     @property
-    def dest(self) -> Optional[Register]:
+    def dest(self) -> Optional[Value]:
         return self._dest
     @property
     def type(self) -> Optional[RType]:
         return self._type
 
     @abstractmethod
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         pass
 
     def can_raise(self) -> bool:
         return self.error_kind != ERR_NEVER
 
-    def unique_sources(self) -> List[Register]:
-        result = []  # type: List[Register]
+    def unique_sources(self) -> List[Value]:
+        result = []  # type: List[Value]
         for reg in self.sources():
             if reg not in result:
                 result.append(reg)
@@ -635,7 +632,7 @@ class StrictRegisterOp(RegisterOp):
     # We could do this soundly without any checks by duplicating
     # the fields, but that is kind of silly...
     @property
-    def dest(self) -> Register:
+    def dest(self) -> Value:
         assert self._dest is not None
         return self._dest
     @property
@@ -649,7 +646,7 @@ class IncRef(RegisterOp):
 
     error_kind = ERR_NEVER
 
-    def __init__(self, src: Register, typ: RType, line: int = -1) -> None:
+    def __init__(self, src: Value, typ: RType, line: int = -1) -> None:
         assert typ.is_refcounted
         super().__init__(None, line)
         self.src = src
@@ -661,7 +658,7 @@ class IncRef(RegisterOp):
             s += ' :: {}'.format(short_name(self.target_type.name))
         return s
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return [self.src]
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
@@ -673,7 +670,7 @@ class DecRef(RegisterOp):
 
     error_kind = ERR_NEVER
 
-    def __init__(self, src: Register, typ: RType, line: int = -1) -> None:
+    def __init__(self, src: Value, typ: RType, line: int = -1) -> None:
         assert typ.is_refcounted
         super().__init__(None, line)
         self.src = src
@@ -688,7 +685,7 @@ class DecRef(RegisterOp):
             s += ' :: {}'.format(short_name(self.target_type.name))
         return s
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return [self.src]
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
@@ -703,7 +700,7 @@ class Call(RegisterOp):
 
     error_kind = ERR_MAGIC
 
-    def __init__(self, ret_type: RType, fn: str, args: List[Register], line: int) -> None:
+    def __init__(self, ret_type: RType, fn: str, args: List[Value], line: int) -> None:
         super().__init__(self, line)
         self.fn = fn
         self.args = args
@@ -716,7 +713,7 @@ class Call(RegisterOp):
             s = env.format('%r = ', self.dest) + s
         return s
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return self.args[:]
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
@@ -730,9 +727,9 @@ class MethodCall(RegisterOp):
 
     def __init__(self,
                  ret_type: RType,
-                 obj: Register,
+                 obj: Value,
                  method: str,
-                 args: List[Register],
+                 args: List[Value],
                  receiver_type: RInstance,
                  line: int = -1) -> None:
         super().__init__(self, line)
@@ -749,7 +746,7 @@ class MethodCall(RegisterOp):
             s = env.format('%r = ', self.dest) + s
         return s
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return self.args[:] + [self.obj]
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
@@ -769,7 +766,7 @@ class PyCall(RegisterOp):
 
     error_kind = ERR_MAGIC
 
-    def __init__(self, function: Register, args: List[Register],
+    def __init__(self, function: Value, args: List[Value],
                  line: int) -> None:
         super().__init__(self, line)
         self.function = function
@@ -783,7 +780,7 @@ class PyCall(RegisterOp):
             s = env.format('%r = ', self.dest) + s
         return s + ' :: py'
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return self.args[:] + [self.function]
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
@@ -799,9 +796,9 @@ class PyMethodCall(RegisterOp):
     error_kind = ERR_MAGIC
 
     def __init__(self,
-                 obj: Register,
-                 method: Register,
-                 args: List[Register],
+                 obj: Value,
+                 method: Value,
+                 args: List[Value],
                  line: int = -1) -> None:
         super().__init__(self, line)
         self.obj = obj
@@ -816,7 +813,7 @@ class PyMethodCall(RegisterOp):
             s = env.format('%r = ', self.dest) + s
         return s + ' :: py'
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return self.args[:] + [self.obj, self.method]
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
@@ -828,13 +825,13 @@ class PyGetAttr(StrictRegisterOp):
 
     error_kind = ERR_MAGIC
 
-    def __init__(self, type: RType, left: Register, right: str, line: int) -> None:
+    def __init__(self, type: RType, left: Value, right: str, line: int) -> None:
         super().__init__(line)
         self.left = left
         self.right = right
         self._type = type
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return [self.left]
 
     def to_str(self, env: Environment) -> str:
@@ -849,7 +846,7 @@ class PyGetAttr(StrictRegisterOp):
 
 class EmitterInterface:
     @abstractmethod
-    def reg(self, name: Register) -> str:
+    def reg(self, name: Value) -> str:
         raise NotImplementedError
 
     @abstractmethod
@@ -895,7 +892,7 @@ class PrimitiveOp(RegisterOp):
     """
 
     def __init__(self,
-                 args: List[Register],
+                 args: List[Value],
                  desc: OpDescription,
                  line: int) -> None:
         if not desc.is_var_arg:
@@ -910,7 +907,7 @@ class PrimitiveOp(RegisterOp):
         else:
             self._type = desc.result_type
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return list(self.args)
 
     def __repr__(self) -> str:
@@ -919,7 +916,7 @@ class PrimitiveOp(RegisterOp):
 
     def to_str(self, env: Environment) -> str:
         params = {}  # type: Dict[str, Any]
-        if self.dest is not None and self.dest != INVALID_REGISTER:
+        if self.dest is not None and self.dest != INVALID_VALUE:
             params['dest'] = env.format('%r', self.dest)
         args = [env.format('%r', arg) for arg in self.args]
         params['args'] = args
@@ -935,12 +932,12 @@ class Assign(Op):
 
     error_kind = ERR_NEVER
 
-    def __init__(self, dest: CRegister, src: Register, line: int = -1) -> None:
+    def __init__(self, dest: Register, src: Value, line: int = -1) -> None:
         super().__init__(line)
         self.src = src
         self.target = dest
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return [self.src]
 
     def to_str(self, env: Environment) -> str:
@@ -960,7 +957,7 @@ class LoadInt(StrictRegisterOp):
         self.value = value
         self._type = int_rprimitive
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return []
 
     def to_str(self, env: Environment) -> str:
@@ -979,7 +976,7 @@ class LoadErrorValue(StrictRegisterOp):
         super().__init__(line)
         self._type = rtype
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return []
 
     def to_str(self, env: Environment) -> str:
@@ -994,7 +991,7 @@ class GetAttr(StrictRegisterOp):
 
     error_kind = ERR_MAGIC
 
-    def __init__(self, obj: Register, attr: str,
+    def __init__(self, obj: Value, attr: str,
                  class_type: RInstance,
                  line: int) -> None:
         super().__init__(line)
@@ -1003,7 +1000,7 @@ class GetAttr(StrictRegisterOp):
         self.class_type = class_type
         self._type = class_type.attr_type(attr)
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return [self.obj]
 
     def to_str(self, env: Environment) -> str:
@@ -1018,7 +1015,7 @@ class SetAttr(StrictRegisterOp):
 
     error_kind = ERR_FALSE
 
-    def __init__(self, obj: Register, attr: str, src: Register,
+    def __init__(self, obj: Value, attr: str, src: Value,
                  class_type: RInstance,
                  line: int) -> None:
         super().__init__(line)
@@ -1028,7 +1025,7 @@ class SetAttr(StrictRegisterOp):
         self.class_type = class_type
         self._type = bool_rprimitive
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return [self.obj, self.src]
 
     def to_str(self, env: Environment) -> str:
@@ -1048,7 +1045,7 @@ class LoadStatic(StrictRegisterOp):
         self.identifier = identifier
         self._type = type
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return []
 
     def to_str(self, env: Environment) -> str:
@@ -1063,13 +1060,13 @@ class TupleSet(StrictRegisterOp):
 
     error_kind = ERR_NEVER
 
-    def __init__(self, items: List[Register], typ: RTuple, line: int) -> None:
+    def __init__(self, items: List[Value], typ: RTuple, line: int) -> None:
         super().__init__(line)
         self.items = items
         self.tuple_type = typ
         self._type = typ
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return self.items[:]
 
     def to_str(self, env: Environment) -> str:
@@ -1085,14 +1082,14 @@ class TupleGet(StrictRegisterOp):
 
     error_kind = ERR_NEVER
 
-    def __init__(self, src: Register, index: int, target_type: RType,
+    def __init__(self, src: Value, index: int, target_type: RType,
                  line: int) -> None:
         super().__init__(line)
         self.src = src
         self.index = index
         self._type = target_type
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return [self.src]
 
     def to_str(self, env: Environment) -> str:
@@ -1112,12 +1109,12 @@ class Cast(StrictRegisterOp):
 
     error_kind = ERR_MAGIC
 
-    def __init__(self, src: Register, typ: RType, line: int) -> None:
+    def __init__(self, src: Value, typ: RType, line: int) -> None:
         super().__init__(line)
         self.src = src
         self._type = typ
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return [self.src]
 
     def to_str(self, env: Environment) -> str:
@@ -1136,13 +1133,13 @@ class Box(StrictRegisterOp):
 
     error_kind = ERR_NEVER
 
-    def __init__(self, src: Register, typ: RType, line: int = -1) -> None:
+    def __init__(self, src: Value, typ: RType, line: int = -1) -> None:
         super().__init__(line)
         self.src = src
         self.src_type = typ
         self._type = object_rprimitive
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return [self.src]
 
     def to_str(self, env: Environment) -> str:
@@ -1161,12 +1158,12 @@ class Unbox(StrictRegisterOp):
 
     error_kind = ERR_MAGIC
 
-    def __init__(self, src: Register, typ: RType, line: int) -> None:
+    def __init__(self, src: Value, typ: RType, line: int) -> None:
         super().__init__(line)
         self.src = src
         self._type = typ
 
-    def sources(self) -> List[Register]:
+    def sources(self) -> List[Value]:
         return [self.src]
 
     def to_str(self, env: Environment) -> str:

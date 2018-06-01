@@ -28,7 +28,7 @@ from mypyc.analysis import (
 from mypyc.ops import (
     FuncIR, BasicBlock, Assign, RegisterOp, DecRef, IncRef, Branch, Goto, Environment,
     Return, Op, Label, Cast, Box, Unbox, LoadStatic, RType,
-    Register, CRegister,
+    Value, Register,
 )
 
 
@@ -52,22 +52,22 @@ def insert_ref_count_opcodes(ir: FuncIR) -> None:
         transform_block(block, live.before, live.after, borrow.before, ir.env)
 
 
-def maybe_append_dec_ref(ops: List[Op], dest: Register, env: Environment) -> None:
+def maybe_append_dec_ref(ops: List[Op], dest: Value, env: Environment) -> None:
     rtype = env.types[dest]
     if rtype.is_refcounted:
         ops.append(DecRef(dest, rtype))
 
 
-def maybe_append_inc_ref(ops: List[Op], dest: Register, env: Environment) -> None:
+def maybe_append_inc_ref(ops: List[Op], dest: Value, env: Environment) -> None:
     rtype = env.types[dest]
     if rtype.is_refcounted:
         ops.append(IncRef(dest, rtype))
 
 
 def transform_block(block: BasicBlock,
-                    pre_live: AnalysisDict[Register],
-                    post_live: AnalysisDict[Register],
-                    pre_borrow: AnalysisDict[Register],
+                    pre_live: AnalysisDict[Value],
+                    post_live: AnalysisDict[Value],
+                    pre_borrow: AnalysisDict[Value],
                     env: Environment) -> None:
     old_ops = block.ops
     ops = []  # type: List[Op]
@@ -88,7 +88,7 @@ def transform_block(block: BasicBlock,
                 maybe_append_dec_ref(ops, dest, env)
         elif isinstance(op, RegisterOp):
             # These operations construct a new reference.
-            tmp_reg = None  # type: Optional[Register]
+            tmp_reg = None  # type: Optional[Value]
             if (op.dest not in pre_borrow[key] and
                     op.dest in pre_live[key]):
                 if op.dest not in op.sources():
@@ -121,9 +121,9 @@ def transform_block(block: BasicBlock,
 def insert_branch_inc_and_decrefs(
         block: BasicBlock,
         blocks: List[BasicBlock],
-        pre_live: AnalysisDict[Register],
-        pre_borrow: AnalysisDict[Register],
-        post_borrow: AnalysisDict[Register],
+        pre_live: AnalysisDict[Value],
+        pre_borrow: AnalysisDict[Value],
+        post_borrow: AnalysisDict[Value],
         env: Environment) -> None:
     """Insert inc_refs and/or dec_refs after a branch/goto.
 
@@ -178,11 +178,11 @@ def insert_branch_inc_and_decrefs(
 
 
 def after_branch_decrefs(label: Label,
-                         pre_live: AnalysisDict[Register],
-                         source_borrowed: Set[Register],
-                         source_live_regs: Set[Register],
+                         pre_live: AnalysisDict[Value],
+                         source_borrowed: Set[Value],
+                         source_live_regs: Set[Value],
                          env: Environment,
-                         omitted: Iterable[Register] = ()) -> List[Op]:
+                         omitted: Iterable[Value] = ()) -> List[Op]:
     target_pre_live = pre_live[label, 0]
     decref = source_live_regs - target_pre_live - source_borrowed
     if decref:
@@ -193,8 +193,8 @@ def after_branch_decrefs(label: Label,
 
 
 def after_branch_increfs(label: Label,
-                         pre_borrow: AnalysisDict[Register],
-                         source_borrowed: Set[Register],
+                         pre_borrow: AnalysisDict[Value],
+                         source_borrowed: Set[Value],
                          env: Environment) -> List[Op]:
     target_borrowed = pre_borrow[label, 0]
     incref = source_borrowed - target_borrowed

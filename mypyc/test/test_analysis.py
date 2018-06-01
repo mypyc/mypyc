@@ -14,7 +14,7 @@ from mypy import experiments
 
 from mypyc import analysis
 from mypyc import genops
-from mypyc.ops import format_func, CRegister, Register
+from mypyc.ops import format_func, Register, Value
 from mypyc.test.testutil import (
     ICODE_GEN_BUILTINS, use_custom_builtins, MypycDataSuite, assert_test_output
 )

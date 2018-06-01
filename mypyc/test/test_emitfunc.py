@@ -7,7 +7,7 @@ from mypyc.ops import (
     Environment, BasicBlock, FuncIR, RuntimeArg, RType, Goto, Return, LoadInt, Assign,
     IncRef, DecRef, Branch, Call, Unbox, Box, RTuple, TupleGet, GetAttr, PrimitiveOp,
     RegisterOp,
-    ClassIR, RInstance, SetAttr, Op, Label, Register, int_rprimitive, bool_rprimitive,
+    ClassIR, RInstance, SetAttr, Op, Label, Value, int_rprimitive, bool_rprimitive,
     list_rprimitive, dict_rprimitive, object_rprimitive,
 )
 from mypyc.emit import Emitter, EmitterContext
@@ -241,9 +241,9 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
 
     def assert_emit_binary_op(self,
                               op: str,
-                              dest: Register,
-                              left: Register,
-                              right: Register,
+                              dest: Value,
+                              left: Value,
+                              right: Value,
                               expected: str) -> None:
         ops = binary_ops[op]
         left_type = self.env.types[left]

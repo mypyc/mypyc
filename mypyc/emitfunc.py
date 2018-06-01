@@ -7,7 +7,7 @@ from mypyc.emit import Emitter
 from mypyc.ops import (
     FuncIR, OpVisitor, Goto, Branch, Return, Assign, LoadInt, LoadErrorValue, GetAttr,
     SetAttr, LoadStatic, TupleGet, TupleSet, Call, PyCall, PyGetAttr, IncRef, DecRef, Box, Cast,
-    Unbox, Label, Register, CRegister, RType, RTuple, MethodCall, PyMethodCall,
+    Unbox, Label, Value, Register, RType, RTuple, MethodCall, PyMethodCall,
     PrimitiveOp, EmitterInterface,
 )
 
@@ -213,7 +213,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         assert op.type is not None
         self.emit_inc_ref(dest, op.type)
 
-    def get_dest_assign(self, dest: Optional[Register]) -> str:
+    def get_dest_assign(self, dest: Optional[Value]) -> str:
         if dest is not None:
             return self.reg(dest) + ' = '
         else:
@@ -278,10 +278,10 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
     def label(self, label: Label) -> str:
         return self.emitter.label(label)
 
-    def reg(self, reg: Register) -> str:
+    def reg(self, reg: Value) -> str:
         return self.emitter.reg(reg)
 
-    def type(self, reg: Register) -> RType:
+    def type(self, reg: Value) -> RType:
         return self.env.types[reg]
 
     def emit_line(self, line: str) -> None:

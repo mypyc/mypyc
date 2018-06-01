@@ -5,7 +5,7 @@ from abc import abstractmethod
 from typing import Dict, Tuple, List, Set, TypeVar, Iterator, Generic, Optional, Iterable
 
 from mypyc.ops import (
-    Register, CRegister,
+    Value, Register,
     BasicBlock, OpVisitor, Assign, LoadInt, LoadErrorValue, RegisterOp, Goto,
     Branch, Return, Call, Environment, Box, Unbox, Cast, Op, Unreachable,
     TupleGet, TupleSet, GetAttr, SetAttr, PyCall, LoadStatic, PyGetAttr, Label,
@@ -76,7 +76,7 @@ class AnalysisResult(Generic[T]):
     def __str__(self) -> str:
         return 'before: %s\nafter: %s\n' % (self.before, self.after)
 
-GenAndKill = Tuple[Set[Register], Set[Register]]
+GenAndKill = Tuple[Set[Value], Set[Value]]
 
 
 class BaseAnalysisVisitor(OpVisitor[GenAndKill]):
@@ -162,7 +162,7 @@ class MaybeDefinedVisitor(BaseAnalysisVisitor):
 
 def analyze_maybe_defined_regs(blocks: List[BasicBlock],
                                cfg: CFG,
-                               initial_defined: Set[Register]) -> AnalysisResult[Register]:
+                               initial_defined: Set[Value]) -> AnalysisResult[Value]:
     """Calculate potentially defined registers at each CFG location.
 
     A register is defined if it has a value along some path from the initial location.
@@ -200,8 +200,8 @@ class MustDefinedVisitor(BaseAnalysisVisitor):
 def analyze_must_defined_regs(
         blocks: List[BasicBlock],
         cfg: CFG,
-        initial_defined: Set[Register],
-        regs: Iterable[Register]) -> AnalysisResult[Register]:
+        initial_defined: Set[Value],
+        regs: Iterable[Value]) -> AnalysisResult[Value]:
     """Calculate always defined registers at each CFG location.
 
     A register is defined if it has a value along all paths from the initial location.
@@ -216,7 +216,7 @@ def analyze_must_defined_regs(
 
 
 class BorrowedArgumentsVisitor(BaseAnalysisVisitor):
-    def __init__(self, args: Set[Register]) -> None:
+    def __init__(self, args: Set[Value]) -> None:
         self.args = args
 
     def visit_branch(self, op: Branch) -> GenAndKill:
@@ -239,7 +239,7 @@ class BorrowedArgumentsVisitor(BaseAnalysisVisitor):
 def analyze_borrowed_arguments(
         blocks: List[BasicBlock],
         cfg: CFG,
-        args: Set[Register]) -> AnalysisResult[Register]:
+        args: Set[Value]) -> AnalysisResult[Value]:
     """Calculate arguments that can use references borrowed from the caller.
 
     When assigning to an argument, it no longer is borrowed.
@@ -272,7 +272,7 @@ class UndefinedVisitor(BaseAnalysisVisitor):
 def analyze_undefined_regs(blocks: List[BasicBlock],
                            cfg: CFG,
                            env: Environment,
-                           initial_defined: Set[Register]) -> AnalysisResult[Register]:
+                           initial_defined: Set[Value]) -> AnalysisResult[Value]:
     """Calculate potentially undefined registers at each CFG location.
 
     A register is undefined if there is some path from initial block
@@ -311,7 +311,7 @@ class LivenessVisitor(BaseAnalysisVisitor):
 
 
 def analyze_live_regs(blocks: List[BasicBlock],
-                      cfg: CFG) -> AnalysisResult[Register]:
+                      cfg: CFG) -> AnalysisResult[Value]:
     """Calculate live registers at each CFG location.
 
     A register is live at a location if it can be read along some CFG path starting

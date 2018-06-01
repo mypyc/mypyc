@@ -13,7 +13,7 @@ from typing import Optional, List
 
 from mypyc.ops import (
     FuncIR, BasicBlock, Label, LoadErrorValue, Return, Goto, Branch, ERR_NEVER, ERR_MAGIC,
-    ERR_FALSE, INVALID_REGISTER, RegisterOp
+    ERR_FALSE, INVALID_VALUE, RegisterOp
 )
 
 
@@ -75,7 +75,7 @@ def split_blocks_at_errors(blocks: List[BasicBlock],
                 # indicated by a special value stored in a register.
                 assert op.dest is not None, op
 
-                branch = Branch(op.dest, INVALID_REGISTER,
+                branch = Branch(op.dest, INVALID_VALUE,
                                 true_label=error_label,
                                 false_label=Label(new_block.label + 1),
                                 op=variant,

@@ -5,7 +5,7 @@ from typing import List, Set, Dict, Optional
 
 from mypyc.common import REG_PREFIX
 from mypyc.ops import (
-    Environment, Label, Register, CRegister, RType, RTuple, RInstance, ROptional,
+    Environment, Label, Value, Register, RType, RTuple, RInstance, ROptional,
     RPrimitive, type_struct_name, is_int_rprimitive, is_bool_rprimitive, short_name,
     is_list_rprimitive, is_dict_rprimitive, is_tuple_rprimitive, is_none_rprimitive,
     object_rprimitive, is_str_rprimitive
@@ -51,7 +51,7 @@ class Emitter:
     def label(self, label: Label) -> str:
         return 'CPyL%d' % label
 
-    def reg(self, reg: Register) -> str:
+    def reg(self, reg: Value) -> str:
         name = self.env.names[reg]
         return REG_PREFIX + name
 
