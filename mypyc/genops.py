@@ -547,10 +547,9 @@ class IRBuilder(NodeVisitor[Value]):
         return INVALID_VALUE
 
     def visit_unary_expr(self, expr: UnaryExpr) -> Value:
-        etype = self.node_type(expr.expr)
         ereg = self.accept(expr.expr)
         for desc in unary_ops.get(expr.op, []):
-            if is_subtype(etype, desc.arg_types[0]):
+            if is_subtype(ereg.type, desc.arg_types[0]):
                 assert desc.result_type is not None
                 target = self.add(PrimitiveOp([ereg], desc, expr.line))
                 break
@@ -731,10 +730,9 @@ class IRBuilder(NodeVisitor[Value]):
         # Gen the args
         fullname = expr.callee.fullname
         args = [self.accept(arg) for arg in expr.args]
-        arg_types = [self.node_type(arg) for arg in expr.args]
 
         if fullname == 'builtins.len' and len(expr.args) == 1 and expr.arg_kinds == [ARG_POS]:
-            expr_rtype = arg_types[0]
+            expr_rtype = args[0].type
             if isinstance(expr_rtype, RTuple):
                 # len() of fixed-length tuple can be trivially determined statically.
                 return self.add(LoadInt(len(expr_rtype.types)))
@@ -744,8 +742,8 @@ class IRBuilder(NodeVisitor[Value]):
         if fullname is not None:
             for desc in func_ops.get(fullname, []):
                 if len(args) == len(desc.arg_types) and expr.arg_kinds == [ARG_POS] * len(args):
-                    for actual_arg, formal_arg in zip(arg_types, desc.arg_types):
-                        if not is_subtype(actual_arg, formal_arg):
+                    for actual_arg, formal_arg_type in zip(args, desc.arg_types):
+                        if not is_subtype(actual_arg.type, formal_arg_type):
                             break
                     else:
                         assert desc.result_type is not None  # TODO: Support no return value
