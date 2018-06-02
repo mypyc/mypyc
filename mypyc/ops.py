@@ -421,6 +421,7 @@ class Value:
     def to_str(self, env: Environment) -> str:
         raise NotImplementedError
 
+
 class Register(Value):
     def __init__(self, type: RType, line: int = -1) -> None:
         super().__init__(line)
@@ -433,6 +434,7 @@ class Register(Value):
     def is_void(self) -> bool:
         return False
 
+
 # Unfortunately we have visitors which are statement-like rather than expression-like.
 # It doesn't make sense to have the visitor return Optional[Value] because every
 # method either always returns no value or returns a value.
@@ -440,7 +442,7 @@ class Register(Value):
 # Eventually we may want to separate expression visitors and statement-like visitors at
 # the type level but until then returning INVALID_VALUE from a statement-like visitor
 # seems acceptable.
-INVALID_VALUE = Register(None)  # type: ignore
+INVALID_VALUE = Register(void_rtype)
 
 
 class Op(Value):
