@@ -332,15 +332,15 @@ class IRBuilder(NodeVisitor[Value]):
             # Indexed assignment x[y] = e
             base_type = self.node_type(lvalue.base)
             index_type = self.node_type(lvalue.index)
-            base_reg = self.accept(lvalue.base)
-            index_reg = self.accept(lvalue.index)
-            if is_list_rprimitive(base_type) and is_int_rprimitive(index_type):
+            base = self.accept(lvalue.base)
+            index = self.accept(lvalue.index)
+            if is_list_rprimitive(base.type) and is_int_rprimitive(index.type):
                 # Indexed list set
-                return AssignmentTargetIndex(base_reg, index_reg, base_type)
+                return AssignmentTargetIndex(base, index, base.type)
             elif is_dict_rprimitive(base_type):
                 # Indexed dict set
-                boxed_index = self.box(index_reg, index_type)
-                return AssignmentTargetIndex(base_reg, boxed_index, base_type)
+                boxed_index = self.box(index, index.type)
+                return AssignmentTargetIndex(base, boxed_index, base.type)
         elif isinstance(lvalue, MemberExpr):
             # Attribute assignment x.y = e
             obj_type = self.node_type(lvalue.expr)
