@@ -292,14 +292,13 @@ class IRBuilder(NodeVisitor[Value]):
             # This is actually a variable annotation without initializer. Don't generate
             # an assignment but we need to call get_assignment_target since it adds a
             # name binding as a side effect.
-            self.get_assignment_target(lvalue, declare_new=True)
+            self.get_assignment_target(lvalue)
             return INVALID_VALUE
-        self.assign(lvalue, stmt.rvalue,
-                    declare_new=(stmt.type is not None))
+        self.assign(lvalue, stmt.rvalue)
         return INVALID_VALUE
 
     def visit_operator_assignment_stmt(self, stmt: OperatorAssignmentStmt) -> Value:
-        target = self.get_assignment_target(stmt.lvalue, declare_new=False)
+        target = self.get_assignment_target(stmt.lvalue)
 
         if isinstance(target, AssignmentTargetRegister):
             rreg = self.accept(stmt.rvalue)
@@ -310,20 +309,19 @@ class IRBuilder(NodeVisitor[Value]):
         # NOTE: List index not supported yet for compound assignments.
         assert False, 'Unsupported lvalue: %r'
 
-    def get_assignment_target(self, lvalue: Lvalue, declare_new: bool) -> AssignmentTarget:
+    def get_assignment_target(self, lvalue: Lvalue) -> AssignmentTarget:
         if isinstance(lvalue, NameExpr):
             # Assign to local variable.
             assert lvalue.kind == LDEF
-            if lvalue.is_new_def or declare_new:
+            assert isinstance(lvalue.node, Var)  # TODO: Can this fail?
+            if lvalue.node not in self.environment.symtable:
                 # Define a new variable.
-                assert isinstance(lvalue.node, Var)  # TODO: Can this fail?
-                lvalue_num = self.environment.add_local(lvalue.node, self.node_type(lvalue))
+                lvalue_reg = self.environment.add_local(lvalue.node, self.node_type(lvalue))
             else:
                 # Assign to a previously defined variable.
-                assert isinstance(lvalue.node, Var)  # TODO: Can this fail?
-                lvalue_num = self.environment.lookup(lvalue.node)
+                lvalue_reg = self.environment.lookup(lvalue.node)
 
-            return AssignmentTargetRegister(lvalue_num)
+            return AssignmentTargetRegister(lvalue_reg)
         elif isinstance(lvalue, IndexExpr):
             # Indexed assignment x[y] = e
             base = self.accept(lvalue.base)
@@ -374,9 +372,8 @@ class IRBuilder(NodeVisitor[Value]):
 
     def assign(self,
                lvalue: Lvalue,
-               rvalue: Expression,
-               declare_new: bool = False) -> AssignmentTarget:
-        target = self.get_assignment_target(lvalue, declare_new)
+               rvalue: Expression) -> AssignmentTarget:
+        target = self.get_assignment_target(lvalue)
         needs_box = self.node_type(rvalue).is_unboxed and not target.type.is_unboxed
         self.assign_to_target(target, rvalue, needs_box)
         return target
