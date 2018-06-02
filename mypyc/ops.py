@@ -626,16 +626,6 @@ class RegisterOp(Op):
         return result
 
 
-class StrictRegisterOp(RegisterOp):
-    """An operation that can be written as r1 = f(r2, ..., rn), where r1 must exist.
-
-    Like RegisterOp but without the option of r1 being None.
-    """
-
-    def __init__(self, line: int) -> None:
-        super().__init__(line)
-
-
 class IncRef(RegisterOp):
     """inc_ref r"""
 
@@ -815,7 +805,7 @@ class PyMethodCall(RegisterOp):
         return visitor.visit_py_method_call(self)
 
 
-class PyGetAttr(StrictRegisterOp):
+class PyGetAttr(RegisterOp):
     """dest = left.right :: py"""
 
     error_kind = ERR_MAGIC
@@ -942,7 +932,7 @@ class Assign(Op):
         return visitor.visit_assign(self)
 
 
-class LoadInt(StrictRegisterOp):
+class LoadInt(RegisterOp):
     """dest = int"""
 
     error_kind = ERR_NEVER
@@ -962,7 +952,7 @@ class LoadInt(StrictRegisterOp):
         return visitor.visit_load_int(self)
 
 
-class LoadErrorValue(StrictRegisterOp):
+class LoadErrorValue(RegisterOp):
     """dest = <error value for type>"""
 
     error_kind = ERR_NEVER
@@ -981,7 +971,7 @@ class LoadErrorValue(StrictRegisterOp):
         return visitor.visit_load_error_value(self)
 
 
-class GetAttr(StrictRegisterOp):
+class GetAttr(RegisterOp):
     """dest = obj.attr (for a native object)"""
 
     error_kind = ERR_MAGIC
@@ -1005,7 +995,7 @@ class GetAttr(StrictRegisterOp):
         return visitor.visit_get_attr(self)
 
 
-class SetAttr(StrictRegisterOp):
+class SetAttr(RegisterOp):
     """obj.attr = src (for a native object)"""
 
     error_kind = ERR_FALSE
@@ -1030,7 +1020,7 @@ class SetAttr(StrictRegisterOp):
         return visitor.visit_set_attr(self)
 
 
-class LoadStatic(StrictRegisterOp):
+class LoadStatic(RegisterOp):
     """dest = name :: static"""
 
     error_kind = ERR_NEVER
@@ -1050,7 +1040,7 @@ class LoadStatic(StrictRegisterOp):
         return visitor.visit_load_static(self)
 
 
-class TupleSet(StrictRegisterOp):
+class TupleSet(RegisterOp):
     """dest = (reg, ...) (for fixed-length tuple)"""
 
     error_kind = ERR_NEVER
@@ -1072,7 +1062,7 @@ class TupleSet(StrictRegisterOp):
         return visitor.visit_tuple_set(self)
 
 
-class TupleGet(StrictRegisterOp):
+class TupleGet(RegisterOp):
     """dest = src[n] (for fixed-length tuple)"""
 
     error_kind = ERR_NEVER
@@ -1094,7 +1084,7 @@ class TupleGet(StrictRegisterOp):
         return visitor.visit_tuple_get(self)
 
 
-class Cast(StrictRegisterOp):
+class Cast(RegisterOp):
     """dest = cast(type, src)
 
     Perform a runtime type check (no representation or value conversion).
@@ -1119,7 +1109,7 @@ class Cast(StrictRegisterOp):
         return visitor.visit_cast(self)
 
 
-class Box(StrictRegisterOp):
+class Box(RegisterOp):
     """dest = box(type, src)
 
     This converts from a potentially unboxed representation to a straight Python object.
@@ -1144,7 +1134,7 @@ class Box(StrictRegisterOp):
         return visitor.visit_box(self)
 
 
-class Unbox(StrictRegisterOp):
+class Unbox(RegisterOp):
     """dest = unbox(type, src)
 
     This is similar to a cast, but it also changes to a (potentially) unboxed runtime
