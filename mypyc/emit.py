@@ -52,8 +52,7 @@ class Emitter:
         return 'CPyL%d' % label
 
     def reg(self, reg: Value) -> str:
-        name = self.env.names[reg]
-        return REG_PREFIX + name
+        return REG_PREFIX + reg.name
 
     def emit_line(self, line: str = '') -> None:
         if line.startswith('}'):

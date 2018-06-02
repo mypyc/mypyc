@@ -38,13 +38,13 @@ def generate_native_function(fn: FuncIR, emitter: Emitter, source_path: str) -> 
     declarations.emit_line('{} {{'.format(native_function_header(fn)))
     body.indent()
 
-    for r in fn.env.names.keys():
-        if fn.env.indexes[r] < len(fn.args):
+    for r, i in fn.env.indexes.items():
+        if i < len(fn.args):
             continue  # skip the arguments
         ctype = fn.env.types[r].ctype
         declarations.emit_line('{ctype} {prefix}{name};'.format(ctype=ctype,
                                                                 prefix=REG_PREFIX,
-                                                                name=fn.env.names[r]))
+                                                                name=r.name))
 
     for block in fn.blocks:
         body.emit_label(block.label)

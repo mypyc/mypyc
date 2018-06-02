@@ -279,7 +279,7 @@ def analyze_undefined_regs(blocks: List[BasicBlock],
     where it has an undefined value.
     """
     initial_undefined = {reg
-                         for reg in env.names.keys()
+                         for reg in env.regs()
                          if reg not in initial_defined}
     return run_analysis(blocks=blocks,
                         cfg=cfg,

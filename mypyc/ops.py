@@ -307,17 +307,16 @@ class Environment:
 
     def __init__(self) -> None:
         self.indexes = {}  # type: Dict[Value, int]
-        self.names = {}  # type: Dict[Value, str]
         self.types = {}  # type: Dict[Value, RType]
         self.symtable = {}  # type: Dict[Var, Register]
         self.temp_index = 0
 
     def regs(self) -> Iterable['Value']:
-        return self.names.keys()
+        return self.indexes.keys()
 
     def add(self, reg: 'Value', name: str, typ: RType) -> None:
-        self.indexes[reg] = len(self.names)
-        self.names[reg] = name
+        reg.name = name
+        self.indexes[reg] = len(self.indexes)
         self.types[reg] = typ
 
     def add_local(self, var: Var, typ: RType) -> 'Register':
@@ -357,7 +356,7 @@ class Environment:
                 typespec = fmt[n + 1]
                 arg = arglist.pop(0)
                 if typespec == 'r':
-                    result.append(self.names[arg])
+                    result.append(arg.name)
                 elif typespec == 'd':
                     result.append('%d' % arg)
                 elif typespec == 'l':
@@ -374,7 +373,7 @@ class Environment:
     def to_lines(self) -> List[str]:
         result = []
         i = 0
-        names = [self.names[k] for k in self.regs()]
+        names = [k.name for k in self.regs()]
         types = [self.types[k] for k in self.regs()]
 
         n = len(names)
@@ -397,6 +396,7 @@ ERR_FALSE = 2  # Generates false (bool) on exception
 class Value:
     # Source line number
     line = -1
+    name = ''
 
     def __init__(self, line: int) -> None:
         self.line = line
@@ -416,7 +416,7 @@ class Register(Value):
         self.type = type
 
     def to_str(self, env: Environment) -> str:
-        return env.names[self]
+        return self.name
 
     @property
     def is_void(self) -> bool:
