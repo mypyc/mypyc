@@ -53,13 +53,13 @@ def insert_ref_count_opcodes(ir: FuncIR) -> None:
 
 
 def maybe_append_dec_ref(ops: List[Op], dest: Value, env: Environment) -> None:
-    rtype = env.types[dest]
+    rtype = dest.type
     if rtype.is_refcounted:
         ops.append(DecRef(dest, rtype))
 
 
 def maybe_append_inc_ref(ops: List[Op], dest: Value, env: Environment) -> None:
-    rtype = env.types[dest]
+    rtype = dest.type
     if rtype.is_refcounted:
         ops.append(IncRef(dest, rtype))
 
@@ -94,7 +94,7 @@ def transform_block(block: BasicBlock,
                 if op not in op.sources():
                     maybe_append_dec_ref(ops, op, env)
                 else:
-                    tmp_reg = env.add_temp(env.types[op])
+                    tmp_reg = env.add_temp(op.type)
                     ops.append(Assign(tmp_reg, op))
             ops.append(op)
             for src in op.unique_sources():
@@ -186,9 +186,9 @@ def after_branch_decrefs(label: Label,
     target_pre_live = pre_live[label, 0]
     decref = source_live_regs - target_pre_live - source_borrowed
     if decref:
-        return [DecRef(reg, env.types[reg])
+        return [DecRef(reg, reg.type)
                 for reg in sorted(decref, key=lambda r: env.indexes[r])
-                if env.types[reg].is_refcounted and reg not in omitted]
+                if reg.type.is_refcounted and reg not in omitted]
     return []
 
 
@@ -199,9 +199,9 @@ def after_branch_increfs(label: Label,
     target_borrowed = pre_borrow[label, 0]
     incref = source_borrowed - target_borrowed
     if incref:
-        return [IncRef(reg, env.types[reg])
+        return [IncRef(reg, reg.type)
                 for reg in sorted(incref, key=lambda r: env.indexes[r])
-                if env.types[reg].is_refcounted]
+                if reg.type.is_refcounted]
     return []
 
 

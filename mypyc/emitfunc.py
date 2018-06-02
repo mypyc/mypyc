@@ -41,7 +41,7 @@ def generate_native_function(fn: FuncIR, emitter: Emitter, source_path: str) -> 
     for r, i in fn.env.indexes.items():
         if i < len(fn.args):
             continue  # skip the arguments
-        ctype = fn.env.types[r].ctype
+        ctype = r.type.ctype
         declarations.emit_line('{ctype} {prefix}{name};'.format(ctype=ctype,
                                                                 prefix=REG_PREFIX,
                                                                 name=r.name))
@@ -95,7 +95,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
             compare = '!=' if op.negated else '=='
             cond = '{} {} Py_None'.format(self.reg(op.left), compare)
         elif op.op == Branch.IS_ERROR:
-            typ = self.env.types[op.left]
+            typ = op.left.type
             compare = '!=' if op.negated else '=='
             if isinstance(typ, RTuple):
                 # TODO: What about empty tuple?
@@ -130,7 +130,6 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         )
 
     def visit_return(self, op: Return) -> None:
-        typ = self.type(op.reg)
         regstr = self.reg(op.reg)
         self.emit_line('return %s;' % regstr)
 
@@ -280,9 +279,6 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
 
     def reg(self, reg: Value) -> str:
         return self.emitter.reg(reg)
-
-    def type(self, reg: Value) -> RType:
-        return self.env.types[reg]
 
     def emit_line(self, line: str) -> None:
         self.emitter.emit_line(line)

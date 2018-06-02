@@ -246,11 +246,9 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                               right: Value,
                               expected: str) -> None:
         ops = binary_ops[op]
-        left_type = self.env.types[left]
-        right_type = self.env.types[right]
         for desc in ops:
-            if (is_subtype(left_type, desc.arg_types[0])
-                    and is_subtype(right_type, desc.arg_types[1])):
+            if (is_subtype(left.type, desc.arg_types[0])
+                    and is_subtype(right.type, desc.arg_types[1])):
                 self.assert_emit(PrimitiveOp([left, right], desc, 55), expected)
                 break
         else:

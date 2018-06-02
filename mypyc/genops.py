@@ -306,7 +306,7 @@ class IRBuilder(NodeVisitor[Value]):
         target = self.get_assignment_target(stmt.lvalue, declare_new=False)
 
         if isinstance(target, AssignmentTargetRegister):
-            ltype = self.environment.types[target.register]
+            ltype = target.register.type
             rtype = self.node_type(stmt.rvalue)
             rreg = self.accept(stmt.rvalue)
             res = self.binary_op(ltype, target.register, rtype, rreg, stmt.op, stmt.line)
@@ -706,7 +706,7 @@ class IRBuilder(NodeVisitor[Value]):
                 target_type: RType, line: int) -> Value:
         arg_boxes = [] # type: List[Value]
         for arg_reg in args:
-            arg_boxes.append(self.box(arg_reg, self.environment.types[arg_reg]))
+            arg_boxes.append(self.box(arg_reg, arg_reg.type))
 
         target_box = self.add(PyCall(function, arg_boxes, line))
         return self.unbox_or_cast(target_box, target_type, line)
@@ -719,7 +719,7 @@ class IRBuilder(NodeVisitor[Value]):
                        line: int) -> Value:
         arg_boxes = [] # type: List[Value]
         for arg_reg in args:
-            arg_boxes.append(self.box(arg_reg, self.environment.types[arg_reg]))
+            arg_boxes.append(self.box(arg_reg, arg_reg.type))
 
         target_box = self.add(PyMethodCall(obj, method, arg_boxes))
         return self.unbox_or_cast(target_box, target_type, line)
@@ -733,7 +733,7 @@ class IRBuilder(NodeVisitor[Value]):
         formal_arg_types = [self.type_to_rtype(t) for t in callee_type.arg_types]
         coerced_arg_regs = []
         for reg, arg_type in zip(args, formal_arg_types):
-            typ = self.environment.types[reg]
+            typ = reg.type
             reg = self.coerce(reg, typ, arg_type, line)
             coerced_arg_regs.append(reg)
         return coerced_arg_regs
@@ -850,8 +850,8 @@ class IRBuilder(NodeVisitor[Value]):
 
         Return None if no translation found; otherwise return the target register.
         """
-        base_type = self.environment.types[base_reg]
-        arg_types = [self.environment.types[arg] for arg in args]
+        base_type = base_reg.type
+        arg_types = [arg.type for arg in args]
         fullname = '%s.%s' % (base_type.name, name)
         for desc in method_ops.get(fullname, []):
             if (is_subtype(base_type, desc.arg_types[0])
@@ -892,7 +892,7 @@ class IRBuilder(NodeVisitor[Value]):
         items = []
         for item_expr, item_type in zip(expr.items, tuple_type.types):
             reg = self.accept(item_expr)
-            reg = self.coerce(reg, self.environment.types[reg], item_type, item_expr.line)
+            reg = self.coerce(reg, reg.type, item_type, item_expr.line)
             items.append(reg)
         return self.add(TupleSet(items, tuple_type, expr.line))
 
@@ -975,7 +975,7 @@ class IRBuilder(NodeVisitor[Value]):
                     target = self.binary_op(ltype, left, rtype, right, 'in', e.line)
                 else:
                     target = self.binary_op(ltype, left, rtype, right, op, e.line)
-                target = self.coerce(target, self.environment.types[target],
+                target = self.coerce(target, target.type,
                                      bool_rprimitive, e.line)
                 branch = Branch(target, INVALID_VALUE, INVALID_LABEL, INVALID_LABEL,
                                 Branch.BOOL_EXPR)
@@ -1035,7 +1035,7 @@ class IRBuilder(NodeVisitor[Value]):
         coerced = []
         for i, arg in enumerate(args):
             formal_type = self.op_arg_type(desc, i)
-            arg = self.coerce(arg, self.environment.types[arg], formal_type, line)
+            arg = self.coerce(arg, arg.type, formal_type, line)
             coerced.append(arg)
         return self.add(PrimitiveOp(coerced, desc, line))
 
