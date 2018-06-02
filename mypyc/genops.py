@@ -606,18 +606,15 @@ class IRBuilder(NodeVisitor[Value]):
         assert False, 'Unsupported binary operation'
 
     def visit_index_expr(self, expr: IndexExpr) -> Value:
-        base_rtype = self.node_type(expr.base)
-        base_reg = self.accept(expr.base)
-        target_type = self.node_type(expr)
+        base = self.accept(expr.base)
 
-        if isinstance(base_rtype, RTuple):
+        if isinstance(base.type, RTuple):
             assert isinstance(expr.index, IntExpr)  # TODO
-            return self.add(TupleGet(base_reg, expr.index.value,
-                                     target_type, expr.line))
+            return self.add(TupleGet(base, expr.index.value, expr.line))
 
         index_reg = self.accept(expr.index)
         target_reg = self.translate_special_method_call(
-            base_reg,
+            base,
             '__getitem__',
             [index_reg],
             self.node_type(expr),
@@ -869,7 +866,7 @@ class IRBuilder(NodeVisitor[Value]):
         for item_expr, item_type in zip(expr.items, tuple_type.types):
             reg = self.accept(item_expr)
             items.append(self.coerce(reg, item_type, item_expr.line))
-        return self.add(TupleSet(items, tuple_type, expr.line))
+        return self.add(TupleSet(items, expr.line))
 
     def visit_dict_expr(self, expr: DictExpr) -> Value:
         assert not expr.items  # TODO

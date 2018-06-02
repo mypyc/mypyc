@@ -34,6 +34,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.o2 = self.env.add_local(Var('o2'), object_rprimitive)
         self.d = self.env.add_local(Var('d'), dict_rprimitive)
         self.b = self.env.add_local(Var('b'), bool_rprimitive)
+        self.t = self.env.add_local(Var('t'), RTuple([int_rprimitive, bool_rprimitive]))
         self.context = EmitterContext()
         self.emitter = Emitter(self.context, self.env)
         self.declarations = Emitter(self.context, self.env)
@@ -52,7 +53,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          "cpy_r_r0 = 10;")
 
     def test_tuple_get(self) -> None:
-        self.assert_emit(TupleGet(self.n, 1, bool_rprimitive, 0), 'cpy_r_r0 = cpy_r_n.f1;')
+        self.assert_emit(TupleGet(self.t, 1, 0), 'cpy_r_r0 = cpy_r_t.f1;')
 
     def test_load_None(self) -> None:
         self.assert_emit(PrimitiveOp([], none_op, 0),

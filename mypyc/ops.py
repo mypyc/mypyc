@@ -1047,11 +1047,11 @@ class TupleSet(RegisterOp):
 
     error_kind = ERR_NEVER
 
-    def __init__(self, items: List[Value], typ: RTuple, line: int) -> None:
+    def __init__(self, items: List[Value], line: int) -> None:
         super().__init__(line)
         self.items = items
-        self.tuple_type = typ
-        self.type = typ
+        self.tuple_type = RTuple([arg.type for arg in items])
+        self.type = self.tuple_type
 
     def sources(self) -> List[Value]:
         return self.items[:]
@@ -1069,12 +1069,12 @@ class TupleGet(RegisterOp):
 
     error_kind = ERR_NEVER
 
-    def __init__(self, src: Value, index: int, target_type: RType,
-                 line: int) -> None:
+    def __init__(self, src: Value, index: int, line: int) -> None:
         super().__init__(line)
         self.src = src
         self.index = index
-        self.type = target_type
+        assert isinstance(src.type, RTuple), "TupleGet only operates on tuples"
+        self.type = src.type.types[index]
 
     def sources(self) -> List[Value]:
         return [self.src]
