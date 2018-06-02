@@ -53,15 +53,13 @@ def insert_ref_count_opcodes(ir: FuncIR) -> None:
 
 
 def maybe_append_dec_ref(ops: List[Op], dest: Value) -> None:
-    rtype = dest.type
-    if rtype.is_refcounted:
-        ops.append(DecRef(dest, rtype))
+    if dest.type.is_refcounted:
+        ops.append(DecRef(dest))
 
 
 def maybe_append_inc_ref(ops: List[Op], dest: Value) -> None:
-    rtype = dest.type
-    if rtype.is_refcounted:
-        ops.append(IncRef(dest, rtype))
+    if dest.type.is_refcounted:
+        ops.append(IncRef(dest))
 
 
 def transform_block(block: BasicBlock,
@@ -186,7 +184,7 @@ def after_branch_decrefs(label: Label,
     target_pre_live = pre_live[label, 0]
     decref = source_live_regs - target_pre_live - source_borrowed
     if decref:
-        return [DecRef(reg, reg.type)
+        return [DecRef(reg)
                 for reg in sorted(decref, key=lambda r: env.indexes[r])
                 if reg.type.is_refcounted and reg not in omitted]
     return []
@@ -199,7 +197,7 @@ def after_branch_increfs(label: Label,
     target_borrowed = pre_borrow[label, 0]
     incref = source_borrowed - target_borrowed
     if incref:
-        return [IncRef(reg, reg.type)
+        return [IncRef(reg)
                 for reg in sorted(incref, key=lambda r: env.indexes[r])
                 if reg.type.is_refcounted]
     return []

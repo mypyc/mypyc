@@ -35,7 +35,8 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.d = self.env.add_local(Var('d'), dict_rprimitive)
         self.b = self.env.add_local(Var('b'), bool_rprimitive)
         self.t = self.env.add_local(Var('t'), RTuple([int_rprimitive, bool_rprimitive]))
-
+        self.tt = self.env.add_local(
+            Var('tt'), RTuple([RTuple([int_rprimitive, bool_rprimitive]), bool_rprimitive]))
         ir = ClassIR('A', [('x', bool_rprimitive),
                            ('y', int_rprimitive)])
         self.r = self.env.add_local(Var('r'), RInstance(ir))
@@ -132,20 +133,18 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          "cpy_r_r0 = CPyDef_myfn(cpy_r_m, cpy_r_k);")
 
     def test_inc_ref(self) -> None:
-        self.assert_emit(IncRef(self.m, int_rprimitive),
+        self.assert_emit(IncRef(self.m),
                          "CPyTagged_IncRef(cpy_r_m);")
 
     def test_dec_ref(self) -> None:
-        self.assert_emit(DecRef(self.m, int_rprimitive),
+        self.assert_emit(DecRef(self.m),
                          "CPyTagged_DecRef(cpy_r_m);")
 
     def test_dec_ref_tuple(self) -> None:
-        tuple_type = RTuple([int_rprimitive, bool_rprimitive])
-        self.assert_emit(DecRef(self.m, tuple_type), 'CPyTagged_DecRef(cpy_r_m.f0);')
+        self.assert_emit(DecRef(self.t), 'CPyTagged_DecRef(cpy_r_t.f0);')
 
     def test_dec_ref_tuple_nested(self) -> None:
-        tuple_type = RTuple([RTuple([int_rprimitive, bool_rprimitive]), bool_rprimitive])
-        self.assert_emit(DecRef(self.m, tuple_type), 'CPyTagged_DecRef(cpy_r_m.f0.f0);')
+        self.assert_emit(DecRef(self.tt), 'CPyTagged_DecRef(cpy_r_tt.f0.f0);')
 
     def test_list_get_item(self) -> None:
         self.assert_emit(PrimitiveOp([self.m, self.k], list_get_item_op, 55),

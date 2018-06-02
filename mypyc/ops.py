@@ -633,16 +633,15 @@ class IncRef(RegisterOp):
 
     error_kind = ERR_NEVER
 
-    def __init__(self, src: Value, typ: RType, line: int = -1) -> None:
-        assert typ.is_refcounted
+    def __init__(self, src: Value, line: int = -1) -> None:
+        assert src.type.is_refcounted
         super().__init__(line)
         self.src = src
-        self.target_type = typ
 
     def to_str(self, env: Environment) -> str:
         s = env.format('inc_ref %r', self.src)
-        if is_bool_rprimitive(self.target_type) or is_int_rprimitive(self.target_type):
-            s += ' :: {}'.format(short_name(self.target_type.name))
+        if is_bool_rprimitive(self.src.type) or is_int_rprimitive(self.src.type):
+            s += ' :: {}'.format(short_name(self.src.type.name))
         return s
 
     def sources(self) -> List[Value]:
@@ -657,19 +656,18 @@ class DecRef(RegisterOp):
 
     error_kind = ERR_NEVER
 
-    def __init__(self, src: Value, typ: RType, line: int = -1) -> None:
-        assert typ.is_refcounted
+    def __init__(self, src: Value, line: int = -1) -> None:
+        assert src.type.is_refcounted
         super().__init__(line)
         self.src = src
-        self.target_type = typ
 
     def __repr__(self) -> str:
         return '<DecRef %r>' % self.src
 
     def to_str(self, env: Environment) -> str:
         s = env.format('dec_ref %r', self.src)
-        if is_bool_rprimitive(self.target_type) or is_int_rprimitive(self.target_type):
-            s += ' :: {}'.format(short_name(self.target_type.name))
+        if is_bool_rprimitive(self.src.type) or is_int_rprimitive(self.src.type):
+            s += ' :: {}'.format(short_name(self.src.type.name))
         return s
 
     def sources(self) -> List[Value]:
@@ -980,8 +978,7 @@ class GetAttr(RegisterOp):
 
     error_kind = ERR_MAGIC
 
-    def __init__(self, obj: Value, attr: str,
-                 line: int) -> None:
+    def __init__(self, obj: Value, attr: str, line: int) -> None:
         super().__init__(line)
         self.obj = obj
         self.attr = attr
@@ -1004,8 +1001,7 @@ class SetAttr(RegisterOp):
 
     error_kind = ERR_FALSE
 
-    def __init__(self, obj: Value, attr: str, src: Value,
-                 line: int) -> None:
+    def __init__(self, obj: Value, attr: str, src: Value, line: int) -> None:
         super().__init__(line)
         self.obj = obj
         self.attr = attr

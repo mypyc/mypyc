@@ -254,11 +254,11 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
 
     def visit_inc_ref(self, op: IncRef) -> None:
         src = self.reg(op.src)
-        self.emit_inc_ref(src, op.target_type)
+        self.emit_inc_ref(src, op.src.type)
 
     def visit_dec_ref(self, op: DecRef) -> None:
         src = self.reg(op.src)
-        self.emit_dec_ref(src, op.target_type)
+        self.emit_dec_ref(src, op.src.type)
 
     def visit_box(self, op: Box) -> None:
         self.emitter.emit_box(self.reg(op.src), self.reg(op), op.src.type)
