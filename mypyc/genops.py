@@ -109,19 +109,19 @@ class AssignmentTargetRegister(AssignmentTarget):
 class AssignmentTargetIndex(AssignmentTarget):
     """base[index] as assignment target"""
 
-    def __init__(self, base_reg: Value, index_reg: Value, rtype: RType) -> None:
-        self.base_reg = base_reg
-        self.index_reg = index_reg
-        self.rtype = rtype
+    def __init__(self, base: Value, index: Value) -> None:
+        self.base = base
+        self.index = index
 
 
 class AssignmentTargetAttr(AssignmentTarget):
     """obj.attr as assignment target"""
 
-    def __init__(self, obj_reg: Value, attr: str, obj_type: RInstance) -> None:
-        self.obj_reg = obj_reg
+    def __init__(self, obj: Value, attr: str) -> None:
+        self.obj = obj
         self.attr = attr
-        self.obj_type = obj_type
+        assert isinstance(obj.type, RInstance), 'Attribute set only supported for user types'
+        self.obj_type = obj.type
 
 
 class IRBuilder(NodeVisitor[Value]):
@@ -336,17 +336,15 @@ class IRBuilder(NodeVisitor[Value]):
             index = self.accept(lvalue.index)
             if is_list_rprimitive(base.type) and is_int_rprimitive(index.type):
                 # Indexed list set
-                return AssignmentTargetIndex(base, index, base.type)
+                return AssignmentTargetIndex(base, index)
             elif is_dict_rprimitive(base_type):
                 # Indexed dict set
                 boxed_index = self.box(index)
-                return AssignmentTargetIndex(base, boxed_index, base.type)
+                return AssignmentTargetIndex(base, boxed_index)
         elif isinstance(lvalue, MemberExpr):
             # Attribute assignment x.y = e
-            obj_type = self.node_type(lvalue.expr)
-            assert isinstance(obj_type, RInstance), 'Attribute set only supported for user types'
-            obj_reg = self.accept(lvalue.expr)
-            return AssignmentTargetAttr(obj_reg, lvalue.name, obj_type)
+            obj = self.accept(lvalue.expr)
+            return AssignmentTargetAttr(obj, lvalue.name)
 
         assert False, 'Unsupported lvalue: %r' % lvalue
 
@@ -366,21 +364,21 @@ class IRBuilder(NodeVisitor[Value]):
             rvalue_reg = self.accept(rvalue)
             if needs_box:
                 rvalue_reg = self.box(rvalue_reg)
-            return self.add(SetAttr(target.obj_reg, target.attr, rvalue_reg, target.obj_type,
+            return self.add(SetAttr(target.obj, target.attr, rvalue_reg, target.obj_type,
                                     rvalue.line))
         elif isinstance(target, AssignmentTargetIndex):
-            item_reg = self.accept(rvalue)
+            item = self.accept(rvalue)
 
             target_reg2 = self.translate_special_method_call(
-                target.base_reg,
+                target.base,
                 '__setitem__',
-                [target.index_reg, item_reg],
+                [target.index, item],
                 None,
                 rvalue.line)
             if target_reg2 is not None:
                 return target_reg2
 
-            assert False, target.rtype
+            assert False, target.base.type
 
         assert False, 'Unsupported assignment target'
 
