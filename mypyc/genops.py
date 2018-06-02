@@ -273,7 +273,7 @@ class IRBuilder(NodeVisitor[Value]):
     def visit_return_stmt(self, stmt: ReturnStmt) -> Value:
         if stmt.expr:
             retval = self.accept(stmt.expr)
-            retval = self.coerce(retval, self.node_type(stmt.expr), self.ret_type, stmt.line)
+            retval = self.coerce(retval, self.ret_type, stmt.line)
         else:
             retval = self.add(PrimitiveOp([], none_op, line=-1))
         self.add(Return(retval))
@@ -721,9 +721,7 @@ class IRBuilder(NodeVisitor[Value]):
         formal_arg_types = [self.type_to_rtype(t) for t in callee_type.arg_types]
         coerced_arg_regs = []
         for reg, arg_type in zip(args, formal_arg_types):
-            typ = reg.type
-            reg = self.coerce(reg, typ, arg_type, line)
-            coerced_arg_regs.append(reg)
+            coerced_arg_regs.append(self.coerce(reg, arg_type, line))
         return coerced_arg_regs
 
 
@@ -798,8 +796,7 @@ class IRBuilder(NodeVisitor[Value]):
     def translate_cast_expr(self, expr: CastExpr) -> Value:
         src = self.accept(expr.expr)
         target_type = self.type_to_rtype(expr.type)
-        source_type = self.node_type(expr.expr)
-        return self.coerce(src, source_type, target_type, expr.line)
+        return self.coerce(src, target_type, expr.line)
 
     def visit_conditional_expr(self, expr: ConditionalExpr) -> Value:
         branches = self.process_conditional(expr.cond)
@@ -839,17 +836,16 @@ class IRBuilder(NodeVisitor[Value]):
         Return None if no translation found; otherwise return the target register.
         """
         base_type = base_reg.type
-        arg_types = [arg.type for arg in args]
         fullname = '%s.%s' % (base_type.name, name)
         for desc in method_ops.get(fullname, []):
             if (is_subtype(base_type, desc.arg_types[0])
-                    and len(arg_types) == len(desc.arg_types) - 1
-                    and all(is_subtype(actual, formal)
-                            for actual, formal in zip(arg_types, desc.arg_types[1:]))):
+                    and len(args) == len(desc.arg_types) - 1
+                    and all(is_subtype(arg.type, formal)
+                            for arg, formal in zip(args, desc.arg_types[1:]))):
                 # Found primitive call.
                 coerced_args = []
-                for arg, actual, formal in zip(args, arg_types, desc.arg_types[1:]):
-                    reg = self.coerce(arg, actual, formal, line)
+                for arg, formal in zip(args, desc.arg_types[1:]):
+                    reg = self.coerce(arg, formal, line)
                     coerced_args.append(reg)
                 if desc.result_type is None:
                     assert desc.error_kind == ERR_FALSE  # TODO: No-value ops not supported yet
@@ -863,7 +859,7 @@ class IRBuilder(NodeVisitor[Value]):
                 op_target = self.add(PrimitiveOp([base_reg] + coerced_args, desc, line))
                 if coercion:
                     assert desc.result_type is not None
-                    return self.coerce(op_target, desc.result_type, result_type, line)
+                    return self.coerce(op_target, result_type, line)
                 else:
                     return op_target
 
@@ -880,8 +876,7 @@ class IRBuilder(NodeVisitor[Value]):
         items = []
         for item_expr, item_type in zip(expr.items, tuple_type.types):
             reg = self.accept(item_expr)
-            reg = self.coerce(reg, reg.type, item_type, item_expr.line)
-            items.append(reg)
+            items.append(self.coerce(reg, item_type, item_expr.line))
         return self.add(TupleSet(items, tuple_type, expr.line))
 
     def visit_dict_expr(self, expr: DictExpr) -> Value:
@@ -961,8 +956,7 @@ class IRBuilder(NodeVisitor[Value]):
                     target = self.binary_op(left, right, 'in', e.line)
                 else:
                     target = self.binary_op(left, right, op, e.line)
-                target = self.coerce(target, target.type,
-                                     bool_rprimitive, e.line)
+                target = self.coerce(target, target.type, e.line)
                 branch = Branch(target, INVALID_VALUE, INVALID_LABEL, INVALID_LABEL,
                                 Branch.BOOL_EXPR)
                 if op == 'not in':
@@ -1021,7 +1015,7 @@ class IRBuilder(NodeVisitor[Value]):
         coerced = []
         for i, arg in enumerate(args):
             formal_type = self.op_arg_type(desc, i)
-            arg = self.coerce(arg, arg.type, formal_type, line)
+            arg = self.coerce(arg, formal_type, line)
             coerced.append(arg)
         return self.add(PrimitiveOp(coerced, desc, line))
 
@@ -1074,7 +1068,7 @@ class IRBuilder(NodeVisitor[Value]):
         static_symbol = self.unicode_literals[value]
         return self.add(LoadStatic(str_rprimitive, static_symbol))
 
-    def coerce(self, src: Value, src_type: RType, target_type: RType, line: int) -> Value:
+    def coerce(self, src: Value, target_type: RType, line: int) -> Value:
         """Generate a coercion/cast from one type to other (only if needed).
 
         For example, int -> object boxes the source int; int -> int emits nothing;
@@ -1082,15 +1076,15 @@ class IRBuilder(NodeVisitor[Value]):
 
         Returns the register with the converted value (may be same as src).
         """
-        if src_type.is_unboxed and not target_type.is_unboxed:
-            return self.box(src, src_type)
-        if ((src_type.is_unboxed and target_type.is_unboxed)
-                and not is_same_type(src_type, target_type)):
+        if src.type.is_unboxed and not target_type.is_unboxed:
+            return self.box(src, src.type)
+        if ((src.type.is_unboxed and target_type.is_unboxed)
+                and not is_same_type(src.type, target_type)):
             # To go from one unboxed type to another, we go through a boxed
             # in-between value, for simplicity.
-            tmp = self.box(src, src_type)
+            tmp = self.box(src, src.type)
             return self.unbox_or_cast(tmp, target_type, line)
-        if ((not src_type.is_unboxed and target_type.is_unboxed)
-                or not is_subtype(src_type, target_type)):
+        if ((not src.type.is_unboxed and target_type.is_unboxed)
+                or not is_subtype(src.type, target_type)):
             return self.unbox_or_cast(src, target_type, line)
         return src
