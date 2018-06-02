@@ -100,7 +100,7 @@ class AssignmentTarget(object):
 
 
 class AssignmentTargetRegister(AssignmentTarget):
-    """Value as assignment target"""
+    """Register as assignment target"""
 
     def __init__(self, register: Register) -> None:
         self.register = register
@@ -311,7 +311,7 @@ class IRBuilder(NodeVisitor[Value]):
             rreg = self.accept(stmt.rvalue)
             res = self.binary_op(ltype, target.register, rtype, rreg, stmt.op, stmt.line)
             self.add(Assign(target.register, res))
-            return INVALID_VALUE  # XXX: is this right?
+            return INVALID_VALUE
 
         # NOTE: List index not supported yet for compound assignments.
         assert False, 'Unsupported lvalue: %r'

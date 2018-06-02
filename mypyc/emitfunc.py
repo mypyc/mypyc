@@ -168,7 +168,6 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
             self.emit_line('%s %s = { %s };' % (op.type.ctype, tmp, ', '.join(values)))
             self.emit_line('%s = %s;' % (self.reg(op), tmp))
         else:
-            assert op.type is not None
             self.emit_line('%s = %s;' % (self.reg(op),
                                          op.type.c_error_value()))
 
@@ -209,7 +208,6 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         dest = self.reg(op)
         src = self.reg(op.src)
         self.emit_line('{} = {}.f{};'.format(dest, src, op.index))
-        assert op.type is not None
         self.emit_inc_ref(dest, op.type)
 
     def get_dest_assign(self, dest: Value) -> str:
@@ -269,7 +267,6 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         self.emitter.emit_cast(self.reg(op.src), self.reg(op), op.type)
 
     def visit_unbox(self, op: Unbox) -> None:
-        assert op.type is not None
         self.emitter.emit_unbox(self.reg(op.src), self.reg(op), op.type)
 
     # Helpers
