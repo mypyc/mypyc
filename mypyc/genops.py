@@ -168,18 +168,19 @@ class IRBuilder(NodeVisitor[Value]):
         return INVALID_VALUE
 
     def prepare_class_def(self, cdef: ClassDef) -> None:
-        ir = ClassIR(cdef.name, [])  # Populate attributes later in visit_class_def
+        # We want to collect the attributes first so they are available
+        # while generating the methods
+        ir = ClassIR(cdef.name)
         self.classes.append(ir)
         self.mapper.type_to_ir[cdef.info] = ir
 
-    def visit_class_def(self, cdef: ClassDef) -> Value:
-        # We want to collect the attributes first so they are available
-        # while generating the methods
-        ir = self.mapper.type_to_ir[cdef.info]
         for name, node in cdef.info.names.items():
             if isinstance(node.node, Var):
                 assert node.node.type, "Class member missing type"
                 ir.attributes.append((name, self.type_to_rtype(node.node.type)))
+
+    def visit_class_def(self, cdef: ClassDef) -> Value:
+        ir = self.mapper.type_to_ir[cdef.info]
         for name, node in cdef.info.names.items():
             if isinstance(node.node, FuncDef):
                 func = self.gen_func_def(node.node, cdef.name)

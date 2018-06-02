@@ -96,3 +96,18 @@ L0:
     r2 = a.f(r0, r1)
     r3 = None
     return r3
+
+[case testForwardUse]
+def g(a: A) -> int:
+    return a.n
+
+class A:
+    n : int
+
+[out]
+def g(a):
+    a :: A
+    r0 :: int
+L0:
+    r0 = a.n
+    return r0

@@ -1218,11 +1218,9 @@ class ClassIR:
 
     # TODO: Use dictionary for attributes in addition to (or instead of) list.
 
-    def __init__(self,
-                 name: str,
-                 attributes: List[Tuple[str, RType]]) -> None:
+    def __init__(self, name: str) -> None:
         self.name = name
-        self.attributes = attributes
+        self.attributes = []  # type: List[Tuple[str, RType]]
         self.methods = []  # type: List[FuncIR]
 
     def struct_name(self) -> str:
