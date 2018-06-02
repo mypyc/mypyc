@@ -306,10 +306,8 @@ class IRBuilder(NodeVisitor[Value]):
         target = self.get_assignment_target(stmt.lvalue, declare_new=False)
 
         if isinstance(target, AssignmentTargetRegister):
-            ltype = target.register.type
-            rtype = self.node_type(stmt.rvalue)
             rreg = self.accept(stmt.rvalue)
-            res = self.binary_op(ltype, target.register, rtype, rreg, stmt.op, stmt.line)
+            res = self.binary_op(target.register, rreg, stmt.op, stmt.line)
             self.add(Assign(target.register, res))
             return INVALID_VALUE
 
@@ -499,9 +497,7 @@ class IRBuilder(NodeVisitor[Value]):
 
             # Increment index register.
             one_reg = self.add(LoadInt(1))
-            self.add(Assign(
-                index_reg,
-                self.binary_op(int_rprimitive, index_reg, int_rprimitive, one_reg, '+', s.line)))
+            self.add(Assign(index_reg, self.binary_op(index_reg, one_reg, '+', s.line)))
 
             # Go back to loop condition check.
             self.add(Goto(top.label))
@@ -549,9 +545,7 @@ class IRBuilder(NodeVisitor[Value]):
             s.body.accept(self)
 
             end_block = self.goto_new_block()
-            self.add(Assign(
-                index_reg,
-                self.binary_op(int_rprimitive, index_reg, int_rprimitive, one_reg, '+', s.line)))
+            self.add(Assign(index_reg, self.binary_op(index_reg, one_reg, '+', s.line)))
             self.add(Goto(condition_block.label))
 
             next_block = self.new_block()
@@ -588,24 +582,18 @@ class IRBuilder(NodeVisitor[Value]):
         return target
 
     def visit_op_expr(self, expr: OpExpr) -> Value:
-        ltype = self.node_type(expr.left)
-        rtype = self.node_type(expr.right)
-        lreg = self.accept(expr.left)
-        rreg = self.accept(expr.right)
-        return self.binary_op(ltype, lreg, rtype, rreg, expr.op, expr.line)
+        return self.binary_op(self.accept(expr.left), self.accept(expr.right), expr.op, expr.line)
 
     def binary_op(self,
-                  ltype: RType,
                   lreg: Value,
-                  rtype: RType,
                   rreg: Value,
                   expr_op: str,
                   line: int) -> Value:
         # Find the highest-priority primitive op that matches.
         matching = None  # type: Optional[OpDescription]
         for desc in binary_ops.get(expr_op, []):
-            if (is_subtype(ltype, desc.arg_types[0])
-                    and is_subtype(rtype, desc.arg_types[1])):
+            if (is_subtype(lreg.type, desc.arg_types[0])
+                    and is_subtype(rreg.type, desc.arg_types[1])):
                 if matching:
                     assert matching.priority != desc.priority, 'Ambiguous: %s, %s'  % (matching,
                                                                                        desc)
@@ -959,12 +947,10 @@ class IRBuilder(NodeVisitor[Value]):
         else:
             # General comparison -- evaluate both operands.
             left = self.accept(e.operands[0])
-            ltype = self.node_type(e.operands[0])
             right = self.accept(e.operands[1])
-            rtype = self.node_type(e.operands[1])
             if (op in ['==', '!=', '<', '<=', '>', '>=']
-                    and is_same_type(ltype, int_rprimitive)
-                    and is_same_type(rtype, int_rprimitive)):
+                    and is_same_type(left.type, int_rprimitive)
+                    and is_same_type(right.type, int_rprimitive)):
                 # Special op for int comparison.
                 opcode = self.int_relative_ops[op]
                 branch = Branch(left, right, INVALID_LABEL, INVALID_LABEL, opcode)
@@ -972,9 +958,9 @@ class IRBuilder(NodeVisitor[Value]):
                 # For other comparisons, generate a bool value and branch based on it. We need
                 # this to handle exceptions in the comparison op.
                 if op in ['in', 'not in']:
-                    target = self.binary_op(ltype, left, rtype, right, 'in', e.line)
+                    target = self.binary_op(left, right, 'in', e.line)
                 else:
-                    target = self.binary_op(ltype, left, rtype, right, op, e.line)
+                    target = self.binary_op(left, right, op, e.line)
                 target = self.coerce(target, target.type,
                                      bool_rprimitive, e.line)
                 branch = Branch(target, INVALID_VALUE, INVALID_LABEL, INVALID_LABEL,
