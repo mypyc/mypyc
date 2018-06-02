@@ -364,8 +364,7 @@ class IRBuilder(NodeVisitor[Value]):
             rvalue_reg = self.accept(rvalue)
             if needs_box:
                 rvalue_reg = self.box(rvalue_reg)
-            return self.add(SetAttr(target.obj, target.attr, rvalue_reg, target.obj_type,
-                                    rvalue.line))
+            return self.add(SetAttr(target.obj, target.attr, rvalue_reg, rvalue.line))
         elif isinstance(target, AssignmentTargetIndex):
             item = self.accept(rvalue)
 
@@ -673,10 +672,8 @@ class IRBuilder(NodeVisitor[Value]):
             return self.load_static_module_attr(expr)
 
         else:
-            obj_reg = self.accept(expr.expr)
-            obj_type = self.node_type(expr.expr)
-            assert isinstance(obj_type, RInstance), 'Attribute access not supported: %s' % obj_type
-            return self.add(GetAttr(obj_reg, expr.name, obj_type, expr.line))
+            obj = self.accept(expr.expr)
+            return self.add(GetAttr(obj, expr.name, expr.line))
 
     def load_static_module_attr(self, expr: RefExpr) -> Value:
         assert expr.node, "RefExpr not resolved"

@@ -979,13 +979,13 @@ class GetAttr(RegisterOp):
     error_kind = ERR_MAGIC
 
     def __init__(self, obj: Value, attr: str,
-                 class_type: RInstance,
                  line: int) -> None:
         super().__init__(line)
         self.obj = obj
         self.attr = attr
-        self.class_type = class_type
-        self.type = class_type.attr_type(attr)
+        assert isinstance(obj.type, RInstance), 'Attribute access not supported: %s' % obj.type
+        self.class_type = obj.type
+        self.type = obj.type.attr_type(attr)
 
     def sources(self) -> List[Value]:
         return [self.obj]
@@ -1003,13 +1003,13 @@ class SetAttr(RegisterOp):
     error_kind = ERR_FALSE
 
     def __init__(self, obj: Value, attr: str, src: Value,
-                 class_type: RInstance,
                  line: int) -> None:
         super().__init__(line)
         self.obj = obj
         self.attr = attr
         self.src = src
-        self.class_type = class_type
+        assert isinstance(obj.type, RInstance), 'Attribute access not supported: %s' % obj.type
+        self.class_type = obj.type
         self.type = bool_rprimitive
 
     def sources(self) -> List[Value]:
