@@ -16,6 +16,7 @@ from typing import (
     List, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType, Callable, Union,
     Iterable,
 )
+from collections import OrderedDict
 
 from mypy.nodes import Var
 
@@ -321,7 +322,7 @@ class Environment:
     """Maintain the register symbol table and manage temp generation"""
 
     def __init__(self) -> None:
-        self.indexes = {}  # type: Dict[Value, int]
+        self.indexes = OrderedDict()  # type: Dict[Value, int]
         self.symtable = {}  # type: Dict[Var, Register]
         self.temp_index = 0
 
