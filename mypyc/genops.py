@@ -96,7 +96,7 @@ class Mapper:
 
 
 class AssignmentTarget(object):
-    pass
+    type = None  # type: RType
 
 
 class AssignmentTargetRegister(AssignmentTarget):
@@ -104,6 +104,7 @@ class AssignmentTargetRegister(AssignmentTarget):
 
     def __init__(self, register: Register) -> None:
         self.register = register
+        self.type = register.type
 
 
 class AssignmentTargetIndex(AssignmentTarget):
@@ -112,6 +113,9 @@ class AssignmentTargetIndex(AssignmentTarget):
     def __init__(self, base: Value, index: Value) -> None:
         self.base = base
         self.index = index
+        # TODO: This won't be right for user-defined classes. Store the
+        #       lvalue type in mypy and remove this special case.
+        self.type = object_rprimitive
 
 
 class AssignmentTargetAttr(AssignmentTarget):
@@ -122,6 +126,7 @@ class AssignmentTargetAttr(AssignmentTarget):
         self.attr = attr
         assert isinstance(obj.type, RInstance), 'Attribute set only supported for user types'
         self.obj_type = obj.type
+        self.type = obj.type.attr_type(attr)
 
 
 class IRBuilder(NodeVisitor[Value]):
@@ -283,23 +288,13 @@ class IRBuilder(NodeVisitor[Value]):
     def visit_assignment_stmt(self, stmt: AssignmentStmt) -> Value:
         assert len(stmt.lvalues) == 1
         lvalue = stmt.lvalues[0]
-        if stmt.type:
-            lvalue_type = self.type_to_rtype(stmt.type)
-            if isinstance(stmt.rvalue, TempNode):
-                # This is actually a variable annotation without initializer. Don't generate
-                # an assignment but we need to call get_assignment_target since it adds a
-                # name binding as a side effect.
-                self.get_assignment_target(lvalue, declare_new=True)
-                return INVALID_VALUE
-        else:
-            if isinstance(lvalue, IndexExpr):
-                # TODO: This won't be right for user-defined classes. Store the
-                #     lvalue type in mypy and remove this special case.
-                lvalue_type = object_rprimitive
-            else:
-                lvalue_type = self.node_type(lvalue)
-        rvalue_type = self.node_type(stmt.rvalue)
-        self.assign(lvalue, stmt.rvalue, rvalue_type, lvalue_type,
+        if stmt.type and isinstance(stmt.rvalue, TempNode):
+            # This is actually a variable annotation without initializer. Don't generate
+            # an assignment but we need to call get_assignment_target since it adds a
+            # name binding as a side effect.
+            self.get_assignment_target(lvalue, declare_new=True)
+            return INVALID_VALUE
+        self.assign(lvalue, stmt.rvalue,
                     declare_new=(stmt.type is not None))
         return INVALID_VALUE
 
@@ -331,14 +326,12 @@ class IRBuilder(NodeVisitor[Value]):
             return AssignmentTargetRegister(lvalue_num)
         elif isinstance(lvalue, IndexExpr):
             # Indexed assignment x[y] = e
-            base_type = self.node_type(lvalue.base)
-            index_type = self.node_type(lvalue.index)
             base = self.accept(lvalue.base)
             index = self.accept(lvalue.index)
             if is_list_rprimitive(base.type) and is_int_rprimitive(index.type):
                 # Indexed list set
                 return AssignmentTargetIndex(base, index)
-            elif is_dict_rprimitive(base_type):
+            elif is_dict_rprimitive(base.type):
                 # Indexed dict set
                 boxed_index = self.box(index)
                 return AssignmentTargetIndex(base, boxed_index)
@@ -350,12 +343,9 @@ class IRBuilder(NodeVisitor[Value]):
         assert False, 'Unsupported lvalue: %r' % lvalue
 
     def assign_to_target(self,
-            target: AssignmentTarget,
-            rvalue: Expression,
-            rvalue_type: RType,
-            needs_box: bool) -> Value:
-        rvalue_type = rvalue_type or self.node_type(rvalue)
-
+                         target: AssignmentTarget,
+                         rvalue: Expression,
+                         needs_box: bool) -> Value:
         if isinstance(target, AssignmentTargetRegister):
             rvalue_reg = self.accept(rvalue)
             if needs_box:
@@ -385,12 +375,10 @@ class IRBuilder(NodeVisitor[Value]):
     def assign(self,
                lvalue: Lvalue,
                rvalue: Expression,
-               rvalue_type: RType,
-               lvalue_type: RType,
                declare_new: bool = False) -> AssignmentTarget:
         target = self.get_assignment_target(lvalue, declare_new)
-        needs_box = rvalue_type.is_unboxed and not lvalue_type.is_unboxed
-        self.assign_to_target(target, rvalue, rvalue_type, needs_box)
+        needs_box = self.node_type(rvalue).is_unboxed and not target.type.is_unboxed
+        self.assign_to_target(target, rvalue, needs_box)
         return target
 
     def visit_if_stmt(self, stmt: IfStmt) -> Value:
@@ -471,7 +459,7 @@ class IRBuilder(NodeVisitor[Value]):
             end_reg = self.accept(end)
 
             # Initialize loop index to 0.
-            assign_target = self.assign(s.index, IntExpr(0), int_rprimitive, int_rprimitive)
+            assign_target = self.assign(s.index, IntExpr(0))
             assert isinstance(assign_target, AssignmentTargetRegister)
             index_reg = assign_target.register
             goto = Goto(INVALID_LABEL)
