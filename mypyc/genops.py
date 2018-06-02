@@ -339,7 +339,7 @@ class IRBuilder(NodeVisitor[Value]):
                 return AssignmentTargetIndex(base, index, base.type)
             elif is_dict_rprimitive(base_type):
                 # Indexed dict set
-                boxed_index = self.box(index, index.type)
+                boxed_index = self.box(index)
                 return AssignmentTargetIndex(base, boxed_index, base.type)
         elif isinstance(lvalue, MemberExpr):
             # Attribute assignment x.y = e
@@ -360,12 +360,12 @@ class IRBuilder(NodeVisitor[Value]):
         if isinstance(target, AssignmentTargetRegister):
             rvalue_reg = self.accept(rvalue)
             if needs_box:
-                rvalue_reg = self.box(rvalue_reg, rvalue_type)
+                rvalue_reg = self.box(rvalue_reg)
             return self.add(Assign(target.register, rvalue_reg))
         elif isinstance(target, AssignmentTargetAttr):
             rvalue_reg = self.accept(rvalue)
             if needs_box:
-                rvalue_reg = self.box(rvalue_reg, rvalue_type)
+                rvalue_reg = self.box(rvalue_reg)
             return self.add(SetAttr(target.obj_reg, target.attr, rvalue_reg, target.obj_type,
                                     rvalue.line))
         elif isinstance(target, AssignmentTargetIndex):
@@ -692,10 +692,7 @@ class IRBuilder(NodeVisitor[Value]):
 
     def py_call(self, function: Value, args: List[Value],
                 target_type: RType, line: int) -> Value:
-        arg_boxes = [] # type: List[Value]
-        for arg_reg in args:
-            arg_boxes.append(self.box(arg_reg, arg_reg.type))
-
+        arg_boxes = [self.box(arg) for arg in args] # type: List[Value]
         target_box = self.add(PyCall(function, arg_boxes, line))
         return self.unbox_or_cast(target_box, target_type, line)
 
@@ -705,10 +702,7 @@ class IRBuilder(NodeVisitor[Value]):
                        args: List[Value],
                        target_type: RType,
                        line: int) -> Value:
-        arg_boxes = [] # type: List[Value]
-        for arg_reg in args:
-            arg_boxes.append(self.box(arg_reg, arg_reg.type))
-
+        arg_boxes = [self.box(arg) for arg in args] # type: List[Value]
         target_box = self.add(PyMethodCall(obj, method, arg_boxes))
         return self.unbox_or_cast(target_box, target_type, line)
 
@@ -1041,9 +1035,9 @@ class IRBuilder(NodeVisitor[Value]):
         mypy_type = self.types[node]
         return self.type_to_rtype(mypy_type)
 
-    def box(self, src: Value, typ: RType) -> Value:
-        if typ.is_unboxed:
-            return self.add(Box(src, typ))
+    def box(self, src: Value) -> Value:
+        if src.type.is_unboxed:
+            return self.add(Box(src))
         else:
             return src
 
@@ -1054,8 +1048,7 @@ class IRBuilder(NodeVisitor[Value]):
             return self.add(Cast(src, target_type, line))
 
     def box_expr(self, expr: Expression) -> Value:
-        typ = self.node_type(expr)
-        return self.box(self.accept(expr), typ)
+        return self.box(self.accept(expr))
 
     def load_static_unicode(self, value: str) -> Value:
         """Loads a static unicode value into a register.
@@ -1077,12 +1070,12 @@ class IRBuilder(NodeVisitor[Value]):
         Returns the register with the converted value (may be same as src).
         """
         if src.type.is_unboxed and not target_type.is_unboxed:
-            return self.box(src, src.type)
+            return self.box(src)
         if ((src.type.is_unboxed and target_type.is_unboxed)
                 and not is_same_type(src.type, target_type)):
             # To go from one unboxed type to another, we go through a boxed
             # in-between value, for simplicity.
-            tmp = self.box(src, src.type)
+            tmp = self.box(src)
             return self.unbox_or_cast(tmp, target_type, line)
         if ((not src.type.is_unboxed and target_type.is_unboxed)
                 or not is_subtype(src.type, target_type)):

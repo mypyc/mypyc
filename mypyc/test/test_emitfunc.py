@@ -150,7 +150,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """cpy_r_r0 = CPyList_SetItem(cpy_r_l, cpy_r_n, cpy_r_o) != 0;""")
 
     def test_box(self) -> None:
-        self.assert_emit(Box(self.n, int_rprimitive),
+        self.assert_emit(Box(self.n),
                          """cpy_r_r0 = CPyTagged_StealAsObject(cpy_r_n);""")
 
     def test_unbox(self) -> None:

@@ -1120,17 +1120,16 @@ class Box(RegisterOp):
 
     error_kind = ERR_NEVER
 
-    def __init__(self, src: Value, typ: RType, line: int = -1) -> None:
+    def __init__(self, src: Value, line: int = -1) -> None:
         super().__init__(line)
         self.src = src
-        self.src_type = typ
         self.type = object_rprimitive
 
     def sources(self) -> List[Value]:
         return [self.src]
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = box(%s, %r)', self, self.src_type, self.src)
+        return env.format('%r = box(%s, %r)', self, self.src.type, self.src)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_box(self)
