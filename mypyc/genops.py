@@ -342,25 +342,22 @@ class IRBuilder(NodeVisitor[Value]):
 
     def assign_to_target(self,
                          target: AssignmentTarget,
-                         rvalue: Expression,
-                         needs_box: bool) -> Value:
+                         rvalue: Expression) -> Value:
+        rvalue_reg = self.accept(rvalue)
+        needs_box = rvalue_reg.type.is_unboxed and not target.type.is_unboxed
         if isinstance(target, AssignmentTargetRegister):
-            rvalue_reg = self.accept(rvalue)
             if needs_box:
                 rvalue_reg = self.box(rvalue_reg)
             return self.add(Assign(target.register, rvalue_reg))
         elif isinstance(target, AssignmentTargetAttr):
-            rvalue_reg = self.accept(rvalue)
             if needs_box:
                 rvalue_reg = self.box(rvalue_reg)
             return self.add(SetAttr(target.obj, target.attr, rvalue_reg, rvalue.line))
         elif isinstance(target, AssignmentTargetIndex):
-            item = self.accept(rvalue)
-
             target_reg2 = self.translate_special_method_call(
                 target.base,
                 '__setitem__',
-                [target.index, item],
+                [target.index, rvalue_reg],
                 None,
                 rvalue.line)
             if target_reg2 is not None:
@@ -374,8 +371,7 @@ class IRBuilder(NodeVisitor[Value]):
                lvalue: Lvalue,
                rvalue: Expression) -> AssignmentTarget:
         target = self.get_assignment_target(lvalue)
-        needs_box = self.node_type(rvalue).is_unboxed and not target.type.is_unboxed
-        self.assign_to_target(target, rvalue, needs_box)
+        self.assign_to_target(target, rvalue)
         return target
 
     def visit_if_stmt(self, stmt: IfStmt) -> Value:
