@@ -738,7 +738,7 @@ class IRBuilder(NodeVisitor[Value]):
                 arg_regs = self.coerce_native_call_args(
                     args, self.types[expr.callee], expr.line)
                 return self.add(MethodCall(self.node_type(expr), obj, expr.callee.name,
-                                           arg_regs, receiver_rtype, expr.line))
+                                           arg_regs, expr.line))
             else:
                 method = self.load_static_unicode(expr.callee.name)
                 return self.py_method_call(

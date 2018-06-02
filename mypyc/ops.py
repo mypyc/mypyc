@@ -687,6 +687,7 @@ class Call(RegisterOp):
 
     error_kind = ERR_MAGIC
 
+    # TODO: take a FuncIR and extract the ret type
     def __init__(self, ret_type: RType, fn: str, args: List[Value], line: int) -> None:
         super().__init__(line)
         self.fn = fn
@@ -712,18 +713,19 @@ class MethodCall(RegisterOp):
 
     error_kind = ERR_MAGIC
 
+    # TODO: extract the ret type from the receiver
     def __init__(self,
                  ret_type: RType,
                  obj: Value,
                  method: str,
                  args: List[Value],
-                 receiver_type: RInstance,
                  line: int = -1) -> None:
         super().__init__(line)
         self.obj = obj
         self.method = method
         self.args = args
-        self.receiver_type = receiver_type
+        assert isinstance(obj.type, RInstance), "Methods can only be called on instances"
+        self.receiver_type = obj.type
         self.type = ret_type
 
     def to_str(self, env: Environment) -> str:
