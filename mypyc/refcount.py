@@ -52,13 +52,13 @@ def insert_ref_count_opcodes(ir: FuncIR) -> None:
         transform_block(block, live.before, live.after, borrow.before, ir.env)
 
 
-def maybe_append_dec_ref(ops: List[Op], dest: Value, env: Environment) -> None:
+def maybe_append_dec_ref(ops: List[Op], dest: Value) -> None:
     rtype = dest.type
     if rtype.is_refcounted:
         ops.append(DecRef(dest, rtype))
 
 
-def maybe_append_inc_ref(ops: List[Op], dest: Value, env: Environment) -> None:
+def maybe_append_inc_ref(ops: List[Op], dest: Value) -> None:
     rtype = dest.type
     if rtype.is_refcounted:
         ops.append(IncRef(dest, rtype))
@@ -78,21 +78,21 @@ def transform_block(block: BasicBlock,
             # These operations just copy/steal a reference and don't create new
             # references.
             if op.src in post_live[key] or op.src in pre_borrow[key]:
-                maybe_append_inc_ref(ops, op.src, env)
+                maybe_append_inc_ref(ops, op.src)
                 if (dest not in pre_borrow[key] and
                         dest in pre_live[key]):
-                    maybe_append_dec_ref(ops, dest, env)
+                    maybe_append_dec_ref(ops, dest)
             ops.append(op)
             if dest not in post_live[key]:
                 assert dest is not None
-                maybe_append_dec_ref(ops, dest, env)
+                maybe_append_dec_ref(ops, dest)
         elif isinstance(op, RegisterOp):
             # These operations construct a new reference.
             tmp_reg = None  # type: Optional[Value]
             if (op not in pre_borrow[key] and
                     op in pre_live[key]):
                 if op not in op.sources():
-                    maybe_append_dec_ref(ops, op, env)
+                    maybe_append_dec_ref(ops, op)
                 else:
                     tmp_reg = env.add_temp(op.type)
                     ops.append(Assign(tmp_reg, op))
@@ -101,17 +101,17 @@ def transform_block(block: BasicBlock,
                 # Decrement source that won't be live afterwards.
                 if src not in post_live[key] and src not in pre_borrow[key]:
                     if src != op:
-                        maybe_append_dec_ref(ops, src, env)
+                        maybe_append_dec_ref(ops, src)
             # TODO: Analyze LoadStatics as being borrowed! (#66)
             if isinstance(op, LoadStatic):
-                maybe_append_inc_ref(ops, op, env)
+                maybe_append_inc_ref(ops, op)
             if not op.is_void and op not in post_live[key]:
-                maybe_append_dec_ref(ops, op, env)
+                maybe_append_dec_ref(ops, op)
             if tmp_reg is not None:
-                maybe_append_dec_ref(ops, tmp_reg, env)
+                maybe_append_dec_ref(ops, tmp_reg)
         elif isinstance(op, Return) and op.reg in pre_borrow[key]:
             # The return op returns a new reference.
-            maybe_append_inc_ref(ops, op.reg, env)
+            maybe_append_inc_ref(ops, op.reg)
             ops.append(op)
         else:
             ops.append(op)
