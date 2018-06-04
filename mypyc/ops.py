@@ -23,10 +23,11 @@ from mypy.nodes import Var
 
 T = TypeVar('T')
 
+# TODO: Use pointers to BasicBlocks instead?
 Label = NewType('Label', int)
 
-# Similarly this is used for placeholder labels which aren't assigned yet (but will
-# be eventually. Its kind of a hack.
+# This is used for placeholder labels which aren't assigned yet (but will
+# be eventually. It's kind of a hack.
 INVALID_LABEL = Label(-88888)
 
 
