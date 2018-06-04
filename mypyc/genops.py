@@ -922,7 +922,7 @@ class IRBuilder(NodeVisitor[Value]):
                     target = self.binary_op(left, right, 'in', e.line)
                 else:
                     target = self.binary_op(left, right, op, e.line)
-                target = self.coerce(target, target.type, e.line)
+                target = self.coerce(target, bool_rprimitive, e.line)
                 branch = Branch(target, INVALID_VALUE, INVALID_LABEL, INVALID_LABEL,
                                 Branch.BOOL_EXPR)
                 if op == 'not in':
