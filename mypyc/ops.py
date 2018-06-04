@@ -424,8 +424,9 @@ class Value:
 
 
 class Register(Value):
-    def __init__(self, type: RType, line: int = -1) -> None:
+    def __init__(self, type: RType, line: int = -1, name: str = '') -> None:
         super().__init__(line)
+        self.name = name
         self.type = type
 
     def to_str(self, env: Environment) -> str:
@@ -443,7 +444,7 @@ class Register(Value):
 # Eventually we may want to separate expression visitors and statement-like visitors at
 # the type level but until then returning INVALID_VALUE from a statement-like visitor
 # seems acceptable.
-INVALID_VALUE = Register(void_rtype)
+INVALID_VALUE = Register(void_rtype, name='<INVALID_VALUE>')
 
 
 class Op(Value):
