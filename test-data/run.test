@@ -599,7 +599,7 @@ for bad in g, 1:
     else:
         assert False, bad
 
-[case testLoadFloat]
+[case testLoadFloatSum]
 def assign_and_return_float_sum() -> float:
     f1 = 1.0
     f2 = 2.0
@@ -611,4 +611,3 @@ sum = 0.0
 for i in range(10):
     sum += assign_and_return_float_sum()
 assert sum == 50.0
-

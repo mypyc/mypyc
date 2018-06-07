@@ -152,7 +152,7 @@ class Emitter:
             err = 'PyErr_SetString(PyExc_TypeError, "{} object expected");'.format(
                 self.pretty_name(typ))
         # TODO: Verify refcount handling.
-        if (is_list_rprimitive(typ) or is_dict_rprimitive(typ) or is_float_rprimitive(typ) or 
+        if (is_list_rprimitive(typ) or is_dict_rprimitive(typ) or is_float_rprimitive(typ) or
                 is_str_rprimitive(typ)):
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
