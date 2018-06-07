@@ -193,7 +193,7 @@ def generate_vtable(cl: ClassIR,
                     vtable_name: str,
                     emitter: Emitter) -> None:
     emitter.emit_line('static CPyVTableItem {}[] = {{'.format(vtable_name))
-    for attr, rtype in cl.attributes:
+    for attr in cl.attributes:
         emitter.emit_line('(CPyVTableItem){},'.format(native_getter_name(cl.name, attr)))
         emitter.emit_line('(CPyVTableItem){},'.format(native_setter_name(cl.name, attr)))
     for fn in cl.methods:
@@ -327,7 +327,7 @@ def generate_methods_table(cl: ClassIR,
 
 
 def generate_getseter_declarations(cl: ClassIR, emitter: Emitter) -> None:
-    for attr, rtype in cl.attributes:
+    for attr in cl.attributes:
         emitter.emit_line('static PyObject *')
         emitter.emit_line('{}({} *self, void *closure);'.format(getter_name(cl.name, attr),
                                                             cl.struct_name()))
@@ -342,7 +342,7 @@ def generate_getseters_table(cl: ClassIR,
                              emitter: Emitter) -> None:
 
     emitter.emit_line('static PyGetSetDef {}[] = {{'.format(name))
-    for attr, rtype in cl.attributes:
+    for attr in cl.attributes:
         emitter.emit_line('{{"{}",'.format(attr))
         emitter.emit_line(' (getter){}, (setter){},'.format(getter_name(cl.name, attr),
                                                             setter_name(cl.name, attr)))

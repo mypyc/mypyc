@@ -183,15 +183,20 @@ class IRBuilder(NodeVisitor[Value]):
             # built-in primitives.
             return INVALID_VALUE
 
+        classes = [node for node in mypyfile.defs if isinstance(node, ClassDef)]
+
         # First pass: Build ClassIRs and TypeInfo-to-ClassIR mapping.
-        for node in mypyfile.defs:
-            if isinstance(node, ClassDef):
-                self.prepare_class_def(node)
+        for cls in classes:
+            self.prepare_class_def(cls)
 
         # Second pass: Generate ops.
         self.current_module_name = mypyfile.fullname()
         for node in mypyfile.defs:
             node.accept(self)
+
+        # Third pass: compute vtables
+        for cls in classes:
+            self.mapper.type_to_ir[cls.info].compute_vtable()
 
         return INVALID_VALUE
 

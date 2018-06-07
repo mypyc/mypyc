@@ -273,20 +273,13 @@ class RInstance(RType):
         return self.class_ir.struct_name()
 
     def getter_index(self, name: str) -> int:
-        for i, (attr, _) in enumerate(self.class_ir.attributes):
-            if attr == name:
-                return i * 2
-        assert False, '%r has no attribute %r' % (self.name, name)
+        return self.class_ir.vtable_entry(name)
 
     def setter_index(self, name: str) -> int:
         return self.getter_index(name) + 1
 
     def method_index(self, name: str) -> int:
-        base = len(self.class_ir.attributes) * 2
-        for i, fn in enumerate(self.class_ir.methods):
-            if fn.name == name:
-                return base + i
-        assert False, '%r has no attribute %r' % (self.name, name)
+        return self.class_ir.vtable_entry(name)
 
     def attr_type(self, name: str) -> RType:
         assert name in self.class_ir.attributes, '%r has no attribute %r' % (self.name, name)
@@ -1232,6 +1225,22 @@ class ClassIR:
         self.name = name
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
         self.methods = []  # type: List[FuncIR]
+        self.vtable = None  # type: Optional[Dict[str, Union[int, int]]]
+
+    def compute_vtable(self) -> None:
+        if self.vtable is not None: return
+        self.vtable = {}
+        base = 0
+        for i, attr in enumerate(self.attributes):
+            self.vtable[attr] = base + i * 2
+        base += len(self.attributes) * 2
+        for i, fn in enumerate(self.methods):
+            self.vtable[fn.name] = base + i
+
+    def vtable_entry(self, name: str) -> int:
+        assert self.vtable is not None, "vtable not computed yet"
+        assert name in self.vtable, '%r has no attribute %r' % (self.name, name)
+        return self.vtable[name]
 
     def struct_name(self) -> str:
         return '{}Object'.format(self.name)
