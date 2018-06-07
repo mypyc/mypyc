@@ -148,14 +148,14 @@ def generate_object_struct(cl: ClassIR, emitter: Emitter) -> None:
     emitter.emit_lines('typedef struct {',
                        'PyObject_HEAD',
                        'CPyVTableItem *vtable;')
-    for attr, rtype in cl.attributes:
+    for attr, rtype in cl.attributes.items():
         emitter.emit_line('{}{};'.format(rtype.ctype_spaced(), attr))
     emitter.emit_line('}} {};'.format(cl.struct_name()))
 
 
 def generate_native_getters_and_setters(cl: ClassIR,
                                         emitter: Emitter) -> None:
-    for attr, rtype in cl.attributes:
+    for attr, rtype in cl.attributes.items():
         # Native getter
         emitter.emit_line('{}{}({} *self)'.format(rtype.ctype_spaced(),
                                                native_getter_name(cl.name, attr),
@@ -216,7 +216,7 @@ def generate_setup_for_class(cl: ClassIR,
     emitter.emit_line('if (self == NULL)')
     emitter.emit_line('    return NULL;')
     emitter.emit_line('self->vtable = {};'.format(vtable_name))
-    for attr, rtype in cl.attributes:
+    for attr, rtype in cl.attributes.items():
         emitter.emit_line('self->{} = {};'.format(attr, rtype.c_undefined_value()))
     emitter.emit_line('return (PyObject *)self;')
     emitter.emit_line('}')
@@ -282,7 +282,7 @@ def generate_traverse_for_class(cl: ClassIR,
     emitter.emit_line('{}({} *self, visitproc visit, void *arg)'.format(func_name,
                                                                         cl.struct_name()))
     emitter.emit_line('{')
-    for attr, rtype in cl.attributes:
+    for attr, rtype in cl.attributes.items():
         emitter.emit_gc_visit('self->{}'.format(attr), rtype)
     emitter.emit_line('return 0;')
     emitter.emit_line('}')
@@ -294,7 +294,7 @@ def generate_clear_for_class(cl: ClassIR,
     emitter.emit_line('static int')
     emitter.emit_line('{}({} *self)'.format(func_name, cl.struct_name()))
     emitter.emit_line('{')
-    for attr, rtype in cl.attributes:
+    for attr, rtype in cl.attributes.items():
         emitter.emit_gc_clear('self->{}'.format(attr), rtype)
     emitter.emit_line('return 0;')
     emitter.emit_line('}')
@@ -352,7 +352,7 @@ def generate_getseters_table(cl: ClassIR,
 
 
 def generate_getseters(cl: ClassIR, emitter: Emitter) -> None:
-    for i, (attr, rtype) in enumerate(cl.attributes):
+    for i, (attr, rtype) in enumerate(cl.attributes.items()):
         generate_getter(cl, attr, rtype, emitter)
         emitter.emit_line('')
         generate_setter(cl, attr, rtype, emitter)

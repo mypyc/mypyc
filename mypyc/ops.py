@@ -289,10 +289,8 @@ class RInstance(RType):
         assert False, '%r has no attribute %r' % (self.name, name)
 
     def attr_type(self, name: str) -> RType:
-        for i, (attr, rtype) in enumerate(self.class_ir.attributes):
-            if attr == name:
-                return rtype
-        assert False, '%r has no attribute %r' % (self.name, name)
+        assert name in self.class_ir.attributes, '%r has no attribute %r' % (self.name, name)
+        return self.class_ir.attributes[name]
 
     def __repr__(self) -> str:
         return '<RInstance %s>' % self.name
@@ -1232,7 +1230,7 @@ class ClassIR:
 
     def __init__(self, name: str) -> None:
         self.name = name
-        self.attributes = []  # type: List[Tuple[str, RType]]
+        self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
         self.methods = []  # type: List[FuncIR]
 
     def struct_name(self) -> str:
