@@ -202,7 +202,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.classes.append(ir)
         self.mapper.type_to_ir[cdef.info] = ir
 
-        for name, node in cdef.info.names.items():
+        for name, node in sorted(cdef.info.names.items(), key=lambda x: x[0]):
             if isinstance(node.node, Var):
                 assert node.node.type, "Class member missing type"
                 ir.attributes.append((name, self.type_to_rtype(node.node.type)))
