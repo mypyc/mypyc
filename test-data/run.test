@@ -621,3 +621,16 @@ assert sum == 50.0
 
 assert str(from_int(10)) == '10.0'
 assert str(to_int(3.14)) == '3'
+
+[case testBigIntLiteral]
+def big_int() -> None:
+    a_62_bit = 4611686018427387902
+    max_62_bit = 4611686018427387903
+    b_63_bit = 4611686018427387904
+    c_63_bit = 9223372036854775806
+    max_63_bit = 9223372036854775807
+    d_64_bit = 9223372036854775808
+    max_32_bit = 2147483647
+[file driver.py]
+from native import big_int
+big_int()
