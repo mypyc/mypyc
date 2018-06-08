@@ -164,8 +164,8 @@ class ModuleGenerator:
                     '    return NULL;',
                 )
             else:
-                raise TypeError('Literals must be integers, floating point numbers, or strings,',
-                                'but the provided literal is of type {}'.format(type(literal)))
+                assert False, ('Literals must be integers, floating point numbers, or strings,',
+                               'but the provided literal is of type {}'.format(type(literal)))
 
         for cl in self.module.classes:
             name = cl.name
