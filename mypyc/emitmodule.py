@@ -83,6 +83,9 @@ class ModuleGenerator:
         for symbol in self.module.integer_literals.values():
             self.declare_static_pyobject(symbol)
 
+        for symbol in self.module.float_literals.values():
+            self.declare_static_pyobject(symbol)
+
         for fn in self.module.functions:
             generate_function_declaration(fn, emitter)
 
@@ -162,6 +165,9 @@ class ModuleGenerator:
                 '{} = PyLong_FromString(\"{}\", NULL, 10);'.format(
                     symbol, str(integer_literal))
             )
+
+        for float_literal, symbol in self.module.float_literals.items():
+            emitter.emit_lines('{} = PyFloat_FromDouble({});'.format(symbol, str(float_literal)))
 
         for cl in self.module.classes:
             name = cl.name
