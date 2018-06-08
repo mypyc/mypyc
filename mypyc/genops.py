@@ -35,7 +35,7 @@ from mypy.types import Type, Instance, CallableType, NoneTyp, TupleType, UnionTy
 from mypy.visitor import NodeVisitor
 from mypy.subtypes import is_named_instance
 
-from mypyc.common import MAX_62_BIT
+from mypyc.common import MAX_SHORT_INT
 from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Value, Register, Label, Return, FuncIR, Assign,
     Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple, Unreachable, TupleGet, TupleSet,
@@ -173,6 +173,12 @@ class IRBuilder(NodeVisitor[Value]):
 
         # Maps float literals to the static c name for that literal
         self.float_literals = {}  # type: Dict[float, str]
+
+        # TODO: For now, separate maps for unicode and integer literals is
+        #       okay. But when adding more types of literals, consider
+        #       combining the multiple maps into one. The map would have a
+        #       type something like:
+        #           Dict[Union[int, str, float], str]
 
         self.current_module_name = None  # type: Optional[str]
 
@@ -636,7 +642,7 @@ class IRBuilder(NodeVisitor[Value]):
         assert False, 'Unsupported indexing operation'
 
     def visit_int_expr(self, expr: IntExpr) -> Value:
-        if expr.value > MAX_62_BIT:
+        if expr.value > MAX_SHORT_INT:
             return self.load_static_int(expr.value)
         return self.add(LoadInt(expr.value))
 
@@ -1140,8 +1146,7 @@ class IRBuilder(NodeVisitor[Value]):
         return self.box(self.accept(expr))
 
     def load_static_int(self, value: int) -> Value:
-        """Loads a static integer value into a register.
-        """
+        """Loads a static integer value into a register."""
         if value not in self.integer_literals:
             self.integer_literals[value] = '__integer_' + str(len(self.integer_literals))
         static_symbol = self.integer_literals[value]
