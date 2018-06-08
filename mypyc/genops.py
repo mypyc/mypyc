@@ -185,32 +185,50 @@ class IRBuilder(NodeVisitor[Value]):
 
         classes = [node for node in mypyfile.defs if isinstance(node, ClassDef)]
 
-        # First pass: Build ClassIRs and TypeInfo-to-ClassIR mapping.
+        # Build ClassIRs and TypeInfo-to-ClassIR mapping.
+        for cls in classes:
+            self.create_class_def(cls)
+
+        # Do class def setup
         for cls in classes:
             self.prepare_class_def(cls)
 
-        # Second pass: Generate ops.
+        # Generate ops.
         self.current_module_name = mypyfile.fullname()
         for node in mypyfile.defs:
             node.accept(self)
 
-        # Third pass: compute vtables
+        # Compute vtables.
         for cls in classes:
             self.mapper.type_to_ir[cls.info].compute_vtable()
 
         return INVALID_VALUE
 
-    def prepare_class_def(self, cdef: ClassDef) -> None:
+    def create_class_def(self, cdef: ClassDef) -> None:
         # We want to collect the attributes first so they are available
         # while generating the methods
         ir = ClassIR(cdef.name)
         self.classes.append(ir)
         self.mapper.type_to_ir[cdef.info] = ir
 
-        for name, node in cdef.info.names.items():
+    def prepare_class_def(self, cdef: ClassDef) -> None:
+        ir = self.mapper.type_to_ir[cdef.info]
+        info = cdef.info
+        for name, node in info.names.items():
             if isinstance(node.node, Var):
                 assert node.node.type, "Class member missing type"
                 ir.attributes[name] = self.type_to_rtype(node.node.type)
+
+        # Set up the parent class
+        assert len(info.bases) == 1, "Only single inheritance is supported"
+        mro = []
+        for cls in info.mro:
+            if cls.fullname() == 'builtins.object': continue
+            assert cls in self.mapper.type_to_ir, "Can't subclass cpython types yet"
+            mro.append(self.mapper.type_to_ir[cls])
+        if len(mro) > 1:
+            ir.base = mro[1]
+        ir.mro = mro
 
     def visit_class_def(self, cdef: ClassDef) -> Value:
         ir = self.mapper.type_to_ir[cdef.info]

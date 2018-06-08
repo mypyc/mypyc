@@ -26,12 +26,14 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     getseters_name = '{}_getseters'.format(name)
     methods_name = '{}_methods'.format(name)
     vtable_name = '{}_vtable'.format(name)
+    base_arg = "&{}".format(type_struct_name(cl.base.name)) if cl.base else "0"
 
     def emit_line() -> None:
         emitter.emit_line()
 
     emit_line()
     generate_object_struct(cl, emitter)
+    emit_line()
 
     # If there is a __init__ method, generate a function for tp_init and
     # extract the args (which we'll use for the native constructor)
@@ -100,7 +102,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
             {methods_name},            /* tp_methods */
             0,                         /* tp_members */
             {getseters_name},          /* tp_getset */
-            0,                         /* tp_base */
+            {base_arg},                /* tp_base */
             0,                         /* tp_dict */
             0,                         /* tp_descr_get */
             0,                         /* tp_descr_set */
@@ -119,6 +121,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
                     methods_name=methods_name,
                     getseters_name=getseters_name,
                     init_name=init_name,
+                    base_arg=base_arg,
                     ))
     emitter.emit_line()
     generate_setup_for_class(cl, setup_name, vtable_name, emitter)
@@ -148,8 +151,9 @@ def generate_object_struct(cl: ClassIR, emitter: Emitter) -> None:
     emitter.emit_lines('typedef struct {',
                        'PyObject_HEAD',
                        'CPyVTableItem *vtable;')
-    for attr, rtype in cl.attributes.items():
-        emitter.emit_line('{}{};'.format(rtype.ctype_spaced(), attr))
+    for base in reversed(cl.mro):
+        for attr, rtype in base.attributes.items():
+            emitter.emit_line('{}{};'.format(rtype.ctype_spaced(), attr))
     emitter.emit_line('}} {};'.format(cl.struct_name()))
 
 
@@ -189,15 +193,23 @@ def generate_native_getters_and_setters(cl: ClassIR,
         emitter.emit_line()
 
 
-def generate_vtable(cl: ClassIR,
+def generate_vtable(base: ClassIR,
                     vtable_name: str,
                     emitter: Emitter) -> None:
     emitter.emit_line('static CPyVTableItem {}[] = {{'.format(vtable_name))
-    for attr in cl.attributes:
-        emitter.emit_line('(CPyVTableItem){},'.format(native_getter_name(cl.name, attr)))
-        emitter.emit_line('(CPyVTableItem){},'.format(native_setter_name(cl.name, attr)))
-    for fn in cl.methods:
-        emitter.emit_line('(CPyVTableItem){}{},'.format(NATIVE_PREFIX, fn.cname))
+    for cl in reversed(base.mro):
+        for attr in cl.attributes:
+            emitter.emit_line('(CPyVTableItem){},'.format(native_getter_name(cl.name, attr)))
+            emitter.emit_line('(CPyVTableItem){},'.format(native_setter_name(cl.name, attr)))
+        for fn in cl.methods:
+            # TODO: This is gross, and inefficient, and wrong if the type changes.
+            # This logic should all live on the genops side, I think
+            search = base.mro if fn.name != '__init__' else [cl]
+            for cl2 in search:
+                m = cl2.get_method(fn.name)
+                if m:
+                    emitter.emit_line('(CPyVTableItem){}{},'.format(NATIVE_PREFIX, m.cname))
+                    break
     emitter.emit_line('};')
 
 
