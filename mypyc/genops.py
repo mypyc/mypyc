@@ -14,7 +14,7 @@ It would be translated to something that conceptually looks like this:
    return r3
 """
 
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union
 
 from mypy.nodes import (
     Node, MypyFile, FuncDef, ReturnStmt, AssignmentStmt, OpExpr, IntExpr, NameExpr, LDEF, Var,
@@ -60,8 +60,7 @@ def build_ir(module: MypyFile,
     builder = IRBuilder(types, mapper)
     module.accept(builder)
 
-    return ModuleIR(builder.imports, builder.unicode_literals, builder.integer_literals,
-                    builder.float_literals, builder.functions, builder.classes)
+    return ModuleIR(builder.imports, builder.literals, builder.functions, builder.classes)
 
 
 class Mapper:
@@ -165,20 +164,8 @@ class IRBuilder(NodeVisitor[Value]):
         self.mapper = mapper
         self.imports = []  # type: List[str]
 
-        # Maps unicode literals to the static c name for that literal
-        self.unicode_literals = {}  # type: Dict[str, str]
-
-        # Maps integer literals to the static c name for that literal
-        self.integer_literals = {}  # type: Dict[int, str]
-
-        # Maps float literals to the static c name for that literal
-        self.float_literals = {}  # type: Dict[float, str]
-
-        # TODO: For now, separate maps for unicode and integer literals is
-        #       okay. But when adding more types of literals, consider
-        #       combining the multiple maps into one. The map would have a
-        #       type something like:
-        #           Dict[Union[int, str, float], str]
+        # Maps integer, float, and unicode literals to the static c name for that literal
+        self.literals = {}  # type: Dict[Union[int, float, str], str]
 
         self.current_module_name = None  # type: Optional[str]
 
@@ -1147,16 +1134,16 @@ class IRBuilder(NodeVisitor[Value]):
 
     def load_static_int(self, value: int) -> Value:
         """Loads a static integer value into a register."""
-        if value not in self.integer_literals:
-            self.integer_literals[value] = '__integer_' + str(len(self.integer_literals))
-        static_symbol = self.integer_literals[value]
+        if value not in self.literals:
+            self.literals[value] = '__integer_' + str(len(self.literals))
+        static_symbol = self.literals[value]
         return self.add(LoadStatic(int_rprimitive, static_symbol))
 
     def load_static_float(self, value: float) -> Value:
         """Loads a static float value into a register."""
-        if value not in self.float_literals:
-            self.float_literals[value] = '__float_' + str(len(self.float_literals))
-        static_symbol = self.float_literals[value]
+        if value not in self.literals:
+            self.literals[value] = '__float_' + str(len(self.literals))
+        static_symbol = self.literals[value]
         return self.add(LoadStatic(float_rprimitive, static_symbol))
 
     def load_static_unicode(self, value: str) -> Value:
@@ -1165,9 +1152,9 @@ class IRBuilder(NodeVisitor[Value]):
         This is useful for more than just unicode literals; for example, method calls
         also require a PyObject * form for the name of the method.
         """
-        if value not in self.unicode_literals:
-            self.unicode_literals[value] = '__unicode_' + str(len(self.unicode_literals))
-        static_symbol = self.unicode_literals[value]
+        if value not in self.literals:
+            self.literals[value] = '__unicode_' + str(len(self.literals))
+        static_symbol = self.literals[value]
         return self.add(LoadStatic(str_rprimitive, static_symbol))
 
     def coerce(self, src: Value, target_type: RType, line: int) -> Value:

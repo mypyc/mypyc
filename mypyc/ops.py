@@ -1252,15 +1252,11 @@ class ModuleIR:
 
     def __init__(self,
             imports: List[str],
-            unicode_literals: Dict[str, str],
-            integer_literals: Dict[int, str],
-            float_literals: Dict[float, str],
+            literals: Dict[Union[int, float, str], str],
             functions: List[FuncIR],
             classes: List[ClassIR]) -> None:
         self.imports = imports[:]
-        self.unicode_literals = unicode_literals
-        self.integer_literals = integer_literals
-        self.float_literals = float_literals
+        self.literals = literals
         self.functions = functions
         self.classes = classes
 
