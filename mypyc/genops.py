@@ -110,6 +110,7 @@ class Mapper:
             return object_rprimitive
         elif isinstance(typ, TypeVarType):
             # Erase type variable to upper bound.
+            # TODO: Erase to object if object has value restriction -- or union (once supported)?
             assert not typ.values, 'TypeVar with value restriction not supported'
             return self.type_to_rtype(typ.upper_bound)
         assert False, '%s unsupported' % type(typ)
