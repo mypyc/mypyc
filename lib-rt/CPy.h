@@ -182,7 +182,7 @@ inline bool CPyTagged_IsAddOverflow(CPyTagged sum, CPyTagged left, CPyTagged rig
 }
 
 static CPyTagged CPyTagged_Negate(CPyTagged num) {
-    if (CPyTagged_CheckShort(num) && num != (CPyTagged) -(1LL << 63)) {
+    if (CPyTagged_CheckShort(num) && num != (CPyTagged) (1LL << 63)) {
         // The only possibility of an overflow error happening when negating a short is if we
         // attempt to negate the most negative number.
         return -num;
