@@ -243,3 +243,12 @@ L3:
     goto L1
 L4:
     return y
+
+[case testForDictIR]
+from typing import Dict
+
+def f(d: Dict[int, int]) -> int:
+    s = 0
+    for key in d:
+        s = s + d[key]
+    return s

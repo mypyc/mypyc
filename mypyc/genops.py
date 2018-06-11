@@ -52,7 +52,7 @@ from mypyc.ops import (
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import list_len_op, list_get_item_op, new_list_op
 from mypyc.ops_dict import new_dict_op
-from mypyc.ops_misc import none_op
+from mypyc.ops_misc import none_op, iter_op, next_op, is_null_op
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
 
@@ -511,7 +511,7 @@ class IRBuilder(NodeVisitor[Value]):
             self.pop_loop_stack(end_block, next)
             return INVALID_VALUE
 
-        if is_list_rprimitive(self.node_type(s.expr)):
+        elif is_list_rprimitive(self.node_type(s.expr)):
             self.push_loop_stack()
 
             expr_reg = self.accept(s.expr)
@@ -559,7 +559,42 @@ class IRBuilder(NodeVisitor[Value]):
 
             return INVALID_VALUE
 
-        assert False, 'for not supported'
+        else:
+            self.push_loop_stack()
+
+            expr_reg = self.accept(s.expr)
+            iter_reg = self.add(PrimitiveOp([expr_reg], iter_op, s.line))
+            next_reg = self.add(PrimitiveOp([iter_reg], next_op, s.line))
+
+            lvalue_reg = self.environment.add_local(s.index.node, object_rprimitive)
+            self.add(Assign(lvalue_reg, next_reg))
+
+            condition_block = self.goto_new_block()
+
+            comparison = self.add(PrimitiveOp([lvalue_reg], is_null_op, s.line))
+
+            branch = Branch(comparison, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
+            self.add(branch)
+            branches = [branch]
+
+            body_block = self.new_block()
+            self.set_branches(branches, False, body_block)
+
+            s.body.accept(self)
+
+            end_block = self.goto_new_block()
+            temp_reg = self.add(PrimitiveOp([iter_reg], next_op, s.line))
+            self.add(Assign(lvalue_reg, temp_reg))
+            self.add(Goto(condition_block.label))
+
+            next_block = self.goto_new_block()
+            self.set_branches(branches, True, next_block)
+
+            self.pop_loop_stack(end_block, next_block)
+
+            return INVALID_VALUE
+
+        # assert False, 'for not supported'
 
     def visit_break_stmt(self, node: BreakStmt) -> Value:
         self.break_gotos[-1].append(Goto(INVALID_LABEL))

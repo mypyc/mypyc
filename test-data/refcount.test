@@ -633,3 +633,12 @@ L0:
     dec_ref r2
     r3 = None
     return r3
+
+[case testForDict]
+from typing import Dict
+
+def f(d: Dict[int, int]) -> int:
+    s = 0
+    for key in d:
+        s = s + d[key]
+    return s

@@ -82,7 +82,7 @@ class TestRun(MypycDataSuite):
             driver_path = os.path.join(test_temp_dir, 'driver.py')
             env = os.environ.copy()
             env['PYTHONPATH'] = os.path.dirname(native_lib_path)
-            proc = subprocess.Popen(['python', driver_path], stdout=subprocess.PIPE,
+            proc = subprocess.Popen(['python', '-u', driver_path], stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, env=env)
             output, _ = proc.communicate()
             output = output.decode('utf8')
