@@ -785,6 +785,10 @@ class IRBuilder(NodeVisitor[Value]):
                 node = node['__init__'].node
                 if isinstance(node, FuncDef) and isinstance(node.type, CallableType):
                     signature = bind_self(node.type)
+                    # "__init__" has None return, but the type object returns
+                    # in instance.  Take the instance return type from the
+                    # inferred callee type, which we can trust since it can't
+                    # be erased from a type variable.
                     inferred_sig = self.types[callee]
                     assert isinstance(inferred_sig, CallableType)
                     signature = signature.copy_modified(ret_type=inferred_sig.ret_type)
