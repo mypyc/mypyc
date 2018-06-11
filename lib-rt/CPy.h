@@ -182,14 +182,10 @@ inline bool CPyTagged_IsAddOverflow(CPyTagged sum, CPyTagged left, CPyTagged rig
 }
 
 static CPyTagged CPyTagged_Negate(CPyTagged num) {
-    if (CPyTagged_CheckShort(num)) {
-        CPyTagged neg = -num;
-        // The only possibility of an overflow error when negating a short is if we attempt to
-        // negate the most negative number. This would be 30 bits, because the high bit is used for
-        // two's complement and the low bit is used as a flag for CPyTagged representation.
-        if (neg != (CPyTagged) -(1 << 30)) {
-            return neg;
-        }
+    if (CPyTagged_CheckShort(num) && num != (CPyTagged) -(1LL << 63)) {
+        // The only possibility of an overflow error happening when negating a short is if we
+        // attempt to negate the most negative number.
+        return -num;
     }
     PyObject *num_obj = CPyTagged_AsObject(num);
     PyObject *result = PyNumber_Negative(num_obj);
