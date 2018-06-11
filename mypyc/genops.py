@@ -734,6 +734,7 @@ class IRBuilder(NodeVisitor[Value]):
             return self.translate_call(expr, callee)
 
     def translate_call(self, expr: CallExpr, callee: Expression) -> Value:
+        """Translate a non-method call."""
         assert isinstance(callee, NameExpr)  # TODO: Allow arbitrary callees
 
         # Gen the args
@@ -755,31 +756,40 @@ class IRBuilder(NodeVisitor[Value]):
                 return target
 
         fn = callee.name  # TODO: fullname
+        # Try to generate a native call. Don't rely on the inferred callee
+        # type, since it may have type variable substitutions that aren't
+        # valid at runtime (due to type erasure). Instead pick the declared
+        # signature of the native function as the true signature.
+        signature = self.get_native_signature(callee)
+        if signature:
+            # Native call
+            arg_types = [self.type_to_rtype(arg_type) for arg_type in signature.arg_types]
+            args = self.coerce_native_call_args(args, arg_types, expr.line)
+            ret_type = self.type_to_rtype(signature.ret_type)
+            return self.add(Call(ret_type, fn, args, expr.line))
+        else:
+            # Fall back to a Python call
+            function = self.accept(callee)
+            return self.py_call(function, args, target_type, expr.line)
+
+    def get_native_signature(self, callee: NameExpr) -> Optional[CallableType]:
+        """Get the signature of a native function, or return None if not available.
+
+        This only works for normal functions, not methods.
+        """
+        signature = None
         if self.is_native_module_name_expr(callee):
-            # Try to generate a native call. Don't rely on the inferred callee
-            # type, since it may have type variable substitutions that aren't
-            # valid at runtime (due to type erasure). Instead pick the declared
-            # signature of the function as the true signature.
             node = callee.node
-            signature = None
             if isinstance(node, TypeInfo):
                 node = node['__init__'].node
                 if isinstance(node, FuncDef) and isinstance(node.type, CallableType):
                     signature = bind_self(node.type)
                     inferred_sig = self.types[callee]
                     assert isinstance(inferred_sig, CallableType)
-                    target_type = self.type_to_rtype(inferred_sig.ret_type)
+                    signature = signature.copy_modified(ret_type=inferred_sig.ret_type)
             elif isinstance(node, FuncDef) and isinstance(node.type, CallableType):
                 signature = node.type
-                target_type = self.type_to_rtype(signature.ret_type)
-            if signature:
-                arg_types = [self.type_to_rtype(arg_type) for arg_type in signature.arg_types]
-                args = self.coerce_native_call_args(args, arg_types, expr.line)
-                return self.add(Call(target_type, fn, args, expr.line))
-
-        # Fall back to a Python call
-        function = self.accept(callee)
-        return self.py_call(function, args, target_type, expr.line)
+        return signature
 
     def translate_method_call(self, expr: CallExpr, callee: MemberExpr) -> Value:
         if self.is_module_member_expr(callee):
