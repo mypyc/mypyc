@@ -779,3 +779,26 @@ def f() -> None:
 [file driver.py]
 from native import f
 f()
+
+[case testCallableTypes]
+from typing import Callable
+def absolute_value(x: int) -> int:
+    return x if x > 0 else -x
+
+def call_native_function(x: int) -> int:
+    return absolute_value(x)
+
+def load_float() -> float:
+    return 5.0
+
+def return_callable_type() -> Callable[[], float]:
+    return load_float
+
+def call_python_function(x: int) -> int:
+    return int(x)
+
+[file driver.py]
+from native import call_native_function, call_python_function
+y = call_native_function(1)
+y = call_python_function(1)
+print(y)

@@ -860,3 +860,16 @@ L0:
     max_32_bit = r6
     r7 = None
     return r7
+
+[case testCallableTypes]
+def absolute_value(x: int) -> int:
+    return x if x > 0 else -x
+
+def call_native_function(x: int) -> int:
+    return absolute_value(x)
+
+def load_float() -> None:
+    x = 5.0
+
+def call_python_function(x: int) -> int:
+    return int(x)
