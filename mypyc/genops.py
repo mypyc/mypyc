@@ -52,7 +52,7 @@ from mypyc.ops import (
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import list_len_op, list_get_item_op, new_list_op
 from mypyc.ops_dict import new_dict_op
-from mypyc.ops_misc import none_op, iter_op, next_op, is_null_op
+from mypyc.ops_misc import none_op, iter_op, next_op, no_err_occurred_op
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
 
@@ -562,33 +562,42 @@ class IRBuilder(NodeVisitor[Value]):
         else:
             self.push_loop_stack()
 
+            assert isinstance(s.index, NameExpr)
+            assert isinstance(s.index.node, Var)
+            lvalue_reg = self.environment.add_local(s.index.node, object_rprimitive)
+
+            # Define registers to contain the expression, along with the iterator that will be used
+            # for the for-loop.
             expr_reg = self.accept(s.expr)
             iter_reg = self.add(PrimitiveOp([expr_reg], iter_op, s.line))
+
+            # Create a block for where the __next__ function will be called on the iterator and
+            # checked to see if the value returned is NULL, which would signal either the end of
+            # the Iterable being traversed or an exception being raised. Note that Branch.IS_ERROR
+            # checks only for NULL (an exception does not necessarily have to be raised).
+            next_block = self.goto_new_block()
             next_reg = self.add(PrimitiveOp([iter_reg], next_op, s.line))
-
-            lvalue_reg = self.environment.add_local(s.index.node, object_rprimitive)
-            self.add(Assign(lvalue_reg, next_reg))
-
-            condition_block = self.goto_new_block()
-
-            comparison = self.add(PrimitiveOp([lvalue_reg], is_null_op, s.line))
-
-            branch = Branch(comparison, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
+            branch = Branch(next_reg, INVALID_LABEL, INVALID_LABEL, Branch.IS_ERROR)
             self.add(branch)
             branches = [branch]
 
+            # Create a new block for the body of the loop. Set the previous branch to go here if
+            # the conditional evaluates to false. Assign the value obtained from __next__ to the
+            # lvalue so that it can be referenced by code in the body of the loop. At the end of
+            # the body, goto the label that calls the iterator's __next__ function again.
             body_block = self.new_block()
             self.set_branches(branches, False, body_block)
-
+            self.add(Assign(lvalue_reg, next_reg))
             s.body.accept(self)
+            self.add(Goto(next_block.label))
 
-            end_block = self.goto_new_block()
-            temp_reg = self.add(PrimitiveOp([iter_reg], next_op, s.line))
-            self.add(Assign(lvalue_reg, temp_reg))
-            self.add(Goto(condition_block.label))
-
-            next_block = self.goto_new_block()
-            self.set_branches(branches, True, next_block)
+            # Create a new block for when the loop is finished. Set the branch to go here if the
+            # conditional evaluates to true. If an exception was raised during the loop, then
+            # err_reg wil be set to True. If no_err_occurred_op returns False, then the exception
+            # will be propagated using the ERR_FALSE flag.
+            end_block = self.new_block()
+            self.set_branches(branches, True, end_block)
+            self.add(PrimitiveOp([], no_err_occurred_op, s.line))
 
             self.pop_loop_stack(end_block, next_block)
 

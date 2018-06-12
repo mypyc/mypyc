@@ -656,16 +656,12 @@ from typing import Dict
 def f(d: Dict[int, int]) -> int:
     s = 0
     for key in d:
-        print('key: ' + str(key))
         s = s + d[key]
-        print('sum: ' + str(s))
-    print('done with loop')
     return s
 
 [file driver.py]
 from native import f
 d = {1:1, 2:2, 3:3, 4:4, 5:5}
-# print(d)
-# print(f(d))
-assert f(d) == 15
+print(f(d))
 [out]
+15

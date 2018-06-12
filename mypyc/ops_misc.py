@@ -41,11 +41,11 @@ next_op = func_op(name='builtins.next',
                   error_kind=ERR_NEVER,
                   emit=simple_emit('{dest} = PyIter_Next({args[0]});'))
 
-is_null_op = method_op(name='is_null',
-                       arg_types=[object_rprimitive],
-                       result_type=bool_rprimitive,
-                       error_kind=ERR_NEVER,
-                       emit=simple_emit('{dest} = ({args[0]} == NULL);'))
+no_err_occurred_op = func_op(name='no_err_occurred',
+                             arg_types=[],
+                             result_type=bool_rprimitive,
+                             error_kind=ERR_FALSE,
+                             emit=simple_emit('{dest} = (PyErr_Occurred() == NULL);'))
 
 #
 # Fallback primitive operations that operate on 'object' operands
