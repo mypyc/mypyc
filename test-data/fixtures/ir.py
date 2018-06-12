@@ -70,6 +70,7 @@ class dict(Generic[T, S]):
     def __contains__(self, x: T) -> bool: pass
     def __iter__(self) -> Iterator[T]: pass
     def update(self, x: Dict[T, S]) -> None: pass
+    def pop(self, x: int) -> T: pass
 
 def len(o: Sized) -> int: pass
 def print(*object) -> None: pass

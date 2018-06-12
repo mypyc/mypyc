@@ -88,10 +88,10 @@ class Mapper:
                 return dict_rprimitive
             elif typ.type.fullname() == 'builtins.tuple':
                 return tuple_rprimitive  # Varying-length tuple
-            elif typ.type.fullname() == 'builtins.object':
-                return object_rprimitive
             elif typ.type in self.type_to_ir:
                 return RInstance(self.type_to_ir[typ.type])
+            else:
+                return object_rprimitive
         elif isinstance(typ, TupleType):
             return RTuple([self.type_to_rtype(t) for t in typ.items])
         elif isinstance(typ, CallableType):
@@ -625,8 +625,6 @@ class IRBuilder(NodeVisitor[Value]):
             self.pop_loop_stack(end_block, next_block)
 
             return INVALID_VALUE
-
-        # assert False, 'for not supported'
 
     def visit_break_stmt(self, node: BreakStmt) -> Value:
         self.break_gotos[-1].append(Goto(INVALID_LABEL))
