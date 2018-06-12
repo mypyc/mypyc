@@ -48,8 +48,6 @@ L1:
     r2 = n < r1 :: int
     if r2 goto L2 else goto L3 :: bool
 L2:
-    goto L3
-    goto L1
 L3:
     r3 = None
     return r3
@@ -109,11 +107,7 @@ L3:
     r4 = n < r3 :: int
     if r4 goto L4 else goto L5 :: bool
 L4:
-    goto L5
-    goto L3
 L5:
-    goto L6
-    goto L1
 L6:
     r5 = None
     return r5
@@ -137,7 +131,6 @@ L1:
     if r2 goto L2 else goto L3 :: bool
 L2:
     goto L1
-    goto L1
 L3:
     r3 = None
     return r3
@@ -160,7 +153,6 @@ L1:
     r2 = n < r0 :: int
     if r2 goto L2 else goto L4 :: bool
 L2:
-    goto L3
 L3:
     r3 = 1
     r4 = n + r3 :: int
@@ -198,9 +190,7 @@ L3:
     if r4 goto L4 else goto L5 :: bool
 L4:
     goto L3
-    goto L3
 L5:
-    goto L1
     goto L1
 L6:
     r5 = None
@@ -244,7 +234,7 @@ L3:
 L4:
     return y
 
-[case testForDictIR]
+[case testForDictBasic]
 from typing import Dict
 
 def f(d: Dict[int, int]) -> None:
@@ -275,3 +265,54 @@ L3:
     r6 = no_err_occurred 
     r7 = None
     return r7
+
+[case testForDictContinue]
+from typing import Dict
+
+def sum_over_even_values(d: Dict[int, int]) -> int:
+    s = 0
+    for key in d:
+        if d[key] % 2:
+            continue
+        s = s + d[key]
+    return s
+[out]
+def sum_over_even_values(d):
+    d :: dict
+    s, r0 :: int
+    key, r1, r2 :: object
+    r3 :: int
+    r4, r5 :: object
+    r6, r7, r8, r9 :: int
+    r10, r11 :: object
+    r12, r13 :: int
+    r14 :: bool
+L0:
+    r0 = 0
+    s = r0
+    r1 = iter d :: object
+L1:
+    r2 = next r1 :: object
+    if is_error(r2) goto L5 else goto L2
+L2:
+    key = r2
+    r3 = unbox(int, key)
+    r4 = box(int, r3)
+    r5 = d[r4] :: dict
+    r6 = unbox(int, r5)
+    r7 = 2
+    r8 = r6 % r7 :: int
+    if r8 goto L3 else goto L4 :: bool
+L3:
+    goto L1
+L4:
+    r9 = unbox(int, key)
+    r10 = box(int, r9)
+    r11 = d[r10] :: dict
+    r12 = unbox(int, r11)
+    r13 = s + r12 :: int
+    s = r13
+    goto L1
+L5:
+    r14 = no_err_occurred 
+    return s

@@ -88,10 +88,10 @@ class Mapper:
                 return dict_rprimitive
             elif typ.type.fullname() == 'builtins.tuple':
                 return tuple_rprimitive  # Varying-length tuple
-            elif typ.type.fullname() == 'builtins.object':
-                return object_rprimitive
             elif typ.type in self.type_to_ir:
                 return RInstance(self.type_to_ir[typ.type])
+            else:
+                return object_rprimitive
         elif isinstance(typ, TupleType):
             return RTuple([self.type_to_rtype(t) for t in typ.items])
         elif isinstance(typ, CallableType):
@@ -168,6 +168,12 @@ class IRBuilder(NodeVisitor[Value]):
         # gotos have their targets rewritten to the next basic block.
         self.break_gotos = []  # type: List[List[Goto]]
         self.continue_gotos = []  # type: List[List[Goto]]
+
+        # These dictionaries map from references of Goto types for break and continue statements to
+        # the outer blocks list index, inner blocks list index, and ops list index at which they
+        # occur.
+        self.break_gotos_map = {}  # type: Dict[Goto, Tuple[int, int, int]]
+        self.continue_gotos_map = {}  # type: Dict[Goto, Tuple[int, int, int]]
 
         self.mapper = mapper
         self.imports = []  # type: List[str]
@@ -461,8 +467,26 @@ class IRBuilder(NodeVisitor[Value]):
         for continue_goto in self.continue_gotos.pop():
             continue_goto.label = continue_block.label
 
+            # Here, we find the block of the continue goto op, and remove all other control-flow
+            # ops that come after it within the same block, since they will not be used.
+            outer_idx, inner_idx, ops_idx = self.continue_gotos_map[continue_goto]
+            ops = self.blocks[outer_idx][inner_idx].ops
+            if ops_idx < len(ops) - 1:
+                for i, op in enumerate(ops[ops_idx + 1:]):
+                    if isinstance(op, (Branch, Goto, Return)):
+                        ops.pop(i + ops_idx + 1)
+
         for break_goto in self.break_gotos.pop():
             break_goto.label = break_block.label
+
+            # Here, we find the block of the break goto op, and remove all other control-flow ops
+            # that come after it within the same block, since they will not be used.
+            outer_idx, inner_idx, ops_idx = self.break_gotos_map[break_goto]
+            ops = self.blocks[outer_idx][inner_idx].ops
+            if ops_idx < len(ops) - 1:
+                for i, op in enumerate(ops[ops_idx + 1:]):
+                    if isinstance(op, (Branch, Goto, Return)):
+                        ops.pop(i + ops_idx + 1)
 
     def visit_while_stmt(self, s: WhileStmt) -> Value:
         self.push_loop_stack()
@@ -622,19 +646,37 @@ class IRBuilder(NodeVisitor[Value]):
             self.set_branches(branches, True, end_block)
             self.add(PrimitiveOp([], no_err_occurred_op, s.line))
 
-            self.pop_loop_stack(end_block, next_block)
+            self.pop_loop_stack(next_block, end_block)
 
             return INVALID_VALUE
 
-        # assert False, 'for not supported'
-
     def visit_break_stmt(self, node: BreakStmt) -> Value:
-        self.break_gotos[-1].append(Goto(INVALID_LABEL))
+        goto = Goto(INVALID_LABEL)
+        self.break_gotos[-1].append(goto)
+
+        # Store the index of the outer list of blocks, the index of inner list of blocks, and the
+        # index of list of ops for the break goto op. Map the continue goto op to these indices so
+        # that its position can be retrieved later from the list of blocks.
+        i1 = len(self.blocks) - 1
+        i2 = len(self.blocks[-1]) - 1
+        i3 = len(self.blocks[-1][-1].ops)
+        self.break_gotos_map[goto] = (i1, i2, i3)
+
         self.add(self.break_gotos[-1][-1])
         return INVALID_VALUE
 
     def visit_continue_stmt(self, node: ContinueStmt) -> Value:
-        self.continue_gotos[-1].append(Goto(INVALID_LABEL))
+        goto = Goto(INVALID_LABEL)
+        self.continue_gotos[-1].append(goto)
+
+        # Store the index of the outer list of blocks, the index of inner list of blocks, and the
+        # index of list of ops for the continue goto op. Map the continue goto op to these indices
+        # so that its position can be retrieved later from the list of blocks.
+        i1 = len(self.blocks) - 1
+        i2 = len(self.blocks[-1]) - 1
+        i3 = len(self.blocks[-1][-1].ops)
+        self.continue_gotos_map[goto] = (i1, i2, i3)
+
         self.add(self.continue_gotos[-1][-1])
         return INVALID_VALUE
 
