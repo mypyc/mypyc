@@ -23,13 +23,6 @@ from mypy.nodes import Var
 
 T = TypeVar('T')
 
-# TODO: Use pointers to BasicBlocks instead?
-Label = NewType('Label', int)
-
-# This is used for placeholder labels which aren't assigned yet (but will
-# be eventually. It's kind of a hack.
-INVALID_LABEL = Label(-88888)
-
 
 def c_module_name(module_name: str) -> str:
     return 'module_{}'.format(module_name.replace('.', '__dot__'))
@@ -375,7 +368,9 @@ class Environment:
                 elif typespec == 'f':
                     result.append('%f' % arg)
                 elif typespec == 'l':
-                    result.append('L%d' % arg)
+                    # ew
+                    if isinstance(arg, BasicBlock): arg = arg.label
+                    result.append('L%s' % arg)
                 elif typespec == 's':
                     result.append(str(arg))
                 else:
@@ -399,6 +394,44 @@ class Environment:
             i += 1
             result.append('%s :: %s' % (', '.join(group), regs[i0].type))
         return result
+
+
+class BasicBlock:
+    """Basic IR block.
+
+    Ends with a jump, branch, or return.
+
+    When building the IR, ops that raise exceptions can be included in
+    the middle of a basic block, but the exceptions aren't checked.
+    Afterwards we perform a transform that inserts explicit checks for
+    all error conditions and splits basic blocks accordingly to preserve
+    the invariant that a jump, branch or return can only ever appear
+    as the final op in a block. Manually inserting error checking ops
+    would be boring and error-prone.
+
+    Ops that may terminate the program aren't treated as exits.
+    """
+
+    def __init__(self, label: Union[str, int] = -1) -> None:
+        self.label = label
+        self.ops = []  # type: List[Op]
+
+    def activate(self, blocks: List['BasicBlock']) -> None:
+        self.label = len(blocks)
+        blocks.append(self)
+
+    @staticmethod
+    def new(blocks: List['BasicBlock']) -> 'BasicBlock':
+        block = BasicBlock()
+        block.activate(blocks)
+        return block
+
+
+Label = BasicBlock
+
+# This is used for placeholder labels which aren't assigned yet (but will
+# be eventually. It's kind of a hack.
+INVALID_LABEL = BasicBlock("<INVALID>")
 
 
 ERR_NEVER = 0  # Never generates an exception
@@ -475,7 +508,7 @@ class Goto(Op):
         self.label = label
 
     def __repr__(self) -> str:
-        return '<Goto %d>' % self.label
+        return '<Goto %s>' % self.label.label
 
     def to_str(self, env: Environment) -> str:
         return env.format('goto %l', self.label)
@@ -1159,27 +1192,6 @@ class Unbox(RegisterOp):
         return visitor.visit_unbox(self)
 
 
-class BasicBlock:
-    """Basic IR block.
-
-    Ends with a jump, branch, or return.
-
-    When building the IR, ops that raise exceptions can be included in
-    the middle of a basic block, but the exceptions aren't checked.
-    Afterwards we perform a transform that inserts explicit checks for
-    all error conditions and splits basic blocks accordingly to preserve
-    the invariant that a jump, branch or return can only ever appear
-    as the final op in a block. Manually inserting error checking ops
-    would be boring and error-prone.
-
-    Ops that may terminate the program aren't treated as exits.
-    """
-
-    def __init__(self, label: Label) -> None:
-        self.label = label
-        self.ops = []  # type: List[Op]
-
-
 class RuntimeArg:
     def __init__(self, name: str, typ: RType) -> None:
         self.name = name
@@ -1393,7 +1405,7 @@ def format_blocks(blocks: List[BasicBlock], env: Environment) -> List[str]:
         lines.append(env.format('%l:', block.label))
         ops = block.ops
         if (isinstance(ops[-1], Goto) and i + 1 < len(blocks) and
-                ops[-1].label == blocks[i + 1].label):
+                ops[-1].label == blocks[i + 1]):
             # Hide the last goto if it just goes to the next basic block.
             ops = ops[:-1]
         for op in ops:

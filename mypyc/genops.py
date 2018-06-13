@@ -437,13 +437,13 @@ class IRBuilder(NodeVisitor[Value]):
             else_leave = self.add_leave()
             next = self.new_block()
             if else_leave:
-                else_leave.label = next.label
+                else_leave.label = next
         else:
             # No else block.
             next = self.new_block()
             self.set_branches(branches, False, next)
         if if_leave:
-            if_leave.label = next.label
+            if_leave.label = next
         return INVALID_VALUE
 
     def add_leave(self) -> Optional[Goto]:
@@ -459,10 +459,10 @@ class IRBuilder(NodeVisitor[Value]):
 
     def pop_loop_stack(self, continue_block: BasicBlock, break_block: BasicBlock) -> None:
         for continue_goto in self.continue_gotos.pop():
-            continue_goto.label = continue_block.label
+            continue_goto.label = continue_block
 
         for break_goto in self.break_gotos.pop():
-            break_goto.label = break_block.label
+            break_goto.label = break_block
 
     def visit_while_stmt(self, s: WhileStmt) -> Value:
         self.push_loop_stack()
@@ -471,7 +471,7 @@ class IRBuilder(NodeVisitor[Value]):
         goto = Goto(INVALID_LABEL)
         self.add(goto)
         top = self.new_block()
-        goto.label = top.label
+        goto.label = top
         branches = self.process_conditional(s.expr)
 
         body = self.new_block()
@@ -479,7 +479,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.set_branches(branches, True, body)
         s.body.accept(self)
         # Add branch to the top at the end of the body.
-        self.add(Goto(top.label))
+        self.add(Goto(top))
         next = self.new_block()
         # Bind "false" branches to the new block.
         self.set_branches(branches, False, next)
@@ -507,7 +507,7 @@ class IRBuilder(NodeVisitor[Value]):
 
             # Add loop condition check.
             top = self.new_block()
-            goto.label = top.label
+            goto.label = top
             comparison = self.binary_op(index_reg, end_reg, '<', s.line)
             branch = Branch(comparison, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
             self.add(branch)
@@ -520,14 +520,14 @@ class IRBuilder(NodeVisitor[Value]):
             end_goto = Goto(INVALID_LABEL)
             self.add(end_goto)
             end_block = self.new_block()
-            end_goto.label = end_block.label
+            end_goto.label = end_block
 
             # Increment index register.
             one_reg = self.add(LoadInt(1))
             self.add(Assign(index_reg, self.binary_op(index_reg, one_reg, '+', s.line)))
 
             # Go back to loop condition check.
-            self.add(Goto(top.label))
+            self.add(Goto(top))
             next = self.new_block()
             self.set_branches(branches, False, next)
 
@@ -573,7 +573,7 @@ class IRBuilder(NodeVisitor[Value]):
 
             end_block = self.goto_new_block()
             self.add(Assign(index_reg, self.binary_op(index_reg, one_reg, '+', s.line)))
-            self.add(Goto(condition_block.label))
+            self.add(Goto(condition_block))
 
             next_block = self.new_block()
             self.set_branches(branches, False, next_block)
@@ -612,7 +612,7 @@ class IRBuilder(NodeVisitor[Value]):
             self.set_branches(branches, False, body_block)
             self.add(Assign(lvalue_reg, next_reg))
             s.body.accept(self)
-            self.add(Goto(next_block.label))
+            self.add(Goto(next_block))
 
             # Create a new block for when the loop is finished. Set the branch to go here if the
             # conditional evaluates to true. If an exception was raised during the loop, then
@@ -933,8 +933,8 @@ class IRBuilder(NodeVisitor[Value]):
         self.add(else_goto_next)
 
         next = self.new_block()
-        if_goto_next.label = next.label
-        else_goto_next.label = next.label
+        if_goto_next.label = next
+        else_goto_next.label = next
 
         return target
 
@@ -1045,11 +1045,11 @@ class IRBuilder(NodeVisitor[Value]):
         """
         for b in branches:
             if condition:
-                if b.true < 0:
-                    b.true = target.label
+                if b.true is INVALID_LABEL:
+                    b.true = target
             else:
-                if b.false < 0:
-                    b.false = target.label
+                if b.false is INVALID_LABEL:
+                    b.false = target
 
     def visit_pass_stmt(self, o: PassStmt) -> Value:
         return INVALID_VALUE
@@ -1189,15 +1189,13 @@ class IRBuilder(NodeVisitor[Value]):
         self.new_block()
 
     def new_block(self) -> BasicBlock:
-        new = BasicBlock(Label(len(self.blocks[-1])))
-        self.blocks[-1].append(new)
-        return new
+        return BasicBlock.new(self.blocks[-1])
 
     def goto_new_block(self) -> BasicBlock:
         goto = Goto(INVALID_LABEL)
         self.add(goto)
         block = self.new_block()
-        goto.label = block.label
+        goto.label = block
         return block
 
     def leave(self) -> Tuple[List[BasicBlock], Environment]:

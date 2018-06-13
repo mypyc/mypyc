@@ -9,7 +9,7 @@ We need to split basic blocks on each error check since branches can
 only be placed at the end of a basic block.
 """
 
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from mypyc.ops import (
     FuncIR, BasicBlock, Label, LoadErrorValue, Return, Goto, Branch, ERR_NEVER, ERR_MAGIC,
@@ -33,13 +33,12 @@ def insert_exception_handling(ir: FuncIR) -> None:
 
 
 def add_handler_block(ir: FuncIR) -> Label:
-    block = BasicBlock(Label(len(ir.blocks)))
+    block = BasicBlock.new(ir.blocks)
     op = LoadErrorValue(ir.ret_type)
     block.ops.append(op)
     ir.env.add_op(op)
     block.ops.append(Return(op))
-    ir.blocks.append(block)
-    return block.label
+    return block
 
 
 def split_blocks_at_errors(blocks: List[BasicBlock],
@@ -53,11 +52,14 @@ def split_blocks_at_errors(blocks: List[BasicBlock],
         ops = block.ops
         i0 = 0
         i = 0
+        next_block = BasicBlock()
         while i < len(ops) - 1:
             op = ops[i]
             if isinstance(op, RegisterOp) and op.error_kind != ERR_NEVER:
                 # Split
-                new_block = BasicBlock(Label(len(new_blocks)))
+                next_block.activate(new_blocks)
+                new_block = next_block
+                next_block = BasicBlock()
                 new_block.ops.extend(ops[i0:i + 1])
 
                 if op.error_kind == ERR_MAGIC:
@@ -77,7 +79,7 @@ def split_blocks_at_errors(blocks: List[BasicBlock],
 
                 branch = Branch(op,
                                 true_label=error_label,
-                                false_label=Label(new_block.label + 1),
+                                false_label=next_block,
                                 op=variant,
                                 line=op.line)
                 branch.negated = negated
@@ -85,17 +87,15 @@ def split_blocks_at_errors(blocks: List[BasicBlock],
                 partial_ops.add(branch)  # Only tweak true label of these
                 new_block.ops.append(branch)
                 if i0 == 0:
-                    mapping[block.label] = new_block.label
-                new_blocks.append(new_block)
+                    mapping[block] = new_block
                 i += 1
                 i0 = i
             else:
                 i += 1
-        new_block = BasicBlock(Label(len(new_blocks)))
-        new_block.ops.extend(ops[i0:i + 1])
+        next_block.activate(new_blocks)
+        next_block.ops.extend(ops[i0:i + 1])
         if i0 == 0:
-            mapping[block.label] = new_block.label
-        new_blocks.append(new_block)
+            mapping[block] = next_block
     # Adjust all labels to reflect the new blocks.
     for block in new_blocks:
         for op in block.ops:

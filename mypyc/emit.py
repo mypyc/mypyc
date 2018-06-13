@@ -49,7 +49,7 @@ class Emitter:
         assert self._indent >= 0
 
     def label(self, label: Label) -> str:
-        return 'CPyL%d' % label
+        return 'CPyL%s' % label.label
 
     def reg(self, reg: Value) -> str:
         return REG_PREFIX + reg.name

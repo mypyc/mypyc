@@ -70,7 +70,7 @@ def transform_block(block: BasicBlock,
     old_ops = block.ops
     ops = []  # type: List[Op]
     for i, op in enumerate(old_ops):
-        key = (block.label, i)
+        key = (block, i)
         if isinstance(op, (Assign, Cast, Box)):
             dest = op.dest if isinstance(op, Assign) else op
             # These operations just copy/steal a reference and don't create new
@@ -136,7 +136,7 @@ def insert_branch_inc_and_decrefs(
               a = 1
           return a  # a is borrowed if condition is false and unborrowed if true
     """
-    prev_key = (block.label, len(block.ops) - 1)
+    prev_key = (block, len(block.ops) - 1)
     source_live_regs = pre_live[prev_key]
     source_borrowed = post_borrow[prev_key]
     if isinstance(block.ops[-1], Branch):
@@ -201,8 +201,7 @@ def after_branch_increfs(label: Label,
 
 
 def add_block(ops: Iterable[Op], blocks: List[BasicBlock], label: Label) -> Label:
-    block = BasicBlock(Label(len(blocks)))
+    block = BasicBlock.new(blocks)
     block.ops.extend(ops)
     block.ops.append(Goto(label))
-    blocks.append(block)
-    return block.label
+    return block

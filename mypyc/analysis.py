@@ -49,7 +49,6 @@ def get_cfg(blocks: List[BasicBlock]) -> CFG:
         assert not any(isinstance(op, (Branch, Goto, Return)) for op in block.ops[:-1]), (
             "Control-flow ops must be at the end of blocks")
 
-        label = block.label
         last = block.ops[-1]
         if isinstance(last, Branch):
             # TODO: assume 1:1 correspondence between block index and label
@@ -58,9 +57,9 @@ def get_cfg(blocks: List[BasicBlock]) -> CFG:
             succ = [last.label]
         else:
             succ = []
-            exits.add(label)
-        succ_map[label] = succ
-        pred_map[label] = []
+            exits.add(block)
+        succ_map[block] = succ
+        pred_map[block] = []
     for prev, nxt in succ_map.items():
         for label in nxt:
             pred_map[label].append(prev)
@@ -379,11 +378,11 @@ def run_analysis(blocks: List[BasicBlock],
             opgen, opkill = op.accept(gen_and_kill)
             gen = ((gen - opkill) | opgen)
             kill = ((kill - opgen) | opkill)
-        block_gen[block.label] = gen
-        block_kill[block.label] = kill
+        block_gen[block] = gen
+        block_kill[block] = kill
 
     # Set up initial state for worklist algorithm.
-    worklist = [block.label for block in blocks]
+    worklist = list(blocks)
     if not backward:
         worklist = worklist[::-1]  # Reverse for a small performance improvement
     workset = set(worklist)
@@ -391,12 +390,12 @@ def run_analysis(blocks: List[BasicBlock],
     after = {}  # type: Dict[Label, Set[T]]
     for block in blocks:
         if kind == MAYBE_ANALYSIS:
-            before[block.label] = set()
-            after[block.label] = set()
+            before[block] = set()
+            after[block] = set()
         else:
             assert universe is not None, "Universe must be defined for a must analysis"
-            before[block.label] = set(universe)
-            after[block.label] = set(universe)
+            before[block] = set(universe)
+            after[block] = set(universe)
 
     if backward:
         pred_map = cfg.succ
@@ -434,7 +433,7 @@ def run_analysis(blocks: List[BasicBlock],
     op_before = {}  # type: Dict[Tuple[Label, int], Set[T]]
     op_after = {}  # type: Dict[Tuple[Label, int], Set[T]]
     for block in blocks:
-        label = block.label
+        label = block
         cur = before[label]
         ops_enum = enumerate(block.ops)  # type: Iterator[Tuple[int, Op]]
         if backward:

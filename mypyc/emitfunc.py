@@ -47,7 +47,7 @@ def generate_native_function(fn: FuncIR, emitter: Emitter, source_path: str) -> 
                                                                 name=r.name))
 
     for block in fn.blocks:
-        body.emit_label(block.label)
+        body.emit_label(block)
         for op in block.ops:
             op.accept(visitor)
 

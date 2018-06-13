@@ -264,7 +264,7 @@ class TestGenerateFunction(unittest.TestCase):
         self.arg = RuntimeArg('arg', int_rprimitive)
         self.env = Environment()
         self.reg = self.env.add_local(self.var, int_rprimitive)
-        self.block = BasicBlock(Label(0))
+        self.block = BasicBlock(0)
 
     def test_simple(self) -> None:
         self.block.ops.append(Return(self.reg))
