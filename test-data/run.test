@@ -788,17 +788,31 @@ def absolute_value(x: int) -> int:
 def call_native_function(x: int) -> int:
     return absolute_value(x)
 
-def load_float() -> float:
-    return 5.0
-
-def return_callable_type() -> Callable[[], float]:
-    return load_float
-
 def call_python_function(x: int) -> int:
     return int(x)
 
+def return_float() -> float:
+    return 5.0
+
+def return_callable_type() -> Callable[[], float]:
+    return return_float
+
+def call_callable_type() -> float:
+    f = return_callable_type()
+    return f()
+
 [file driver.py]
-from native import call_native_function, call_python_function
-y = call_native_function(1)
-y = call_python_function(1)
-print(y)
+from native import call_native_function, call_python_function, return_callable_type, call_callable_type
+w = call_native_function(1)
+x = call_python_function(1)
+y = return_callable_type()
+z = call_callable_type()
+print(w)
+print(x)
+print(y())
+print(z)
+[out]
+1
+1
+5.0
+5.0

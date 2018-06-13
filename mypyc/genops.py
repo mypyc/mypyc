@@ -51,7 +51,7 @@ from mypyc.ops import (
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import list_len_op, list_get_item_op, new_list_op
-from mypyc.ops_dict import new_dict_op
+from mypyc.ops_dict import new_dict_op, dict_get_item_op
 from mypyc.ops_misc import none_op, iter_op, next_op, no_err_occurred_op
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
@@ -740,10 +740,18 @@ class IRBuilder(NodeVisitor[Value]):
         if not self.is_native_name_expr(expr):
             return self.load_static_module_attr(expr)
 
-        # TODO: We assume that this is a Var node, which is very limited
-        assert isinstance(expr.node, Var)
-
-        return self.environment.lookup(expr.node)
+        # TODO: We assume that this is a Var or FuncDef node, which is very limited
+        if isinstance(expr.node, Var):
+            return self.environment.lookup(expr.node)
+        elif isinstance(expr.node, FuncDef):
+            # If we have a function, then we want to retrieve the corresponding PyObject * from the
+            # _globals dictionary in the C-generated code using the function name as a key, and
+            # return that PyObject *.
+            _globals = self.add(LoadStatic(object_rprimitive, '_globals'))
+            func_name_reg = self.load_static_unicode(expr.node.name())
+            return self.add(PrimitiveOp([_globals, func_name_reg], dict_get_item_op, expr.line))
+        else:
+            assert False, 'node must be of either Var or FuncDef type'
 
     def is_module_member_expr(self, expr: MemberExpr) -> bool:
         return isinstance(expr.expr, RefExpr) and expr.expr.kind == MODULE_REF
