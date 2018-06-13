@@ -743,15 +743,11 @@ class IRBuilder(NodeVisitor[Value]):
         # TODO: We assume that this is a Var or FuncDef node, which is very limited
         if isinstance(expr.node, Var):
             return self.environment.lookup(expr.node)
-        elif isinstance(expr.node, FuncDef):
-            # If we have a function, then we want to retrieve the corresponding PyObject * from the
-            # _globals dictionary in the C-generated code using the function name as a key, and
-            # return that PyObject *.
-            _globals = self.add(LoadStatic(object_rprimitive, '_globals'))
-            func_name_reg = self.load_static_unicode(expr.node.name())
-            return self.add(PrimitiveOp([_globals, func_name_reg], dict_get_item_op, expr.line))
-        else:
-            assert False, 'node must be of either Var or FuncDef type'
+        if isinstance(expr.node, FuncDef):
+            # If we have a function, then we can look it up in the global variables dictionary.
+            return self.load_global_func(expr)
+
+        assert False, 'node must be of either Var or FuncDef type'
 
     def is_module_member_expr(self, expr: MemberExpr) -> bool:
         return isinstance(expr.expr, RefExpr) and expr.expr.kind == MODULE_REF
@@ -765,13 +761,6 @@ class IRBuilder(NodeVisitor[Value]):
                 return self.add(GetAttr(obj, expr.name, expr.line))
             else:
                 return self.add(PyGetAttr(obj, expr.name, expr.line))
-
-    def load_static_module_attr(self, expr: RefExpr) -> Value:
-        assert expr.node, "RefExpr not resolved"
-        module = '.'.join(expr.node.fullname().split('.')[:-1])
-        name = expr.node.fullname().split('.')[-1]
-        left = self.add(LoadStatic(object_rprimitive, c_module_name(module)))
-        return self.add(PyGetAttr(left, name, expr.line))
 
     def py_call(self, function: Value, args: List[Value],
                 target_type: RType, line: int) -> Value:
@@ -1271,6 +1260,17 @@ class IRBuilder(NodeVisitor[Value]):
     def box_expr(self, expr: Expression) -> Value:
         return self.box(self.accept(expr))
 
+    def load_global_func(self, expr: NameExpr) -> Value:
+        """Loads a Python-level global function into a register.
+
+        This takes a NameExpr and uses its name as a key to retrieve the corresponding PyObject *
+        from the _globals dictionary in the C-generated code.
+        """
+        assert isinstance(expr.node, FuncDef)
+        _globals = self.add(LoadStatic(object_rprimitive, '_globals'))
+        reg = self.load_static_unicode(expr.node.name())
+        return self.add(PrimitiveOp([_globals, reg], dict_get_item_op, expr.line))
+
     def load_static_int(self, value: int) -> Value:
         """Loads a static integer value into a register."""
         if value not in self.literals:
@@ -1295,6 +1295,13 @@ class IRBuilder(NodeVisitor[Value]):
             self.literals[value] = '__unicode_' + str(len(self.literals))
         static_symbol = self.literals[value]
         return self.add(LoadStatic(str_rprimitive, static_symbol))
+
+    def load_static_module_attr(self, expr: RefExpr) -> Value:
+        assert expr.node, "RefExpr not resolved"
+        module = '.'.join(expr.node.fullname().split('.')[:-1])
+        name = expr.node.fullname().split('.')[-1]
+        left = self.add(LoadStatic(object_rprimitive, c_module_name(module)))
+        return self.add(PyGetAttr(left, name, expr.line))
 
     def coerce(self, src: Value, target_type: RType, line: int) -> Value:
         """Generate a coercion/cast from one type to other (only if needed).

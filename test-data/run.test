@@ -801,18 +801,23 @@ def call_callable_type() -> float:
     f = return_callable_type()
     return f()
 
+def return_passed_in_callable_type(f: Callable[[], float]) -> Callable[[], float]:
+    return f
+
+def call_passed_in_callable_type(f: Callable[[], float]) -> float:
+    return f()
+
 [file driver.py]
-from native import call_native_function, call_python_function, return_callable_type, call_callable_type
-w = call_native_function(1)
-x = call_python_function(1)
-y = return_callable_type()
-z = call_callable_type()
-print(w)
-print(x)
-print(y())
-print(z)
-[out]
-1
-1
-5.0
-5.0
+from native import call_native_function, call_python_function, return_float, return_callable_type, call_callable_type, return_passed_in_callable_type, call_passed_in_callable_type
+a = call_native_function(1)
+b = call_python_function(1)
+c = return_callable_type()
+d = call_callable_type()
+e = return_passed_in_callable_type(return_float)
+f = call_passed_in_callable_type(return_float)
+assert a == 1
+assert b == 1
+assert c() == 5.0
+assert d == 5.0
+assert e() == 5.0
+assert f == 5.0
