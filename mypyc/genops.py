@@ -183,6 +183,8 @@ class IRBuilder(NodeVisitor[Value]):
             # built-in primitives.
             return INVALID_VALUE
 
+        self.module_name = mypyfile.fullname()
+
         classes = [node for node in mypyfile.defs if isinstance(node, ClassDef)]
 
         # Build ClassIRs and TypeInfo-to-ClassIR mapping.
@@ -207,7 +209,7 @@ class IRBuilder(NodeVisitor[Value]):
     def create_class_def(self, cdef: ClassDef) -> None:
         # We want to collect the attributes first so they are available
         # while generating the methods
-        ir = ClassIR(cdef.name)
+        ir = ClassIR(cdef.name, self.module_name)
         self.classes.append(ir)
         self.mapper.type_to_ir[cdef.info] = ir
 
@@ -287,7 +289,7 @@ class IRBuilder(NodeVisitor[Value]):
 
         blocks, env = self.leave()
         args = self.convert_args(fdef)
-        return FuncIR(fdef.name(), class_name, args, self.ret_type, blocks, env)
+        return FuncIR(fdef.name(), class_name, self.module_name, args, self.ret_type, blocks, env)
 
     def visit_func_def(self, fdef: FuncDef) -> Value:
         self.functions.append(self.gen_func_def(fdef))

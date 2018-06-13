@@ -10,6 +10,7 @@ from mypyc.ops import (
     short_name, is_list_rprimitive, is_dict_rprimitive, is_tuple_rprimitive, is_none_rprimitive,
     object_rprimitive, is_str_rprimitive
 )
+from mypyc.namegen import NameGenerator
 
 
 class HeaderDeclaration:
@@ -19,10 +20,11 @@ class HeaderDeclaration:
 
 
 class EmitterContext:
-    """Shared emitter state for an entire module."""
+    """Shared emitter state for an entire compilation unit."""
 
-    def __init__(self) -> None:
+    def __init__(self, module_names: List[str]) -> None:
         self.temp_counter = 0
+        self.names = NameGenerator(module_names)
 
         # A map of a C identifier to whatever the C identifier declares. Currently this is
         # used for declaring structs and the key corresponds to the name of the struct.
@@ -35,6 +37,7 @@ class Emitter:
 
     def __init__(self, context: EmitterContext, env: Optional[Environment] = None) -> None:
         self.context = context
+        self.names = context.names
         self.env = env or Environment()
         self.fragments = []  # type: List[str]
         self._indent = 0

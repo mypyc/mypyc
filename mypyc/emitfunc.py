@@ -10,6 +10,7 @@ from mypyc.ops import (
     Label, Value, Register, RType, RTuple, MethodCall, PyMethodCall, PrimitiveOp, EmitterInterface,
     PySetAttr, Unreachable, is_int_rprimitive
 )
+from mypyc.namegen import NameGenerator
 
 
 def native_function_type(fn: FuncIR) -> str:
@@ -18,7 +19,7 @@ def native_function_type(fn: FuncIR) -> str:
     return '{} (*)({})'.format(ret, args)
 
 
-def native_function_header(fn: FuncIR) -> str:
+def native_function_header(fn: FuncIR, names: NameGenerator) -> str:
     args = []
     for arg in fn.args:
         args.append('{}{}{}'.format(arg.type.ctype_spaced(), REG_PREFIX, arg.name))
@@ -26,7 +27,7 @@ def native_function_header(fn: FuncIR) -> str:
     return 'static {ret_type}{prefix}{name}({args})'.format(
         ret_type=fn.ret_type.ctype_spaced(),
         prefix=NATIVE_PREFIX,
-        name=fn.cname,
+        name=fn.cname(names),
         args=', '.join(args) or 'void')
 
 
@@ -35,7 +36,7 @@ def generate_native_function(fn: FuncIR, emitter: Emitter, source_path: str) -> 
     body = Emitter(emitter.context, fn.env)
     visitor = FunctionEmitterVisitor(body, declarations, fn.name, source_path)
 
-    declarations.emit_line('{} {{'.format(native_function_header(fn)))
+    declarations.emit_line('{} {{'.format(native_function_header(fn, emitter.names)))
     body.indent()
 
     for r, i in fn.env.indexes.items():

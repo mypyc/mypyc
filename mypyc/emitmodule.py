@@ -55,8 +55,8 @@ def compile_module_to_c(sources: List[BuildSource], module_names: List[str], opt
 
 def generate_function_declaration(fn: FuncIR, emitter: Emitter) -> None:
     emitter.emit_lines(
-        '{};'.format(native_function_header(fn)),
-        '{};'.format(wrapper_function_header(fn)))
+        '{};'.format(native_function_header(fn, emitter.names)),
+        '{};'.format(wrapper_function_header(fn, emitter.names)))
 
 
 def encode_as_c_string(s: str) -> Tuple[str, int]:
@@ -73,7 +73,8 @@ class ModuleGenerator:
                  source_paths: Dict[str, str]) -> None:
         self.modules = modules
         self.source_paths = source_paths
-        self.context = EmitterContext()
+        self.context = EmitterContext([name for name, _ in modules])
+        self.names = self.context.names
 
     def generate_c_for_modules(self) -> str:
         emitter = Emitter(self.context)
@@ -127,7 +128,7 @@ class ModuleGenerator:
             emitter.emit_line(
                 ('{{"{name}", (PyCFunction){prefix}{name}, METH_VARARGS | METH_KEYWORDS, '
                  'NULL /* docstring */}},').format(
-                    name=fn.cname,
+                    name=fn.cname(self.names),
                     prefix=PREFIX))
         emitter.emit_line('{NULL, NULL, 0, NULL}')
         emitter.emit_line('};')

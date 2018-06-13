@@ -39,13 +39,13 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.t = self.env.add_local(Var('t'), RTuple([int_rprimitive, bool_rprimitive]))
         self.tt = self.env.add_local(
             Var('tt'), RTuple([RTuple([int_rprimitive, bool_rprimitive]), bool_rprimitive]))
-        ir = ClassIR('A')
+        ir = ClassIR('A', 'mod')
         ir.attributes = OrderedDict([('x', bool_rprimitive), ('y', int_rprimitive)])
         ir.compute_vtable()
         ir.mro = [ir]
         self.r = self.env.add_local(Var('r'), RInstance(ir))
 
-        self.context = EmitterContext()
+        self.context = EmitterContext(['mod'])
         self.emitter = Emitter(self.context, self.env)
         self.declarations = Emitter(self.context, self.env)
         self.visitor = FunctionEmitterVisitor(self.emitter, self.declarations, 'func', 'prog.py')
@@ -268,8 +268,8 @@ class TestGenerateFunction(unittest.TestCase):
 
     def test_simple(self) -> None:
         self.block.ops.append(Return(self.reg))
-        fn = FuncIR('myfunc', None, [self.arg], int_rprimitive, [self.block], self.env)
-        emitter = Emitter(EmitterContext())
+        fn = FuncIR('myfunc', None, 'mod', [self.arg], int_rprimitive, [self.block], self.env)
+        emitter = Emitter(EmitterContext(['mod']))
         generate_native_function(fn, emitter, 'prog.py')
         result = emitter.fragments
         assert_string_arrays_equal(
@@ -286,8 +286,8 @@ class TestGenerateFunction(unittest.TestCase):
         op = LoadInt(5)
         self.block.ops.append(op)
         self.env.add_op(op)
-        fn = FuncIR('myfunc', None, [self.arg], list_rprimitive, [self.block], self.env)
-        emitter = Emitter(EmitterContext())
+        fn = FuncIR('myfunc', None, 'mod', [self.arg], list_rprimitive, [self.block], self.env)
+        emitter = Emitter(EmitterContext(['mod']))
         generate_native_function(fn, emitter, 'prog.py')
         result = emitter.fragments
         assert_string_arrays_equal(

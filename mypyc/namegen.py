@@ -1,4 +1,4 @@
-from typing import List, Dict, Tuple, Set
+from typing import List, Dict, Tuple, Set, Optional
 
 
 class NameGenerator:
@@ -44,7 +44,7 @@ class NameGenerator:
         self.translations = {}  # type: Dict[Tuple[str, str], str]
         self.used_names = set()  # type: Set[str]
 
-    def private_name(self, module: str, partial_name: str) -> str:
+    def private_name(self, module: str, partial_name: Optional[str]) -> str:
         """Return a C name usable for a static definition.
 
         Return a distinct result for each (module, partial_name) pair.
@@ -54,6 +54,8 @@ class NameGenerator:
         unique, not that they aren't overlapping with arbitrary names.
         """
         # TODO: Support unicode
+        if partial_name is None:
+            return self.module_map[module].rstrip('_')
         if (module, partial_name) in self.translations:
             return self.translations[module, partial_name]
         candidate = '{}{}'.format(self.module_map[module], partial_name.replace('.', '_'))
@@ -86,7 +88,7 @@ def exported_name(fullname: str) -> str:
 
 
 def make_module_translation_map(names: List[str]) -> Dict[str, str]:
-    num_instances = {}
+    num_instances = {}  # type: Dict[str, int]
     for name in names:
         for suffix in candidate_suffixes(name):
             num_instances[suffix] = num_instances.get(suffix, 0) + 1

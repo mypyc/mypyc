@@ -20,6 +20,8 @@ from collections import OrderedDict
 
 from mypy.nodes import Var
 
+from mypyc.namegen import NameGenerator
+
 
 T = TypeVar('T')
 
@@ -1195,18 +1197,24 @@ class FuncIR:
     def __init__(self,
                  name: str,
                  class_name: Optional[str],
+                 module_name: str,
                  args: List[RuntimeArg],
                  ret_type: RType,
                  blocks: List[BasicBlock],
                  env: Environment) -> None:
         self.name = name
         self.class_name = class_name
-        # TODO: escape ___ in names
-        self.cname = name if not class_name else class_name + '___' + name
+        self.module_name = module_name
         self.args = args
         self.ret_type = ret_type
         self.blocks = blocks
         self.env = env
+
+    def cname(self, names: NameGenerator) -> str:
+        name = self.name
+        if self.class_name:
+            name += '_' + self.class_name
+        return names.private_name(self.module_name, name)
 
     def __str__(self) -> str:
         return '\n'.join(format_func(self))
@@ -1220,8 +1228,9 @@ class ClassIR:
 
     # TODO: Use dictionary for attributes in addition to (or instead of) list.
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, module_name: str) -> None:
         self.name = name
+        self.module_name = module_name
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
         self.methods = []  # type: List[FuncIR]
         self.vtable = None  # type: Optional[Dict[str, int]]

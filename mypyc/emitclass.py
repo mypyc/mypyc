@@ -9,6 +9,7 @@ from mypyc.emit import Emitter
 from mypyc.emitfunc import native_function_header
 from mypyc.ops import ClassIR, FuncIR, RType, Environment, type_struct_name, object_rprimitive
 from mypyc.sametype import is_same_type
+from mypyc.namegen import NameGenerator
 
 
 def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
@@ -48,8 +49,8 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
 
     emitter.emit_line('static PyObject *{}(void);'.format(setup_name))
     # TODO: Use RInstance
-    ctor = FuncIR(cl.name, None, init_args, object_rprimitive, [], Environment())
-    emitter.emit_line(native_function_header(ctor) + ';')
+    ctor = FuncIR(cl.name, None, module, init_args, object_rprimitive, [], Environment())
+    emitter.emit_line(native_function_header(ctor, emitter.names) + ';')
 
     emit_line()
     generate_new_for_class(cl, new_name, vtable_name, setup_name, emitter)
@@ -208,7 +209,8 @@ def generate_vtable(base: ClassIR,
             for cl2 in search:
                 m = cl2.get_method(fn.name)
                 if m:
-                    emitter.emit_line('(CPyVTableItem){}{},'.format(NATIVE_PREFIX, m.cname))
+                    emitter.emit_line('(CPyVTableItem){}{},'.format(NATIVE_PREFIX,
+                                                                    m.cname(emitter.names)))
                     break
     emitter.emit_line('};')
 
@@ -241,14 +243,14 @@ def generate_constructor_for_class(cl: ClassIR,
                                    vtable_name: str,
                                    emitter: Emitter) -> None:
     """Generate a native function that allocates and initializes an instance of a class."""
-    emitter.emit_line('{}'.format(native_function_header(fn)))
+    emitter.emit_line('{}'.format(native_function_header(fn, emitter.names)))
     emitter.emit_line('{')
     emitter.emit_line('PyObject *self = {}();'.format(setup_name))
     emitter.emit_line('if (self == NULL)')
     emitter.emit_line('    return NULL;')
     if init_fn is not None:
         args = ', '.join(['self'] + [REG_PREFIX + arg.name for arg in fn.args])
-        emitter.emit_line('{}{}({});'.format(NATIVE_PREFIX, init_fn.cname, args))
+        emitter.emit_line('{}{}({});'.format(NATIVE_PREFIX, init_fn.cname(emitter.names), args))
     emitter.emit_line('return self;')
     emitter.emit_line('}')
 
@@ -268,7 +270,7 @@ def generate_init_for_class(cl: ClassIR,
         '{}(PyObject *self, PyObject *args, PyObject *kwds)'.format(func_name))
     emitter.emit_line('{')
     emitter.emit_line('return {}{}(self, args, kwds) != NULL ? 0 : -1;'.format(
-        PREFIX, init_fn.cname))
+        PREFIX, init_fn.cname(emitter.names)))
     emitter.emit_line('}')
 
 
@@ -328,11 +330,10 @@ def generate_dealloc_for_class(cl: ClassIR,
 def generate_methods_table(cl: ClassIR,
                            name: str,
                            emitter: Emitter) -> None:
-
     emitter.emit_line('static PyMethodDef {}[] = {{'.format(name))
     for fn in cl.methods:
         emitter.emit_line('{{"{}",'.format(fn.name))
-        emitter.emit_line(' (PyCFunction){}{},'.format(PREFIX, fn.cname))
+        emitter.emit_line(' (PyCFunction){}{},'.format(PREFIX, fn.cname(emitter.names)))
         emitter.emit_line(' METH_VARARGS | METH_KEYWORDS, NULL},')
     emitter.emit_line('{NULL}  /* Sentinel */')
     emitter.emit_line('};')
