@@ -50,7 +50,7 @@ from mypyc.ops import (
     ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, PySetAttr,
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
-from mypyc.ops_list import list_len_op, list_get_item_op, new_list_op
+from mypyc.ops_list import list_len_op, list_get_item_op, list_set_item_op, new_list_op
 from mypyc.ops_dict import new_dict_op, dict_get_item_op
 from mypyc.ops_misc import none_op, iter_op, next_op, no_err_occurred_op
 from mypyc.subtype import is_subtype
@@ -365,15 +365,26 @@ class IRBuilder(NodeVisitor[Value]):
 
     def visit_operator_assignment_stmt(self, stmt: OperatorAssignmentStmt) -> Value:
         target = self.get_assignment_target(stmt.lvalue)
+        rreg = self.accept(stmt.rvalue)
 
         if isinstance(target, AssignmentTargetRegister):
-            rreg = self.accept(stmt.rvalue)
             res = self.binary_op(target.register, rreg, stmt.op, stmt.line)
             res = self.coerce(res, target.type, stmt.line)
             self.add(Assign(target.register, res))
             return INVALID_VALUE
+        if isinstance(target, AssignmentTargetIndex):
+            res = self.add(PrimitiveOp([target.base, target.index], list_get_item_op, stmt.line))
+            res = self.binary_op(res, rreg, stmt.op, stmt.line)
+            res = self.coerce(res, target.type, stmt.line)
+            self.add(PrimitiveOp([target.base, target.index, res], list_set_item_op, stmt.line))
+            return INVALID_VALUE
+        if isinstance(target, AssignmentTargetAttr):
+            res = self.add(GetAttr(target.obj, target.attr, stmt.line))
+            res = self.binary_op(res, rreg, stmt.op, stmt.line)
+            res = self.coerce(res, target.type, stmt.line)
+            self.add(SetAttr(target.obj, target.attr, res, stmt.line))
+            return INVALID_VALUE
 
-        # NOTE: List index not supported yet for compound assignments.
         assert False, 'Unsupported lvalue: %r' % target
 
     def get_assignment_target(self, lvalue: Lvalue) -> AssignmentTarget:

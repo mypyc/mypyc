@@ -833,3 +833,24 @@ assert c() == 5.0
 assert d == 5.0
 assert e() == 5.0
 assert f == 5.0
+
+[case testArbitraryLvalues]
+from typing import List
+
+class O(object):
+    def __init__(self) -> None:
+        self.x = 1
+
+def increment_attr(o: O) -> O:
+    o.x += 1
+    return o
+
+def increment_all_indices(l: List[int]) -> List[int]:
+    for i in range(len(l)):
+        l[i] += 1
+    return l
+
+[file driver.py]
+from native import O, increment_attr, increment_all_indices
+assert increment_attr(O()).x == 2
+assert increment_all_indices([1, 2, 3]) == [2, 3, 4]
