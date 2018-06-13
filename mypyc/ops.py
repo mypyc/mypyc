@@ -368,8 +368,8 @@ class Environment:
                 elif typespec == 'f':
                     result.append('%f' % arg)
                 elif typespec == 'l':
-                    # ew
-                    if isinstance(arg, BasicBlock): arg = arg.label
+                    if isinstance(arg, BasicBlock):
+                        arg = arg.label
                     result.append('L%s' % arg)
                 elif typespec == 's':
                     result.append(str(arg))
@@ -412,7 +412,7 @@ class BasicBlock:
     Ops that may terminate the program aren't treated as exits.
     """
 
-    def __init__(self, label: Union[str, int] = -1) -> None:
+    def __init__(self, label: int = -1) -> None:
         self.label = label
         self.ops = []  # type: List[Op]
 
@@ -427,11 +427,9 @@ class BasicBlock:
         return block
 
 
-Label = BasicBlock
-
 # This is used for placeholder labels which aren't assigned yet (but will
 # be eventually. It's kind of a hack.
-INVALID_LABEL = BasicBlock("<INVALID>")
+INVALID_LABEL = BasicBlock(-88888)
 
 
 ERR_NEVER = 0  # Never generates an exception
@@ -503,7 +501,7 @@ class Goto(Op):
 
     error_kind = ERR_NEVER
 
-    def __init__(self, label: Label, line: int = -1) -> None:
+    def __init__(self, label: BasicBlock, line: int = -1) -> None:
         super().__init__(line)
         self.label = label
 
@@ -534,8 +532,8 @@ class Branch(Op):
         IS_ERROR: ('is_error(%r)', ''),
     }
 
-    def __init__(self, left: Value, true_label: Label,
-                 false_label: Label, op: int, line: int = -1) -> None:
+    def __init__(self, left: Value, true_label: BasicBlock,
+                 false_label: BasicBlock, op: int, line: int = -1) -> None:
         super().__init__(line)
         self.left = left
         self.true = true_label

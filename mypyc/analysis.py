@@ -8,7 +8,7 @@ from mypyc.ops import (
     Value, Register,
     BasicBlock, OpVisitor, Assign, LoadInt, LoadErrorValue, RegisterOp, Goto, Branch, Return, Call,
     Environment, Box, Unbox, Cast, Op, Unreachable, TupleGet, TupleSet, GetAttr, SetAttr, PyCall,
-    LoadStatic, PyGetAttr, PySetAttr, Label, PyMethodCall, PrimitiveOp, MethodCall,
+    LoadStatic, PyGetAttr, PySetAttr, PyMethodCall, PrimitiveOp, MethodCall,
 )
 
 
@@ -19,8 +19,10 @@ class CFG:
     non-empty set of exits.
     """
 
-    def __init__(self, succ: Dict[Label, List[Label]], pred: Dict[Label, List[Label]],
-                 exits: Set[Label]) -> None:
+    def __init__(self,
+                 succ: Dict[BasicBlock, List[BasicBlock]],
+                 pred: Dict[BasicBlock, List[BasicBlock]],
+                 exits: Set[BasicBlock]) -> None:
         assert exits
         self.succ = succ
         self.pred = pred
@@ -42,7 +44,7 @@ def get_cfg(blocks: List[BasicBlock]) -> CFG:
          basic block index -> (successors blocks, predecesssor blocks)
     """
     succ_map = {}
-    pred_map = {}  # type: Dict[Label, List[Label]]
+    pred_map = {}  # type: Dict[BasicBlock, List[BasicBlock]]
     exits = set()
     for block in blocks:
 
@@ -68,7 +70,7 @@ def get_cfg(blocks: List[BasicBlock]) -> CFG:
 
 T = TypeVar('T')
 
-AnalysisDict = Dict[Tuple[Label, int], Set[T]]
+AnalysisDict = Dict[Tuple[BasicBlock, int], Set[T]]
 
 
 class AnalysisResult(Generic[T]):
@@ -386,8 +388,8 @@ def run_analysis(blocks: List[BasicBlock],
     if not backward:
         worklist = worklist[::-1]  # Reverse for a small performance improvement
     workset = set(worklist)
-    before = {}  # type: Dict[Label, Set[T]]
-    after = {}  # type: Dict[Label, Set[T]]
+    before = {}  # type: Dict[BasicBlock, Set[T]]
+    after = {}  # type: Dict[BasicBlock, Set[T]]
     for block in blocks:
         if kind == MAYBE_ANALYSIS:
             before[block] = set()
@@ -430,8 +432,8 @@ def run_analysis(blocks: List[BasicBlock],
         after[label] = new_after
 
     # Run algorithm for each basic block to generate opcode-level sets.
-    op_before = {}  # type: Dict[Tuple[Label, int], Set[T]]
-    op_after = {}  # type: Dict[Tuple[Label, int], Set[T]]
+    op_before = {}  # type: Dict[Tuple[BasicBlock, int], Set[T]]
+    op_after = {}  # type: Dict[Tuple[BasicBlock, int], Set[T]]
     for block in blocks:
         label = block
         cur = before[label]

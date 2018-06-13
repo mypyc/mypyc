@@ -12,7 +12,7 @@ only be placed at the end of a basic block.
 from typing import Optional, List, Dict
 
 from mypyc.ops import (
-    FuncIR, BasicBlock, Label, LoadErrorValue, Return, Goto, Branch, ERR_NEVER, ERR_MAGIC,
+    FuncIR, BasicBlock, LoadErrorValue, Return, Goto, Branch, ERR_NEVER, ERR_MAGIC,
     ERR_FALSE, INVALID_VALUE, RegisterOp
 )
 
@@ -32,7 +32,7 @@ def insert_exception_handling(ir: FuncIR) -> None:
         ir.blocks = split_blocks_at_errors(ir.blocks, error_label, ir.name)
 
 
-def add_handler_block(ir: FuncIR) -> Label:
+def add_handler_block(ir: FuncIR) -> BasicBlock:
     block = BasicBlock.new(ir.blocks)
     op = LoadErrorValue(ir.ret_type)
     block.ops.append(op)
@@ -42,7 +42,7 @@ def add_handler_block(ir: FuncIR) -> Label:
 
 
 def split_blocks_at_errors(blocks: List[BasicBlock],
-                           error_label: Label,
+                           error_label: BasicBlock,
                            func: str) -> List[BasicBlock]:
     new_blocks = []  # type: List[BasicBlock]
     mapping = {}

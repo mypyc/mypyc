@@ -40,7 +40,7 @@ from mypy.checkmember import bind_self
 
 from mypyc.common import MAX_SHORT_INT
 from mypyc.ops import (
-    BasicBlock, Environment, Op, LoadInt, RType, Value, Register, Label, Return, FuncIR, Assign,
+    BasicBlock, Environment, Op, LoadInt, RType, Value, Register, Return, FuncIR, Assign,
     Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple, Unreachable, TupleGet, TupleSet,
     ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, PyGetAttr, PyCall, ROptional,
     c_module_name, PyMethodCall, MethodCall, INVALID_VALUE, INVALID_LABEL, int_rprimitive,

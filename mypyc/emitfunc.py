@@ -7,7 +7,8 @@ from mypyc.emit import Emitter
 from mypyc.ops import (
     FuncIR, OpVisitor, Goto, Branch, Return, Assign, LoadInt, LoadErrorValue, GetAttr, SetAttr,
     LoadStatic, TupleGet, TupleSet, Call, PyCall, PyGetAttr, IncRef, DecRef, Box, Cast, Unbox,
-    Label, Value, Register, RType, RTuple, MethodCall, PyMethodCall, PrimitiveOp, EmitterInterface,
+    BasicBlock, Value, Register, RType, RTuple, MethodCall, PyMethodCall, PrimitiveOp,
+    EmitterInterface,
     PySetAttr, Unreachable, is_int_rprimitive
 )
 
@@ -272,7 +273,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
 
     # Helpers
 
-    def label(self, label: Label) -> str:
+    def label(self, label: BasicBlock) -> str:
         return self.emitter.label(label)
 
     def reg(self, reg: Value) -> str:

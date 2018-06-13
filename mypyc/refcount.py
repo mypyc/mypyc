@@ -27,7 +27,7 @@ from mypyc.analysis import (
 )
 from mypyc.ops import (
     FuncIR, BasicBlock, Assign, RegisterOp, DecRef, IncRef, Branch, Goto, Environment,
-    Return, Op, Label, Cast, Box, RType,
+    Return, Op, Cast, Box, RType,
     Value, Register,
 )
 
@@ -172,7 +172,7 @@ def insert_branch_inc_and_decrefs(
             goto.label = add_block(new_opcodes, blocks, goto.label)
 
 
-def after_branch_decrefs(label: Label,
+def after_branch_decrefs(label: BasicBlock,
                          pre_live: AnalysisDict[Value],
                          source_borrowed: Set[Value],
                          source_live_regs: Set[Value],
@@ -187,7 +187,7 @@ def after_branch_decrefs(label: Label,
     return []
 
 
-def after_branch_increfs(label: Label,
+def after_branch_increfs(label: BasicBlock,
                          pre_borrow: AnalysisDict[Value],
                          source_borrowed: Set[Value],
                          env: Environment) -> List[Op]:
@@ -200,7 +200,7 @@ def after_branch_increfs(label: Label,
     return []
 
 
-def add_block(ops: Iterable[Op], blocks: List[BasicBlock], label: Label) -> Label:
+def add_block(ops: Iterable[Op], blocks: List[BasicBlock], label: BasicBlock) -> BasicBlock:
     block = BasicBlock.new(blocks)
     block.ops.extend(ops)
     block.ops.append(Goto(label))
