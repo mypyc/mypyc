@@ -123,25 +123,27 @@ class ModuleGenerator:
 
     def generate_module_def(self, emitter: Emitter, module_name: str, module: ModuleIR) -> None:
         # Emit module methods
-        emitter.emit_line('static PyMethodDef module_methods[] = {')
+        module_prefix = emitter.names.private_name(module_name)
+        emitter.emit_line('static PyMethodDef {}module_methods[] = {{'.format(module_prefix))
         for fn in module.functions:
             emitter.emit_line(
-                ('{{"{name}", (PyCFunction){prefix}{name}, METH_VARARGS | METH_KEYWORDS, '
+                ('{{"{name}", (PyCFunction){prefix}{cname}, METH_VARARGS | METH_KEYWORDS, '
                  'NULL /* docstring */}},').format(
-                    name=fn.cname(self.names),
+                    name=fn.name,
+                    cname=fn.cname(emitter.names),
                     prefix=PREFIX))
         emitter.emit_line('{NULL, NULL, 0, NULL}')
         emitter.emit_line('};')
         emitter.emit_line()
 
         # Emit module definition struct
-        emitter.emit_lines('static struct PyModuleDef module = {',
+        emitter.emit_lines('static struct PyModuleDef {}module = {{'.format(module_prefix),
                            'PyModuleDef_HEAD_INIT,',
                            '"{}",'.format(module_name),
                            'NULL, /* docstring */',
                            '-1,       /* size of per-interpreter state of the module,',
                            '             or -1 if the module keeps state in global variables. */',
-                           'module_methods',
+                           '{}module_methods'.format(module_prefix),
                            '};')
         emitter.emit_line()
 
@@ -153,7 +155,7 @@ class ModuleGenerator:
             type_struct = cl.type_struct
             emitter.emit_lines('if (PyType_Ready(&{}) < 0)'.format(type_struct),
                                '    return NULL;')
-        emitter.emit_lines('m = PyModule_Create(&module);',
+        emitter.emit_lines('m = PyModule_Create(&{}module);'.format(module_prefix),
                            'if (m == NULL)',
                            '    return NULL;')
         emitter.emit_lines('_globals = PyModule_GetDict(m);',

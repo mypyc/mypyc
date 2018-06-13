@@ -56,10 +56,12 @@ class TestRun(MypycDataSuite):
             module_names = ['native']
 
             # Hard code another module name to compile in the same compilation unit.
+            to_delete = []
             for fn, text in testcase.files:
                 if os.path.basename(fn) == 'other.py':
                     module_names.append('other')
                     sources.append(build.BuildSource(fn, 'other', text))
+                    to_delete.append(fn)
 
             try:
                 ctext = emitmodule.compile_module_to_c(
@@ -72,21 +74,25 @@ class TestRun(MypycDataSuite):
                     print(line)
                 assert False, 'Compile error'
 
-            cpath = os.path.join(test_temp_dir, 'native.c')
-            with open(cpath, 'w') as f:
-                f.write(ctext)
+            for mod in module_names:
+                cpath = os.path.join(test_temp_dir, '%s.c' % mod)
+                with open(cpath, 'w') as f:
+                    f.write(ctext)
 
-            try:
-                native_lib_path = buildc.build_c_extension(cpath)
-            except buildc.BuildError as err:
-                heading('Generated C')
-                with open(cpath) as f:
-                    print(f.read().rstrip())
-                heading('End C')
-                heading('Build output')
-                print(err.output.decode('utf8').rstrip('\n'))
-                heading('End output')
-                raise
+                try:
+                    native_lib_path = buildc.build_c_extension(cpath, mod)
+                except buildc.BuildError as err:
+                    heading('Generated C')
+                    with open(cpath) as f:
+                        print(f.read().rstrip())
+                    heading('End C')
+                    heading('Build output')
+                    print(err.output.decode('utf8').rstrip('\n'))
+                    heading('End output')
+                    raise
+
+            for p in to_delete:
+                os.remove(p)
 
             driver_path = os.path.join(test_temp_dir, 'driver.py')
             env = os.environ.copy()

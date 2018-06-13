@@ -30,7 +30,7 @@ class BuildError(Exception):
         self.output = output
 
 
-def build_c_extension(cpath: str) -> str:
+def build_c_extension(cpath: str, module_name: str) -> str:
     tempdir = tempfile.mkdtemp()
     include_dir = os.path.join(os.path.dirname(__file__), '..', 'lib-rt')
     try:
@@ -46,7 +46,7 @@ def build_c_extension(cpath: str) -> str:
             subprocess.check_output(['python', setup_path, 'build'], stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError as err:
             raise BuildError(err.output)
-        so_path = glob.glob('build/*/*.so')
+        so_path = glob.glob('build/*/%s*.so' % module_name)
         assert len(so_path) == 1
         return so_path[0]
     finally:

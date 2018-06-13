@@ -44,7 +44,7 @@ class NameGenerator:
         self.translations = {}  # type: Dict[Tuple[str, str], str]
         self.used_names = set()  # type: Set[str]
 
-    def private_name(self, module: str, partial_name: Optional[str]) -> str:
+    def private_name(self, module: str, partial_name: Optional[str] = None) -> str:
         """Return a C name usable for a static definition.
 
         Return a distinct result for each (module, partial_name) pair.
