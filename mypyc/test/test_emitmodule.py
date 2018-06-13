@@ -42,7 +42,7 @@ class TestCompiler(MypycDataSuite):
             try:
                 ctext = emitmodule.compile_module_to_c(
                     sources=[source],
-                    module_name='prog',
+                    module_names=['prog'],
                     options=options,
                     alt_lib_path=test_temp_dir)
                 out = ctext.splitlines()

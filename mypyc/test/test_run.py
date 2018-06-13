@@ -52,11 +52,19 @@ class TestRun(MypycDataSuite):
                 f.write(text)
 
             source = build.BuildSource(source_path, 'native', text)
+            sources = [source]
+            module_names = ['native']
+
+            # Hard code another module name to compile in the same compilation unit.
+            for fn, text in testcase.files:
+                if os.path.basename(fn) == 'other.py':
+                    module_names.append('other')
+                    sources.append(build.BuildSource(fn, 'other', text))
 
             try:
                 ctext = emitmodule.compile_module_to_c(
-                    sources=[source],
-                    module_name='native',
+                    sources=sources,
+                    module_names=module_names,
                     options=options,
                     alt_lib_path=test_temp_dir)
             except CompileError as e:

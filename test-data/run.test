@@ -676,3 +676,21 @@ assert neg(9223372036854775807) == -9223372036854775807
 assert neg(-9223372036854775807) == 9223372036854775807
 assert neg(9223372036854775808) == -9223372036854775808
 assert neg(-9223372036854775808) == 9223372036854775808
+
+[case testXXX]
+def f(x: int) -> int:
+    return x + 1
+[file other.py]
+def g(x: int) -> int:
+    return x + 2
+[file driver.py]
+from native import f
+from other import g
+assert f(3) == 4
+assert g(4) == 6
+try:
+    g(1.1)
+except TypeError:
+    pass
+else:
+    assert False
