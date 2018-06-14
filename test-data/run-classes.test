@@ -182,3 +182,80 @@ def f(a: List[C]) -> C:
 from native import f, C
 c = C()
 assert f([c]) is c
+
+[case testClass1]
+class A:
+    def __init__(self, x: int) -> None:
+        self.x = x
+    def foo(self) -> int:
+        return self.x+1
+def foo() -> int:
+    a = A(20)
+    return a.foo()
+[file driver.py]
+from native import A, foo
+a = A(10)
+assert a.foo() == 11
+assert foo() == 21
+
+[case testGenericClass]
+from typing import TypeVar, Generic
+T = TypeVar('T')
+class C(Generic[T]):
+    x: T
+    def __init__(self, x: T) -> None:
+        self.x = x
+    def get(self) -> T:
+        return self.x
+    def set(self, y: T) -> None:
+        self.x = y
+
+def f(c: C[int]) -> int:
+    y = c.get()
+    d = C[int](2)
+    c.set(c.get() + 1 + d.get())
+    c.x = c.x + 2
+    return c.x
+
+[file driver.py]
+from native import C, f
+c = C(6)
+assert f(c) == 11
+c.x = 'x'
+assert c.x == 'x'
+c.set([1])
+assert c.x == [1]
+assert c.get() == [1]
+
+[case testSubclass]
+from typing import Tuple
+
+class A:
+    def __init__(self) -> None:
+        self.x = 10
+    def hi(self, suffix: str) -> str:
+        return str(self.x) + suffix
+class B(A):
+    def __init__(self) -> None:
+        self.x = 20
+        self.y = 'world'
+    def hi(self, suffix: str) -> str:
+        return 'hello ' + str(self.y) + suffix
+
+def use_a(x: A) -> Tuple[int, str]:
+    return (x.x, x.hi(''))
+def use_b(x: B) -> str:
+    return x.hi('')
+
+[file driver.py]
+from native import A, B, use_a, use_b
+a = A()
+b = B()
+assert use_a(a) == (10, '10')
+assert use_a(b) == (20, 'hello world')
+assert a.x == 10
+assert b.x == 20
+assert b.y == 'world'
+assert a.hi('!') == '10!'
+assert b.hi('!') == 'hello world!'
+assert use_b(b) == 'hello world'

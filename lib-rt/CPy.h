@@ -3,10 +3,14 @@
 
 #include <stdbool.h>
 #include <Python.h>
+#include <frameobject.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define likely(x)       __builtin_expect((x),1)
+#define unlikely(x)     __builtin_expect((x),0)
 
 // Naming conventions:
 //
@@ -36,8 +40,11 @@ static void CPyDebug_Print(const char *msg) {
 
 // Set attribute value using vtable
 #define CPY_SET_ATTR(obj, vtable_index, value, object_type, attr_type) \
-    ((void (*)(object_type *, attr_type))((object_type *)obj)->vtable[vtable_index])( \
-        (object_type *)obj, value);
+    ((bool (*)(object_type *, attr_type))((object_type *)obj)->vtable[vtable_index])( \
+        (object_type *)obj, value)
+
+#define CPY_GET_METHOD(obj, vtable_index, object_type, method_type) \
+    ((method_type)(((object_type *)obj)->vtable[vtable_index]))
 
 static void CPyError_OutOfMemory(void) {
     fprintf(stderr, "fatal: out of memory\n");
@@ -45,28 +52,28 @@ static void CPyError_OutOfMemory(void) {
     abort();
 }
 
-inline int CPyTagged_CheckLong(CPyTagged x) {
+static inline int CPyTagged_CheckLong(CPyTagged x) {
     return x & CPY_INT_TAG;
 }
 
-inline int CPyTagged_CheckShort(CPyTagged x) {
+static inline int CPyTagged_CheckShort(CPyTagged x) {
     return !CPyTagged_CheckLong(x);
 }
 
-inline CPyTagged CPyTagged_ShortFromInt(int x) {
+static inline CPyTagged CPyTagged_ShortFromInt(int x) {
     return x << 1;
 }
 
-inline CPyTagged CPyTagged_ShortFromLongLong(long long x) {
+static inline CPyTagged CPyTagged_ShortFromLongLong(long long x) {
     return x << 1;
 }
 
-inline long long CPyTagged_ShortAsLongLong(CPyTagged x) {
+static inline long long CPyTagged_ShortAsLongLong(CPyTagged x) {
     // NOTE: Assume that we sign extend.
     return (CPySignedInt)x >> 1;
 }
 
-inline PyObject *CPyTagged_LongAsObject(CPyTagged x) {
+static inline PyObject *CPyTagged_LongAsObject(CPyTagged x) {
     // NOTE: Assume target is not a short int.
     return (PyObject *)(x & ~CPY_INT_TAG);
 }
@@ -157,21 +164,36 @@ static long long CPyTagged_AsLongLong(CPyTagged x) {
     }
 }
 
-inline void CPyTagged_IncRef(CPyTagged x) {
+static inline void CPyTagged_IncRef(CPyTagged x) {
     if (CPyTagged_CheckLong(x)) {
         Py_INCREF(CPyTagged_LongAsObject(x));
     }
 }
 
-inline void CPyTagged_DecRef(CPyTagged x) {
+static inline void CPyTagged_DecRef(CPyTagged x) {
     if (CPyTagged_CheckLong(x)) {
         Py_DECREF(CPyTagged_LongAsObject(x));
     }
 }
 
-inline bool CPyTagged_IsAddOverflow(CPyTagged sum, CPyTagged left, CPyTagged right) {
+static inline bool CPyTagged_IsAddOverflow(CPyTagged sum, CPyTagged left, CPyTagged right) {
     // This check was copied from some of my old code I believe that it works :-)
     return (long long)(sum ^ left) < 0 && (long long)(sum ^ right) < 0;
+}
+
+static CPyTagged CPyTagged_Negate(CPyTagged num) {
+    if (CPyTagged_CheckShort(num) && num != (CPyTagged) (1LL << 63)) {
+        // The only possibility of an overflow error happening when negating a short is if we
+        // attempt to negate the most negative number.
+        return -num;
+    }
+    PyObject *num_obj = CPyTagged_AsObject(num);
+    PyObject *result = PyNumber_Negative(num_obj);
+    if (result == NULL) {
+        CPyError_OutOfMemory();
+    }
+    Py_DECREF(num_obj);
+    return CPyTagged_StealFromObject(result);
 }
 
 static CPyTagged CPyTagged_Add(CPyTagged left, CPyTagged right) {
@@ -193,7 +215,7 @@ static CPyTagged CPyTagged_Add(CPyTagged left, CPyTagged right) {
     return CPyTagged_StealFromObject(result);
 }
 
-inline bool CPyTagged_IsSubtractOverflow(CPyTagged diff, CPyTagged left, CPyTagged right) {
+static inline bool CPyTagged_IsSubtractOverflow(CPyTagged diff, CPyTagged left, CPyTagged right) {
     // This check was copied from some of my old code I believe that it works :-)
     return (long long)(diff ^ left) < 0 && (long long)(diff ^ right) >= 0;
 }
@@ -217,7 +239,7 @@ static CPyTagged CPyTagged_Subtract(CPyTagged left, CPyTagged right) {
     return CPyTagged_StealFromObject(result);
 }
 
-inline bool CPyTagged_IsMultiplyOverflow(CPyTagged left, CPyTagged right) {
+static inline bool CPyTagged_IsMultiplyOverflow(CPyTagged left, CPyTagged right) {
     // This is conservative -- return false only in a small number of all non-overflow cases
     return left >= (1U << 31) || right >= (1U << 31);
 }
@@ -240,7 +262,7 @@ static CPyTagged CPyTagged_Multiply(CPyTagged left, CPyTagged right) {
     return CPyTagged_StealFromObject(result);
 }
 
-inline bool CPyTagged_MaybeFloorDivideOverflow(CPyTagged left, CPyTagged right) {
+static inline bool CPyTagged_MaybeFloorDivideOverflow(CPyTagged left, CPyTagged right) {
     return right == -0x8000000000000000ULL || left == -0x8000000000000000ULL;
 }
 
@@ -269,7 +291,7 @@ static CPyTagged CPyTagged_FloorDivide(CPyTagged left, CPyTagged right) {
     return CPyTagged_StealFromObject(result);
 }
 
-inline bool CPyTagged_MaybeRemainderOverflow(CPyTagged left, CPyTagged right) {
+static inline bool CPyTagged_MaybeRemainderOverflow(CPyTagged left, CPyTagged right) {
     return right == -0x8000000000000000ULL || left == -0x8000000000000000ULL;
 }
 
@@ -372,19 +394,22 @@ static PyObject *CPyList_GetItem(PyObject *list, CPyTagged index) {
         Py_ssize_t size = PyList_GET_SIZE(list);
         if (n >= 0) {
             if (n >= size) {
-                abort();
+                PyErr_SetString(PyExc_IndexError, "list index out of range");
+                return NULL;
             }
         } else {
             n += size;
             if (n < 0) {
-                abort();
+                PyErr_SetString(PyExc_IndexError, "list index out of range");
+                return NULL;
             }
         }
         PyObject *result = PyList_GET_ITEM(list, n);
         Py_INCREF(result);
         return result;
     } else {
-        abort(); // TODO: Generate exception
+        PyErr_SetString(PyExc_IndexError, "list index out of range");
+        return NULL;
     }
 }
 
@@ -394,19 +419,22 @@ static bool CPyList_SetItem(PyObject *list, CPyTagged index, PyObject *value) {
         Py_ssize_t size = PyList_GET_SIZE(list);
         if (n >= 0) {
             if (n >= size) {
-                abort();
+                PyErr_SetString(PyExc_IndexError, "list assignment index out of range");
+                return false;
             }
         } else {
             n += size;
             if (n < 0) {
-                abort();
+                PyErr_SetString(PyExc_IndexError, "list assignment index out of range");
+                return false;
             }
         }
         Py_INCREF(value); // TODO: Move this outside the function to allow optimizing it away
         PyList_SET_ITEM(list, n, value);
         return true;
     } else {
-        abort(); // TODO: Generate exception
+        PyErr_SetString(PyExc_IndexError, "list assignment index out of range");
+        return false;
     }
 }
 
@@ -416,28 +444,70 @@ static PyObject *CPySequenceTuple_GetItem(PyObject *tuple, CPyTagged index) {
         Py_ssize_t size = PyTuple_GET_SIZE(tuple);
         if (n >= 0) {
             if (n >= size) {
-                abort();
+                PyErr_SetString(PyExc_IndexError, "tuple index out of range");
+                return NULL;
             }
         } else {
             n += size;
             if (n < 0) {
-                abort();
+                PyErr_SetString(PyExc_IndexError, "tuple index out of range");
+                return NULL;
             }
         }
         PyObject *result = PyTuple_GET_ITEM(tuple, n);
         Py_INCREF(result);
         return result;
     } else {
-        abort(); // TODO: Generate exception
+        PyErr_SetString(PyExc_IndexError, "tuple index out of range");
+        return NULL;
     }
 }
 
-static inline PyObject *CPyObject_GetAttrString(PyObject *obj, const char *attr_name) {
-    PyObject *result = PyObject_GetAttrString(obj, attr_name);
-    if (result == NULL) {
-        abort();
+static PyCodeObject *CPy_CreateCodeObject(const char *filename, const char *funcname, int line) {
+    PyObject *filename_obj = PyUnicode_FromString(filename);
+    PyObject *funcname_obj = PyUnicode_FromString(funcname);
+    PyObject *empty_bytes = PyBytes_FromStringAndSize("", 0);
+    PyObject *empty_tuple = PyTuple_New(0);
+    PyCodeObject *code_obj = NULL;
+    if (filename_obj == NULL || funcname_obj == NULL || empty_bytes == NULL
+        || empty_tuple == NULL) {
+        goto Error;
     }
-    return result;
+    code_obj = PyCode_New(0, 0, 0, 0, 0,
+                          empty_bytes,
+                          empty_tuple,
+                          empty_tuple,
+                          empty_tuple,
+                          empty_tuple,
+                          empty_tuple,
+                          filename_obj,
+                          funcname_obj,
+                          line,
+                          empty_bytes);
+  Error:
+    Py_XDECREF(empty_bytes);
+    Py_XDECREF(empty_tuple);
+    Py_XDECREF(filename_obj);
+    Py_XDECREF(funcname_obj);
+    return code_obj;
+}
+
+static void CPy_AddTraceback(const char *filename, const char *funcname, int line,
+                             PyObject *globals) {
+    PyCodeObject *code_obj = CPy_CreateCodeObject(filename, funcname, line);
+    if (code_obj == NULL) {
+        return;
+    }
+    PyThreadState *thread_state = PyThreadState_GET();
+    PyFrameObject *frame_obj = PyFrame_New(thread_state, code_obj, globals, 0);
+    if (frame_obj == NULL) {
+        Py_DECREF(code_obj);
+        return;
+    }
+    frame_obj->f_lineno = line;
+    PyTraceBack_Here(frame_obj);
+    Py_DECREF(code_obj);
+    Py_DECREF(frame_obj);
 }
 
 #ifdef __cplusplus

@@ -7,5 +7,11 @@ test_capi
 *.a
 
 /env
+/env-debug
+/env-3.5
 /.mypy_cache
 /.cache
+/.pytest_cache
+/dmypy.json
+/.dmypy.json
+/.mypyc-flake8-cache.json

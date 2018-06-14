@@ -1,3 +1,4 @@
+
 [case testCallTrivialFunction]
 def f(x: int) -> int:
     return x
@@ -41,6 +42,30 @@ print(count(5))
 1
 2
 6
+
+[case testFor]
+from typing import List
+def count(n: int) -> None:
+    for i in range(n):
+        print(i)
+def list_iter(l: List[int]) -> None:
+    for i in l:
+        print(i)
+[file driver.py]
+from native import count, list_iter
+count(5)
+list_iter(list(reversed(range(5))))
+[out]
+0
+1
+2
+3
+4
+4
+3
+2
+1
+0
 
 [case testRecursiveFibonacci]
 def fib(n: int) -> int:
@@ -125,6 +150,20 @@ print(primes(13))
 [[0, 0, 1, 1]
 [[0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1]
 
+[case testListAppend]
+from typing import List
+def f(x: List[int], n: int) -> None:
+    x.append(n)
+[file driver.py]
+from native import f
+l = [1, 2]
+f(l, 10)
+assert l == [1, 2, 10]
+f(l, 3)
+f(l, 4)
+f(l, 5)
+assert l == [1, 2, 10, 3, 4, 5]
+
 [case testTrue]
 def f() -> bool:
     return True
@@ -140,7 +179,6 @@ def f(x: bool) -> bool:
         return False
     else:
         return True
-    return False
 [file driver.py]
 from native import f
 print(f(True))
@@ -272,6 +310,10 @@ def g(x: Optional[A]) -> int:
     if x is not None:
         return 2
     return 3
+
+def h(x: Optional[int], y: Optional[bool]) -> None:
+    pass
+
 [file driver.py]
 from native import f, g, A
 a = A()
@@ -291,3 +333,503 @@ def g(x: int) -> int:
 [file driver.py]
 from native import f
 assert f(1) == 2
+
+[case testStr]
+def f() -> str:
+    return 'some string'
+def g() -> str:
+    return 'some\a \v \t \x7f " \n \0string 🐍'
+def tostr(x: int) -> str:
+    return str(x)
+def concat(x: str, y: str) -> str:
+    return x + y
+def eq(x: str) -> int:
+    if x == 'foo':
+        return 0
+    elif x != 'bar':
+        return 1
+    return 2
+
+[file driver.py]
+from native import f, g, tostr, concat, eq
+assert f() == 'some string'
+assert g() == 'some\a \v \t \x7f " \n \0string 🐍'
+assert tostr(57) == '57'
+assert concat('foo', 'bar') == 'foobar'
+assert eq('foo') == 0
+assert eq('zar') == 1
+assert eq('bar') == 2
+
+[case testDictUpdate]
+from typing import Dict
+def f(x: int) -> int:
+    dict1 = {} # type: Dict[int, int]
+    dict1[1] = 1
+    dict2 = {} # type: Dict[int, int]
+    dict2[x] = 2
+    dict1.update(dict2)
+    return dict1[1]
+[file driver.py]
+from native import f
+assert f(1) == 2
+assert f(2) == 1
+
+[case testPyMethodCall]
+from typing import List
+def f(x: List[int]) -> int:
+    return x.pop()
+def g(x: List[int], y: List[int]) -> None:
+    x.extend(y)
+[file driver.py]
+from native import f, g
+l = [1, 2]
+assert f(l) == 2
+g(l, [10])
+assert l == [1, 10]
+assert f(l) == 10
+assert f(l) == 1
+g(l, [11, 12])
+assert l == [11, 12]
+
+[case testException]
+from typing import List
+def f(x: List[int]) -> None:
+    g(x)
+
+def g(x: List[int]) -> bool:
+    x[5] = 2
+    return True
+[file driver.py]
+from native import f
+import traceback
+try:
+    f([])
+except IndexError:
+    traceback.print_exc()
+[out]
+Traceback (most recent call last):
+  File "tmp/driver.py", line 4, in <module>
+    f([])
+  File "tmp/py/native.py", line 3, in f
+    g(x)
+  File "tmp/py/native.py", line 6, in g
+    x[5] = 2
+IndexError: list assignment index out of range
+
+[case testGenericEquality]
+def eq(a: object, b: object) -> bool:
+    if a == b:
+        return True
+    else:
+        return False
+def ne(a: object, b: object) -> bool:
+    if a != b:
+        return True
+    else:
+        return False
+def f(o: object) -> bool:
+    if [1, 2] == o:
+        return True
+    else:
+        return False
+[file driver.py]
+from native import eq, ne, f
+assert eq('xz', 'x' + 'z')
+assert not eq('x', 'y')
+assert not ne('xz', 'x' + 'z')
+assert ne('x', 'y')
+assert f([1, 2])
+assert not f([2, 2])
+assert not f(1)
+
+[case testGenericBinaryOps]
+from typing import Any
+def add(x: Any, y: Any) -> Any:
+    return x + y
+def subtract(x: Any, y: Any) -> Any:
+    return x - y
+def multiply(x: Any, y: Any) -> Any:
+    return x * y
+def floor_div(x: Any, y: Any) -> Any:
+    return x // y
+def true_div(x: Any, y: Any) -> Any:
+    return x / y
+def remainder(x: Any, y: Any) -> Any:
+    return x % y
+def power(x: Any, y: Any) -> Any:
+    return x ** y
+def lshift(x: Any, y: Any) -> Any:
+    return x << y
+def rshift(x: Any, y: Any) -> Any:
+    return x >> y
+def num_and(x: Any, y: Any) -> Any:
+    return x & y
+def num_xor(x: Any, y: Any) -> Any:
+    return x ^ y
+def num_or(x: Any, y: Any) -> Any:
+    return x | y
+def lt(x: Any, y: Any) -> Any:
+    if x < y:
+        return True
+    else:
+        return False
+def le(x: Any, y: Any) -> Any:
+    if x <= y:
+        return True
+    else:
+        return False
+def gt(x: Any, y: Any) -> Any:
+    if x > y:
+        return True
+    else:
+        return False
+def ge(x: Any, y: Any) -> Any:
+    if x >= y:
+        return True
+    else:
+        return False
+def contains(x: Any, y: Any) -> Any:
+    if x in y:
+        return True
+    else:
+        return False
+[file driver.py]
+from native import *
+assert add(5, 6) == 11
+assert add('x', 'y') == 'xy'
+assert subtract(8, 3) == 5
+assert multiply(8, 3) == 24
+assert floor_div(8, 3) == 2
+assert true_div(7, 2) == 3.5
+assert remainder(11, 4) == 3
+assert remainder('%.3d', 5) == '005'
+assert remainder('%d-%s', (5, 'xy')) == '5-xy'
+assert power(3, 4) == 81
+assert lshift(5, 3) == 40
+assert rshift(41, 3) == 5
+assert num_and(99, 56) == 32
+assert num_xor(99, 56) == 91
+assert num_or(99, 56) == 123
+assert lt('a', 'b')
+assert not lt('a', 'a')
+assert not lt('b', 'a')
+assert not gt('a', 'b')
+assert not gt('a', 'a')
+assert gt('b', 'a')
+assert le('a', 'b')
+assert le('a', 'a')
+assert not le('b', 'a')
+assert not ge('a', 'b')
+assert ge('a', 'a')
+assert ge('b', 'a')
+assert contains('x', 'axb')
+assert not contains('X', 'axb')
+assert contains('x', {'x', 'y'})
+
+[case testGenericMiscOps]
+from typing import Any
+def neg(x: Any) -> Any:
+    return -x
+def pos(x: Any) -> Any:
+    return +x
+def invert(x: Any) -> Any:
+    return ~x
+def get_item(o: Any, k: Any) -> Any:
+    return o[k]
+def set_item(o: Any, k: Any, v: Any) -> Any:
+    o[k] = v
+[file driver.py]
+from native import *
+assert neg(6) == -6
+assert pos(6) == 6
+assert invert(6) == -7
+d = {'x': 5}
+assert get_item(d, 'x') == 5
+set_item(d, 'y', 6)
+assert d['y'] == 6
+
+[case testAnyAttributeAndMethodAccess]
+from typing import Any, List
+class C:
+    a: int
+    def m(self, x: int, a: List[int]) -> int:
+        return self.a + x + a[0]
+def get_a(x: Any) -> Any:
+    return x.a
+def set_a(x: Any, y: Any) -> None:
+    x.a = y
+def call_m(x: Any) -> Any:
+    return x.m(1, [3])
+[file driver.py]
+from native import C, get_a, set_a, call_m
+class D:
+    def m(self, x, a):
+        return self.a + x + a[0]
+
+c = C()
+c.a = 6
+d = D()
+d.a = 2
+assert get_a(c) == 6
+assert get_a(d) == 2
+assert call_m(c) == 10
+assert call_m(d) == 6
+set_a(c, 5)
+assert c.a == 5
+set_a(d, 4)
+assert d.a == 4
+try:
+    get_a(object())
+except AttributeError:
+    pass
+else:
+    assert False
+try:
+    call_m(object())
+except AttributeError:
+    pass
+else:
+    assert False
+try:
+    set_a(object(), 5)
+except AttributeError:
+    pass
+else:
+    assert False
+
+[case testAnyCall]
+from typing import Any
+def call(f: Any) -> Any:
+    return f(1, 'x')
+[file driver.py]
+from native import call
+def f(x, y):
+    return (x, y)
+def g(x): pass
+
+assert call(f) == (1, 'x')
+for bad in g, 1:
+    try:
+        call(bad)
+    except TypeError:
+        pass
+    else:
+        assert False, bad
+
+[case testFloat]
+def assign_and_return_float_sum() -> float:
+    f1 = 1.0
+    f2 = 2.0
+    f3 = 3.0
+    return f1 * f2 + f3
+
+def from_int(i: int) -> float:
+    return float(i)
+
+def to_int(x: float) -> int:
+    return int(x)
+
+[file driver.py]
+from native import assign_and_return_float_sum, from_int, to_int
+sum = 0.0
+for i in range(10):
+    sum += assign_and_return_float_sum()
+assert sum == 50.0
+
+assert str(from_int(10)) == '10.0'
+assert str(to_int(3.14)) == '3'
+
+[case testBigIntLiteral]
+def big_int() -> None:
+    a_62_bit = 4611686018427387902
+    max_62_bit = 4611686018427387903
+    b_63_bit = 4611686018427387904
+    c_63_bit = 9223372036854775806
+    max_63_bit = 9223372036854775807
+    d_64_bit = 9223372036854775808
+    max_32_bit = 2147483647
+    print(a_62_bit)
+    print(max_62_bit)
+    print(b_63_bit)
+    print(c_63_bit)
+    print(max_63_bit)
+    print(d_64_bit)
+    print(max_32_bit)
+[file driver.py]
+from native import big_int
+big_int()
+[out]
+4611686018427387902
+4611686018427387903
+4611686018427387904
+9223372036854775806
+9223372036854775807
+9223372036854775808
+2147483647
+
+[case testForIterable]
+from typing import Iterable, Dict, Any
+def iterate_over_any(a: Any) -> None:
+    for element in a:
+        print(element)
+
+def iterate_over_iterable(iterable: Iterable[T]) -> None:
+    for element in iterable:
+        print(element)
+
+def iterate_and_delete(d: Dict[int, int]) -> None:
+    for key in d:
+        d.pop(key)
+
+def sum_over_values(d: Dict[int, int]) -> int:
+    s = 0
+    for key in d:
+        s = s + d[key]
+    return s
+
+def sum_over_even_values(d: Dict[int, int]) -> int:
+    s = 0
+    for key in d:
+        if d[key] % 2:
+            continue
+        s = s + d[key]
+    return s
+
+def sum_over_two_values(d: Dict[int, int]) -> int:
+    s = 0
+    i = 0
+    for key in d:
+        if i == 2:
+            break
+        s = s + d[key]
+        i = i + 1
+    return s
+
+[file driver.py]
+from native import iterate_over_any, iterate_over_iterable, iterate_and_delete, sum_over_values, sum_over_even_values, sum_over_two_values
+import traceback
+def broken_generator(n):
+    num = 0
+    while num < n:
+        yield num
+        num += 1
+    raise Exception('Exception Manually Raised')
+
+d = {1:1, 2:2, 3:3, 4:4, 5:5}
+print(sum_over_values(d))
+print(sum_over_even_values(d))
+print(sum_over_two_values(d))
+
+try:
+    iterate_over_any(5)
+except TypeError:
+    traceback.print_exc()
+try:
+    iterate_over_iterable(broken_generator(5))
+except Exception:
+    traceback.print_exc()
+try:
+    iterate_and_delete(d)
+except RuntimeError:
+    traceback.print_exc()
+[out]
+Traceback (most recent call last):
+  File "tmp/driver.py", line 16, in <module>
+    iterate_over_any(5)
+  File "tmp/py/native.py", line 3, in iterate_over_any
+    for element in a:
+TypeError: 'int' object is not iterable
+Traceback (most recent call last):
+  File "tmp/driver.py", line 20, in <module>
+    iterate_over_iterable(broken_generator(5))
+  File "tmp/py/native.py", line 7, in iterate_over_iterable
+    for element in iterable:
+  File "tmp/driver.py", line 8, in broken_generator
+    raise Exception('Exception Manually Raised')
+Exception: Exception Manually Raised
+Traceback (most recent call last):
+  File "tmp/driver.py", line 24, in <module>
+    iterate_and_delete(d)
+  File "tmp/py/native.py", line 11, in iterate_and_delete
+    for key in d:
+RuntimeError: dictionary changed size during iteration
+15
+6
+3
+0
+1
+2
+3
+4
+
+[case testNeg]
+def neg(x: int) -> int:
+    return -x
+[file driver.py]
+from native import neg
+assert neg(5) == -5
+assert neg(-5) == 5
+assert neg(1073741823) == -1073741823
+assert neg(-1073741823) == 1073741823
+assert neg(1073741824) == -1073741824
+assert neg(-1073741824) == 1073741824
+assert neg(2147483647) == -2147483647
+assert neg(-2147483647) == 2147483647
+assert neg(2147483648) == -2147483648
+assert neg(-2147483648) == 2147483648
+assert neg(4611686018427387904) == -4611686018427387904
+assert neg(-4611686018427387904) == 4611686018427387904
+assert neg(9223372036854775807) == -9223372036854775807
+assert neg(-9223372036854775807) == 9223372036854775807
+assert neg(9223372036854775808) == -9223372036854775808
+assert neg(-9223372036854775808) == 9223372036854775808
+
+[case testContinueFor]
+def f() -> None:
+    for n in range(5):
+        continue
+[file driver.py]
+from native import f
+f()
+
+[case testCallableTypes]
+from typing import Callable
+def absolute_value(x: int) -> int:
+    return x if x > 0 else -x
+
+def call_native_function(x: int) -> int:
+    return absolute_value(x)
+
+def call_python_function(x: int) -> int:
+    return int(x)
+
+def return_float() -> float:
+    return 5.0
+
+def return_callable_type() -> Callable[[], float]:
+    return return_float
+
+def call_callable_type() -> float:
+    f = return_callable_type()
+    return f()
+
+def return_passed_in_callable_type(f: Callable[[], float]) -> Callable[[], float]:
+    return f
+
+def call_passed_in_callable_type(f: Callable[[], float]) -> float:
+    return f()
+
+[file driver.py]
+from native import call_native_function, call_python_function, return_float, return_callable_type, call_callable_type, return_passed_in_callable_type, call_passed_in_callable_type
+a = call_native_function(1)
+b = call_python_function(1)
+c = return_callable_type()
+d = call_callable_type()
+e = return_passed_in_callable_type(return_float)
+f = call_passed_in_callable_type(return_float)
+assert a == 1
+assert b == 1
+assert c() == 5.0
+assert d == 5.0
+assert e() == 5.0
+assert f == 5.0

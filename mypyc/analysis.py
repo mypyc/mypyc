@@ -2,13 +2,13 @@
 
 from abc import abstractmethod
 
-from typing import Dict, Tuple, List, Set, TypeVar, Iterator, Generic
+from typing import Dict, Tuple, List, Set, TypeVar, Iterator, Generic, Optional, Iterable
 
 from mypyc.ops import (
-    BasicBlock, OpVisitor, PrimitiveOp, Assign, LoadInt, RegisterOp, Goto,
-    Branch, Return, Call, Environment, Box, Unbox, Cast, Op, Unreachable,
-    TupleGet, GetAttr, SetAttr, PyCall, LoadStatic, PyGetAttr, Label, Register,
-    PyLoadGlobal,
+    Value, Register,
+    BasicBlock, OpVisitor, Assign, LoadInt, LoadErrorValue, RegisterOp, Goto, Branch, Return, Call,
+    Environment, Box, Unbox, Cast, Op, Unreachable, TupleGet, TupleSet, GetAttr, SetAttr, PyCall,
+    LoadStatic, PyGetAttr, PySetAttr, Label, PyMethodCall, PrimitiveOp, MethodCall,
 )
 
 
@@ -26,6 +26,13 @@ class CFG:
         self.pred = pred
         self.exits = exits
 
+    def __str__(self) -> str:
+        lines = []
+        lines.append('exits: %s' % sorted(self.exits))
+        lines.append('succ: %s' % self.succ)
+        lines.append('pred: %s' % self.pred)
+        return '\n'.join(lines)
+
 
 def get_cfg(blocks: List[BasicBlock]) -> CFG:
     """Calculate basic block control-flow graph.
@@ -38,11 +45,15 @@ def get_cfg(blocks: List[BasicBlock]) -> CFG:
     pred_map = {}  # type: Dict[Label, List[Label]]
     exits = set()
     for block in blocks:
+
+        assert not any(isinstance(op, (Branch, Goto, Return)) for op in block.ops[:-1]), (
+            "Control-flow ops must be at the end of blocks")
+
         label = block.label
         last = block.ops[-1]
         if isinstance(last, Branch):
-            succ = [last.true, last.false]  # TODO: assume 1:1 correspondence between block index
-                                            #       and label
+            # TODO: assume 1:1 correspondence between block index and label
+            succ = [last.true, last.false]
         elif isinstance(last, Goto):
             succ = [last.label]
         else:
@@ -60,12 +71,17 @@ T = TypeVar('T')
 
 AnalysisDict = Dict[Tuple[Label, int], Set[T]]
 
+
 class AnalysisResult(Generic[T]):
     def __init__(self, before: AnalysisDict[T], after: AnalysisDict[T]) -> None:
         self.before = before
         self.after = after
 
-GenAndKill = Tuple[Set[Register], Set[Register]]
+    def __str__(self) -> str:
+        return 'before: %s\nafter: %s\n' % (self.before, self.after)
+
+
+GenAndKill = Tuple[Set[Value], Set[Value]]
 
 
 class BaseAnalysisVisitor(OpVisitor[GenAndKill]):
@@ -76,19 +92,29 @@ class BaseAnalysisVisitor(OpVisitor[GenAndKill]):
     def visit_register_op(self, op: RegisterOp) -> GenAndKill:
         raise NotImplementedError
 
+    @abstractmethod
+    def visit_assign(self, op: Assign) -> GenAndKill:
+        raise NotImplementedError
+
     def visit_call(self, op: Call) -> GenAndKill:
         return self.visit_register_op(op)
 
     def visit_py_call(self, op: PyCall) -> GenAndKill:
         return self.visit_register_op(op)
 
+    def visit_method_call(self, op: MethodCall) -> GenAndKill:
+        return self.visit_register_op(op)
+
+    def visit_py_method_call(self, op: PyMethodCall) -> GenAndKill:
+        return self.visit_register_op(op)
+
     def visit_primitive_op(self, op: PrimitiveOp) -> GenAndKill:
         return self.visit_register_op(op)
 
-    def visit_assign(self, op: Assign) -> GenAndKill:
+    def visit_load_int(self, op: LoadInt) -> GenAndKill:
         return self.visit_register_op(op)
 
-    def visit_load_int(self, op: LoadInt) -> GenAndKill:
+    def visit_load_error_value(self, op: LoadErrorValue) -> GenAndKill:
         return self.visit_register_op(op)
 
     def visit_get_attr(self, op: GetAttr) -> GenAndKill:
@@ -103,10 +129,13 @@ class BaseAnalysisVisitor(OpVisitor[GenAndKill]):
     def visit_py_get_attr(self, op: PyGetAttr) -> GenAndKill:
         return self.visit_register_op(op)
 
-    def visit_py_load_global(self, op: PyLoadGlobal) -> GenAndKill:
+    def visit_py_set_attr(self, op: PySetAttr) -> GenAndKill:
         return self.visit_register_op(op)
 
     def visit_tuple_get(self, op: TupleGet) -> GenAndKill:
+        return self.visit_register_op(op)
+
+    def visit_tuple_set(self, op: TupleSet) -> GenAndKill:
         return self.visit_register_op(op)
 
     def visit_box(self, op: Box) -> GenAndKill:
@@ -130,15 +159,18 @@ class MaybeDefinedVisitor(BaseAnalysisVisitor):
         return set(), set()
 
     def visit_register_op(self, op: RegisterOp) -> GenAndKill:
-        if op.dest is not None:
-            return {op.dest}, set()
+        if not op.is_void:
+            return {op}, set()
         else:
             return set(), set()
+
+    def visit_assign(self, op: Assign) -> GenAndKill:
+        return {op.dest}, set()
 
 
 def analyze_maybe_defined_regs(blocks: List[BasicBlock],
                                cfg: CFG,
-                               initial_defined: Set[Register]) -> AnalysisResult[Register]:
+                               initial_defined: Set[Value]) -> AnalysisResult[Value]:
     """Calculate potentially defined registers at each CFG location.
 
     A register is defined if it has a value along some path from the initial location.
@@ -164,17 +196,20 @@ class MustDefinedVisitor(BaseAnalysisVisitor):
         return set(), set()
 
     def visit_register_op(self, op: RegisterOp) -> GenAndKill:
-        if op.dest is not None:
-            return {op.dest}, set()
+        if not op.is_void:
+            return {op}, set()
         else:
             return set(), set()
+
+    def visit_assign(self, op: Assign) -> GenAndKill:
+        return {op.dest}, set()
 
 
 def analyze_must_defined_regs(
         blocks: List[BasicBlock],
         cfg: CFG,
-        initial_defined: Set[Register],
-        num_regs: int) -> AnalysisResult[Register]:
+        initial_defined: Set[Value],
+        regs: Iterable[Value]) -> AnalysisResult[Value]:
     """Calculate always defined registers at each CFG location.
 
     A register is defined if it has a value along all paths from the initial location.
@@ -185,11 +220,11 @@ def analyze_must_defined_regs(
                         initial=initial_defined,
                         backward=False,
                         kind=MUST_ANALYSIS,
-                        universe=set([Register(r) for r in range(num_regs)]))
+                        universe=set(regs))
 
 
 class BorrowedArgumentsVisitor(BaseAnalysisVisitor):
-    def __init__(self, args: Set[Register]) -> None:
+    def __init__(self, args: Set[Value]) -> None:
         self.args = args
 
     def visit_branch(self, op: Branch) -> GenAndKill:
@@ -202,6 +237,9 @@ class BorrowedArgumentsVisitor(BaseAnalysisVisitor):
         return set(), set()
 
     def visit_register_op(self, op: RegisterOp) -> GenAndKill:
+        return set(), set()
+
+    def visit_assign(self, op: Assign) -> GenAndKill:
         if op.dest in self.args:
             return set(), {op.dest}
         return set(), set()
@@ -210,18 +248,18 @@ class BorrowedArgumentsVisitor(BaseAnalysisVisitor):
 def analyze_borrowed_arguments(
         blocks: List[BasicBlock],
         cfg: CFG,
-        args: Set[Register]) -> AnalysisResult[Register]:
+        borrowed: Set[Value]) -> AnalysisResult[Value]:
     """Calculate arguments that can use references borrowed from the caller.
 
     When assigning to an argument, it no longer is borrowed.
     """
     return run_analysis(blocks=blocks,
                         cfg=cfg,
-                        gen_and_kill=BorrowedArgumentsVisitor(args),
-                        initial=args,
+                        gen_and_kill=BorrowedArgumentsVisitor(borrowed),
+                        initial=borrowed,
                         backward=False,
                         kind=MUST_ANALYSIS,
-                        universe=args)
+                        universe=borrowed)
 
 
 class UndefinedVisitor(BaseAnalysisVisitor):
@@ -235,19 +273,22 @@ class UndefinedVisitor(BaseAnalysisVisitor):
         return set(), set()
 
     def visit_register_op(self, op: RegisterOp) -> GenAndKill:
+        return set(), {op} if not op.is_void else set()
+
+    def visit_assign(self, op: Assign) -> GenAndKill:
         return set(), {op.dest}
 
 
 def analyze_undefined_regs(blocks: List[BasicBlock],
                            cfg: CFG,
                            env: Environment,
-                           initial_defined: Set[Register]) -> AnalysisResult[Register]:
+                           initial_defined: Set[Value]) -> AnalysisResult[Value]:
     """Calculate potentially undefined registers at each CFG location.
 
     A register is undefined if there is some path from initial block
     where it has an undefined value.
     """
-    initial_undefined = {Register(reg) for reg in range(len(env.names)) if Register(reg) not in initial_defined}
+    initial_undefined = set(env.regs()) - initial_defined
     return run_analysis(blocks=blocks,
                         cfg=cfg,
                         gen_and_kill=UndefinedVisitor(),
@@ -268,14 +309,17 @@ class LivenessVisitor(BaseAnalysisVisitor):
 
     def visit_register_op(self, op: RegisterOp) -> GenAndKill:
         gen = set(op.sources())
-        if op.dest is not None:
-            return gen, {op.dest}
+        if not op.is_void:
+            return gen, {op}
         else:
             return gen, set()
 
+    def visit_assign(self, op: Assign) -> GenAndKill:
+        return set(op.sources()), {op.dest}
+
 
 def analyze_live_regs(blocks: List[BasicBlock],
-                      cfg: CFG) -> AnalysisResult[Register]:
+                      cfg: CFG) -> AnalysisResult[Value]:
     """Calculate live registers at each CFG location.
 
     A register is live at a location if it can be read along some CFG path starting
@@ -303,7 +347,7 @@ def run_analysis(blocks: List[BasicBlock],
                  initial: Set[T],
                  kind: int,
                  backward: bool,
-                 universe: Set[T] = None) -> AnalysisResult[T]:
+                 universe: Optional[Set[T]] = None) -> AnalysisResult[T]:
     """Run a general set-based data flow analysis.
 
     Args:
@@ -321,9 +365,6 @@ def run_analysis(blocks: List[BasicBlock],
 
     Return analysis results: (before, after)
     """
-    if kind == MUST_ANALYSIS:
-        assert universe is not None, "Universe must be defined for a must analysis"
-
     block_gen = {}
     block_kill = {}
 
@@ -338,7 +379,7 @@ def run_analysis(blocks: List[BasicBlock],
             opgen, opkill = op.accept(gen_and_kill)
             gen = ((gen - opkill) | opgen)
             kill = ((kill - opgen) | opkill)
-        block_gen[block.label] =  gen
+        block_gen[block.label] = gen
         block_kill[block.label] = kill
 
     # Set up initial state for worklist algorithm.
@@ -353,6 +394,7 @@ def run_analysis(blocks: List[BasicBlock],
             before[block.label] = set()
             after[block.label] = set()
         else:
+            assert universe is not None, "Universe must be defined for a must analysis"
             before[block.label] = set(universe)
             after[block.label] = set(universe)
 
@@ -376,10 +418,11 @@ def run_analysis(blocks: List[BasicBlock],
                     new_before |= after[pred]
                 else:
                     new_before &= after[pred]
+            assert new_before is not None
         else:
             new_before = set(initial)
         before[label] = new_before
-        new_after = (new_before | block_gen[label]) - block_kill[label]
+        new_after = (new_before - block_kill[label]) | block_gen[label]
         if new_after != after[label]:
             for succ in succ_map[label]:
                 if succ not in workset:
@@ -388,8 +431,8 @@ def run_analysis(blocks: List[BasicBlock],
         after[label] = new_after
 
     # Run algorithm for each basic block to generate opcode-level sets.
-    op_before = {} # type: Dict[Tuple[Label, int], Set[T]]
-    op_after = {} # type: Dict[Tuple[Label, int], Set[T]]
+    op_before = {}  # type: Dict[Tuple[Label, int], Set[T]]
+    op_after = {}  # type: Dict[Tuple[Label, int], Set[T]]
     for block in blocks:
         label = block.label
         cur = before[label]

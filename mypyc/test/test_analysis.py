@@ -3,11 +3,10 @@
 import os.path
 import re
 import shutil
-from typing import List
+from typing import List, Set
 
 from mypy import build
-from mypy.test.helpers import assert_string_arrays_equal_wildcards
-from mypy.test.data import parse_test_cases, DataDrivenTestCase, DataSuite
+from mypy.test.data import parse_test_cases, DataDrivenTestCase
 from mypy.test.config import test_temp_dir
 from mypy.errors import CompileError
 from mypy.options import Options
@@ -15,38 +14,31 @@ from mypy import experiments
 
 from mypyc import analysis
 from mypyc import genops
-from mypyc.ops import format_func, Register
-from mypyc.test.config import test_data_prefix
-from mypyc.test.testutil import ICODE_GEN_BUILTINS, use_custom_builtins
+from mypyc.ops import format_func, Register, Value
+from mypyc.test.testutil import (
+    ICODE_GEN_BUILTINS, use_custom_builtins, MypycDataSuite, assert_test_output
+)
 
 files = [
     'analysis.test'
 ]
 
 
-class TestAnalysis(DataSuite):
-    def __init__(self, *, update_data: bool) -> None:
-        pass
-
-    @classmethod
-    def cases(cls) -> List[DataDrivenTestCase]:
-        c = []  # type: List[DataDrivenTestCase]
-        for f in files:
-            c += parse_test_cases(
-                os.path.join(test_data_prefix, f),
-                None, test_temp_dir, True)
-        return c
+class TestAnalysis(MypycDataSuite):
+    files = files
+    base_path = test_temp_dir
+    optional_out = True
 
     def run_case(self, testcase: DataDrivenTestCase) -> None:
         """Perform a data-flow analysis test case."""
 
-        with use_custom_builtins(os.path.join(test_data_prefix, ICODE_GEN_BUILTINS), testcase):
-            expected_output = testcase.output
+        with use_custom_builtins(os.path.join(self.data_prefix, ICODE_GEN_BUILTINS), testcase):
             program_text = '\n'.join(testcase.input)
 
             options = Options()
             options.use_builtins_fixtures = True
             options.show_traceback = True
+            options.python_version = (3, 6)
 
             source = build.BuildSource('main', '__main__', program_text)
             try:
@@ -62,13 +54,15 @@ class TestAnalysis(DataSuite):
                     actual = result.errors
                 else:
                     module = genops.build_ir(result.files['__main__'], result.types)
-                    assert len(module.functions) == 1, "Only 1 function definition expected per test case"
+                    assert len(module.functions) == 1, (
+                        "Only 1 function definition expected per test case")
                     fn = module.functions[0]
                     actual = format_func(fn)
                     actual = actual[actual.index('L0:'):]
                     cfg = analysis.get_cfg(fn.blocks)
 
-                    args = set([Register(i) for i in range(len(fn.args))])
+                    args = set(reg for reg, i in fn.env.indexes.items() if i < len(fn.args))
+
                     name = testcase.name
                     if name.endswith('_MaybeDefined'):
                         # Forward, maybe
@@ -80,7 +74,7 @@ class TestAnalysis(DataSuite):
                         # Forward, must
                         analysis_result = analysis.analyze_must_defined_regs(
                             fn.blocks, cfg, args,
-                            num_regs=fn.env.num_regs())
+                            regs=fn.env.regs())
                     elif name.endswith('_BorrowedArgument'):
                         # Forward, must
                         analysis_result = analysis.analyze_borrowed_arguments(fn.blocks, cfg, args)
@@ -89,10 +83,9 @@ class TestAnalysis(DataSuite):
 
                     actual.append('')
                     for key in sorted(analysis_result.before.keys()):
-                        pre = ', '.join(fn.env.names[reg] for reg in analysis_result.before[key])
-                        post = ', '.join(fn.env.names[reg] for reg in analysis_result.after[key])
+                        pre = ', '.join(sorted(reg.name
+                                               for reg in analysis_result.before[key]))
+                        post = ', '.join(sorted(reg.name
+                                                for reg in analysis_result.after[key]))
                         actual.append('%-8s %-23s %s' % (key, '{%s}' % pre, '{%s}' % post))
-            assert_string_arrays_equal_wildcards(
-                expected_output, actual,
-                'Invalid source code output ({}, line {})'.format(testcase.file,
-                                                                  testcase.line))
+            assert_test_output(testcase, actual, 'Invalid source code output')

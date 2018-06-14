@@ -22,12 +22,13 @@ def f(a: A) -> None:
 def f(a):
     a :: A
     r0 :: int
-    r1 :: None
+    r1 :: bool
+    r2 :: None
 L0:
     r0 = 1
-    a.x = r0
-    r1 = None
-    return r1
+    a.x = r0; r1 = is_error
+    r2 = None
+    return r2
 
 [case testUserClassInList]
 class C:
@@ -41,22 +42,137 @@ def f() -> int:
     return d.x + 1
 [out]
 def f():
-    c :: C
-    r0 :: int
-    a :: list
-    d :: C
+    c, r0 :: C
     r1 :: int
-    r2 :: object
-    r3, r4, r5 :: int
+    r2 :: bool
+    a, r3 :: list
+    d :: C
+    r4 :: int
+    r5 :: object
+    r6 :: C
+    r7, r8, r9 :: int
 L0:
-    c = C()
-    r0 = 5
-    c.x = r0
-    a = [c]
-    r1 = 0
-    r2 = a[r1] :: list
-    d = cast(C, r2)
-    r3 = d.x
-    r4 = 1
-    r5 = r3 + r4 :: int
+    r0 = C()
+    c = r0
+    r1 = 5
+    c.x = r1; r2 = is_error
+    r3 = [c]
+    a = r3
+    r4 = 0
+    r5 = a[r4] :: list
+    r6 = cast(C, r5)
+    d = r6
+    r7 = d.x
+    r8 = 1
+    r9 = r7 + r8 :: int
+    return r9
+
+[case testMethodCall]
+class A:
+    def f(self, x: int, y: str) -> int:
+        return x + 10
+
+def g(a: A) -> None:
+    a.f(1, 'hi')
+[out]
+def f(self, x, y):
+    self :: A
+    x :: int
+    y :: str
+    r0, r1 :: int
+L0:
+    r0 = 10
+    r1 = x + r0 :: int
+    return r1
+def g(a):
+    a :: A
+    r0 :: int
+    r1 :: str
+    r2 :: int
+    r3 :: None
+L0:
+    r0 = 1
+    r1 = __unicode_0 :: static
+    r2 = a.f(r0, r1)
+    r3 = None
+    return r3
+
+[case testForwardUse]
+def g(a: A) -> int:
+    return a.n
+
+class A:
+    n : int
+
+[out]
+def g(a):
+    a :: A
+    r0 :: int
+L0:
+    r0 = a.n
+    return r0
+
+[case testOptionalMember]
+from typing import Optional
+class Node:
+    next: Optional[Node]
+    def length(self) -> int:
+        if self.next is not None:
+            return 1 + self.next.length()
+        return 1
+[out]
+def length(self):
+    self :: Node
+    r0 :: optional[Node]
+    r1 :: int
+    r2 :: optional[Node]
+    r3 :: Node
+    r4, r5, r6 :: int
+L0:
+    r0 = self.next
+    if not r0 is None goto L1 else goto L2 :: object
+L1:
+    r1 = 1
+    r2 = self.next
+    r3 = cast(Node, r2)
+    r4 = r3.length()
+    r5 = r1 + r4 :: int
     return r5
+L2:
+    r6 = 1
+    return r6
+
+[case testSubclass]
+class A:
+    def __init__(self) -> None:
+        self.x = 10
+class B(A):
+    def __init__(self) -> None:
+        self.x = 20
+        self.y = 30
+[out]
+-- This is totally useless because we don't print any class info!!
+def __init__(self):
+    self :: A
+    r0 :: int
+    r1 :: bool
+    r2 :: None
+L0:
+    r0 = 10
+    self.x = r0; r1 = is_error
+    r2 = None
+    return r2
+def __init__(self):
+    self :: B
+    r0 :: int
+    r1 :: bool
+    r2 :: int
+    r3 :: bool
+    r4 :: None
+L0:
+    r0 = 20
+    self.x = r0; r1 = is_error
+    r2 = 30
+    self.y = r2; r3 = is_error
+    r4 = None
+    return r4

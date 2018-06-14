@@ -5,8 +5,7 @@ import subprocess
 from typing import List
 
 from mypy import build
-from mypy.test.data import parse_test_cases, DataDrivenTestCase, DataSuite
-from mypy.test.helpers import assert_string_arrays_equal_wildcards
+from mypy.test.data import parse_test_cases, DataDrivenTestCase
 from mypy.test.config import test_temp_dir
 from mypy.errors import CompileError
 from mypy.options import Options
@@ -14,39 +13,45 @@ from mypy.options import Options
 from mypyc import genops
 from mypyc import emitmodule
 from mypyc import buildc
-from mypyc.test.testutil import ICODE_GEN_BUILTINS, use_custom_builtins
-from mypyc.test.config import test_data_prefix
+from mypyc.test.testutil import (
+    ICODE_GEN_BUILTINS, use_custom_builtins, MypycDataSuite, assert_test_output,
+)
+
+import pytest  # type: ignore  # no pytest in typeshed
+
+files = [
+    'run.test',
+    'run-classes.test',
+    'run-bench.test',
+]
 
 
-files = ['run.test',
-         'run-classes.test']
-
-
-class TestRun(DataSuite):
+class TestRun(MypycDataSuite):
     """Test cases that build a C extension and run code."""
-
-    def __init__(self, *, update_data: bool) -> None:
-        pass
-
-    @classmethod
-    def cases(cls) -> List[DataDrivenTestCase]:
-        c = []  # type: List[DataDrivenTestCase]
-        for f in files:
-            c += parse_test_cases(
-                os.path.join(test_data_prefix, f),
-                None, test_temp_dir, True)
-        return c
-
+    files = files
+    base_path = test_temp_dir
+    optional_out = True
 
     def run_case(self, testcase: DataDrivenTestCase) -> None:
-        with use_custom_builtins(os.path.join(test_data_prefix, ICODE_GEN_BUILTINS), testcase):
+        bench = testcase.config.getoption('--bench', False) and 'Benchmark' in testcase.name
+
+        with use_custom_builtins(os.path.join(self.data_prefix, ICODE_GEN_BUILTINS), testcase):
             text = '\n'.join(testcase.input)
 
             options = Options()
             options.use_builtins_fixtures = True
             options.show_traceback = True
             options.strict_optional = True
-            source = build.BuildSource('native.py', 'native', text)
+            options.python_version = (3, 6)
+
+            os.mkdir('tmp/py')
+            source_path = 'tmp/py/native.py'
+            with open(source_path, 'w') as f:
+                f.write(text)
+            with open('tmp/interpreted.py', 'w') as f:
+                f.write(text)
+
+            source = build.BuildSource(source_path, 'native', text)
 
             try:
                 ctext = emitmodule.compile_module_to_c(
@@ -64,7 +69,7 @@ class TestRun(DataSuite):
                 f.write(ctext)
 
             try:
-                native_lib_path = buildc.build_c_extension(cpath)
+                native_lib_path = buildc.build_c_extension(cpath, preserve_setup=True)
             except buildc.BuildError as err:
                 heading('Generated C')
                 with open(cpath) as f:
@@ -78,6 +83,7 @@ class TestRun(DataSuite):
             driver_path = os.path.join(test_temp_dir, 'driver.py')
             env = os.environ.copy()
             env['PYTHONPATH'] = os.path.dirname(native_lib_path)
+            env['MYPYC_RUN_BENCH'] = '1' if bench else '0'
             proc = subprocess.Popen(['python', driver_path], stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, env=env)
             output, _ = proc.communicate()
@@ -93,12 +99,14 @@ class TestRun(DataSuite):
                 print('*** Exit status: %d' % proc.returncode)
 
             # Verify output.
-            assert_string_arrays_equal_wildcards(testcase.output, outlines,
-                                                 'Invalid output ({}, line {})'.format(
-                                                     testcase.file, testcase.line))
+            if bench:
+                print('Test output:')
+                print(output)
+            else:
+                assert_test_output(testcase, outlines, 'Invalid output')
 
             assert proc.returncode == 0
 
 
-def heading(text):
+def heading(text: str) -> None:
     print('=' * 20 + ' ' + text + ' ' + '=' * 20)

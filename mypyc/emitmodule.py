@@ -1,6 +1,7 @@
 """Generate C code for a Python C extension module from Python source code."""
 
-from typing import Dict, List, Tuple
+from collections import OrderedDict
+from typing import List, Tuple, Dict, Iterable
 
 from mypy.build import BuildSource, build
 from mypy.errors import CompileError
@@ -14,6 +15,7 @@ from mypyc.emitclass import generate_class
 from mypyc.emitwrapper import generate_wrapper_function, wrapper_function_header
 from mypyc.ops import c_module_name, FuncIR, ClassIR, ModuleIR
 from mypyc.refcount import insert_ref_count_opcodes
+from mypyc.exceptions import insert_exception_handling
 
 
 class MarkedDeclaration:
@@ -33,11 +35,17 @@ def compile_module_to_c(sources: List[BuildSource], module_name: str, options: O
     if result.errors:
         raise CompileError(result.errors)
 
+    # Generate basic IR, with missing exception and refcount handling.
     module = genops.build_ir(result.files[module_name], result.types)
+    # Insert exception handling.
+    for fn in module.functions:
+        insert_exception_handling(fn)
+    # Insert refcount handling.
     for fn in module.functions:
         insert_ref_count_opcodes(fn)
-
-    generator = ModuleGenerator(module_name, module)
+    # Generate C code.
+    source_path = result.files[module_name].path
+    generator = ModuleGenerator(module_name, module, source_path)
     return generator.generate_c_module()
 
 
@@ -47,22 +55,36 @@ def generate_function_declaration(fn: FuncIR, emitter: Emitter) -> None:
         '{};'.format(wrapper_function_header(fn)))
 
 
+def encode_as_c_string(s: str) -> Tuple[str, int]:
+    """Produce a utf-8 encoded, escaped, quoted C string and its size from a string"""
+    # This is a kind of abusive way to do this...
+    b = s.encode('utf-8')
+    escaped = str(b)[2:-1].replace('"', '\\"')
+    return '"{}"'.format(escaped), len(b)
+
+
 class ModuleGenerator:
-    def __init__(self, module_name: str, module: ModuleIR) -> None:
+    def __init__(self, module_name: str, module: ModuleIR, source_path: str) -> None:
         self.module_name = module_name
         self.module = module
+        self.source_path = source_path
         self.context = EmitterContext()
 
     def generate_c_module(self) -> str:
         emitter = Emitter(self.context)
 
+        self.declare_internal_globals()
+
         self.declare_imports(self.module.imports)
 
-        for cl in self.module.classes:
-            generate_class(cl, self.module_name, emitter)
+        for symbol in self.module.literals.values():
+            self.declare_static_pyobject(symbol)
 
         for fn in self.module.functions:
             generate_function_declaration(fn, emitter)
+
+        for cl in self.module.classes:
+            generate_class(cl, self.module_name, emitter)
 
         emitter.emit_line()
 
@@ -70,7 +92,7 @@ class ModuleGenerator:
 
         for fn in self.module.functions:
             emitter.emit_line()
-            generate_native_function(fn, emitter)
+            generate_native_function(fn, emitter, self.source_path)
             emitter.emit_line()
             generate_wrapper_function(fn, emitter)
 
@@ -79,25 +101,25 @@ class ModuleGenerator:
         declarations.emit_line('#include <CPy.h>')
         declarations.emit_line()
 
-        declarations.emit_line('static CPyModule *self_module;');
-
         for declaration in self.toposort_declarations():
             declarations.emit_lines(*declaration.body)
 
         return ''.join(declarations.fragments + emitter.fragments)
 
     def generate_module_def(self, emitter: Emitter) -> None:
+        # Emit module methods
         emitter.emit_line('static PyMethodDef module_methods[] = {')
         for fn in self.module.functions:
             emitter.emit_line(
                 ('{{"{name}", (PyCFunction){prefix}{name}, METH_VARARGS | METH_KEYWORDS, '
                  'NULL /* docstring */}},').format(
-                    name=fn.name,
+                    name=fn.cname,
                     prefix=PREFIX))
         emitter.emit_line('{NULL, NULL, 0, NULL}')
         emitter.emit_line('};')
         emitter.emit_line()
 
+        # Emit module definition struct
         emitter.emit_lines('static struct PyModuleDef module = {',
                            'PyModuleDef_HEAD_INIT,',
                            '"{}",'.format(self.module_name),
@@ -107,26 +129,49 @@ class ModuleGenerator:
                            'module_methods',
                            '};')
         emitter.emit_line()
+
+        # Emit module init function
         emitter.emit_lines('PyMODINIT_FUNC PyInit_{}(void)'.format(self.module_name),
                            '{',
                            'PyObject *m;')
         for cl in self.module.classes:
             type_struct = cl.type_struct
             emitter.emit_lines('if (PyType_Ready(&{}) < 0)'.format(type_struct),
-                                '    return NULL;')
-
-        # Save a copy of the current module to a static global
+                               '    return NULL;')
         emitter.emit_lines('m = PyModule_Create(&module);',
                            'if (m == NULL)',
-                           '    return NULL;',
-                           'self_module = m;',
-                           'Py_INCREF(self_module);')
+                           '    return NULL;')
+        emitter.emit_lines('_globals = PyModule_GetDict(m);',
+                           'if (_globals == NULL)',
+                           '    return NULL;')
         self.generate_imports_init_section(self.module.imports, emitter)
         self.generate_from_imports_init_section(
             self.module.imports,
             self.module.from_imports,
             emitter,
         )
+
+        for literal, symbol in self.module.literals.items():
+            if isinstance(literal, int):
+                emitter.emit_lines(
+                    '{} = PyLong_FromString(\"{}\", NULL, 10);'.format(
+                        symbol, str(literal))
+                )
+            elif isinstance(literal, float):
+                emitter.emit_lines(
+                    '{} = PyFloat_FromDouble({});'.format(symbol, str(literal))
+                )
+            elif isinstance(literal, str):
+                emitter.emit_lines(
+                    '{} = PyUnicode_FromStringAndSize({}, {});'.format(
+                        symbol, *encode_as_c_string(literal)),
+                    'if ({} == NULL)'.format(symbol),
+                    '    return NULL;',
+                )
+            else:
+                assert False, ('Literals must be integers, floating point numbers, or strings,',
+                               'but the provided literal is of type {}'.format(type(literal)))
+
         for cl in self.module.classes:
             name = cl.name
             type_struct = cl.type_struct
@@ -146,10 +191,11 @@ class ModuleGenerator:
         This runs in O(V + E).
         """
         result = []
-        marked_declarations = {k: MarkedDeclaration(v, False)
-                               for k, v in self.context.declarations.items()}
+        marked_declarations = OrderedDict()  # type: Dict[str, MarkedDeclaration]
+        for k, v in self.context.declarations.items():
+            marked_declarations[k] = MarkedDeclaration(v, False)
 
-        def _toposort_visit(name):
+        def _toposort_visit(name: str) -> None:
             decl = marked_declarations[name]
             if decl.mark:
                 return
@@ -161,11 +207,11 @@ class ModuleGenerator:
             decl.mark = True
 
         for name, marked_declaration in marked_declarations.items():
-           _toposort_visit(name)
+            _toposort_visit(name)
 
         return result
 
-    def declare_global(self, type_spaced, name, static=True) -> None:
+    def declare_global(self, type_spaced: str, name: str, static: bool=True) -> None:
         static_str = 'static ' if static else ''
         if name not in self.context.declarations:
             self.context.declarations[name] = HeaderDeclaration(
@@ -173,18 +219,24 @@ class ModuleGenerator:
                 ['{}{}{};'.format(static_str, type_spaced, name)],
             )
 
+    def declare_internal_globals(self) -> None:
+        self.declare_global('PyObject *', '_globals')
+
     def declare_import(self, imp: str) -> None:
         self.declare_global('CPyModule *', c_module_name(imp))
 
-    def declare_imports(self, imps) -> None:
+    def declare_imports(self, imps: Iterable[str]) -> None:
         for imp in imps:
             self.declare_import(imp)
+
+    def declare_static_pyobject(self, symbol: str) -> None:
+        self.declare_global('PyObject *', symbol)
 
     def generate_imports_init_section(self, imps: List[str], emitter: Emitter) -> None:
         for imp in imps:
             self.generate_import(imp, emitter)
 
-    def generate_import(self, imp: str, emitter: Emitter):
+    def generate_import(self, imp: str, emitter: Emitter) -> None:
         emitter.emit_line('{} = PyImport_ImportModule("{}");'.format(c_module_name(imp), imp))
         emitter.emit_line('if ({} == NULL)'.format(c_module_name(imp)))
         emitter.emit_line('    return NULL;')
@@ -203,7 +255,7 @@ class ModuleGenerator:
             for original_name, as_name in import_names:
                 # Obtain a reference to the original object
                 object_temp_name = emitter.temp_name()
-                emitter.emit_line('PyObject *{} = CPyObject_GetAttrString({}, "{}");'.format(
+                emitter.emit_line('PyObject *{} = PyObject_GetAttrString({}, "{}");'.format(
                     object_temp_name,
                     c_module_name(imp),
                     original_name,

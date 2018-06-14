@@ -14,7 +14,8 @@ def f() -> int:
     return x
 [out]
 L0:
-    x = 1
+    r0 = 1
+    x = r0
     return x
 
 [case testLocalVars]
@@ -25,7 +26,8 @@ def f() -> int:
     return x
 [out]
 L0:
-    x = 1
+    r0 = 1
+    x = r0
     y = x
     x = y
     return x
@@ -38,14 +40,15 @@ def f() -> int:
     return y + z
 [out]
 L0:
-    x = 1
+    r0 = 1
+    x = r0
     inc_ref x :: int
     y = x
     z = x
-    r0 = y + z :: int
+    r1 = y + z :: int
     dec_ref y :: int
     dec_ref z :: int
-    return r0
+    return r1
 
 [case testFreeAtReturn]
 def f() -> int:
@@ -56,21 +59,23 @@ def f() -> int:
     return y
 [out]
 L0:
-    x = 1
-    y = 2
     r0 = 1
-    if x == r0 goto L3 else goto L4 :: int
+    x = r0
+    r1 = 2
+    y = r1
+    r2 = 1
+    r3 = x == r2 :: int
+    dec_ref r2 :: int
+    if r3 goto L3 else goto L4 :: bool
 L1:
     return x
 L2:
     return y
 L3:
     dec_ref y :: int
-    dec_ref r0 :: int
     goto L1
 L4:
     dec_ref x :: int
-    dec_ref r0 :: int
     goto L2
 
 [case testArgumentsInOps]
@@ -81,10 +86,12 @@ def f(a: int, b: int) -> int:
 [out]
 L0:
     r0 = 1
-    x = a + r0 :: int
+    r1 = a + r0 :: int
     dec_ref r0 :: int
-    y = x + a :: int
+    x = r1
+    r2 = x + a :: int
     dec_ref x :: int
+    y = r2
     return y
 
 [case testArgumentsInAssign]
@@ -100,11 +107,12 @@ L0:
     dec_ref x :: int
     inc_ref a :: int
     y = a
-    x = 1
-    r0 = x + y :: int
+    r0 = 1
+    x = r0
+    r1 = x + y :: int
     dec_ref x :: int
     dec_ref y :: int
-    return r0
+    return r1
 
 [case testAssignToArgument1]
 def f(a: int) -> int:
@@ -113,7 +121,8 @@ def f(a: int) -> int:
     return y
 [out]
 L0:
-    a = 1
+    r0 = 1
+    a = r0
     y = a
     return y
 
@@ -125,14 +134,17 @@ def f(a: int) -> int:
     return a
 [out]
 L0:
-    a = 1
+    r0 = 1
+    a = r0
     dec_ref a :: int
-    a = 2
+    r1 = 2
+    a = r1
     dec_ref a :: int
-    a = 3
+    r2 = 3
+    a = r2
     return a
 
-[case testAssignToArgument2]
+[case testAssignToArgument3]
 def f(a: int) -> int:
     x = 1
     a = x
@@ -140,7 +152,8 @@ def f(a: int) -> int:
     return a
 [out]
 L0:
-    x = 1
+    r0 = 1
+    x = r0
     inc_ref x :: int
     a = x
     y = x
@@ -165,19 +178,23 @@ def f(a: int) -> int:
     return y
 [out]
 L0:
-    if a == a goto L1 else goto L2 :: int
+    r0 = a == a :: int
+    if r0 goto L1 else goto L2 :: bool
 L1:
-    a = 1
+    r1 = 1
+    a = r1
     goto L3
 L2:
-    x = 2
+    r2 = 2
+    x = r2
     dec_ref x :: int
     goto L4
 L3:
-    r0 = 1
-    y = a + r0 :: int
+    r3 = 1
+    r4 = a + r3 :: int
     dec_ref a :: int
-    dec_ref r0 :: int
+    dec_ref r3 :: int
+    y = r4
     return y
 L4:
     inc_ref a :: int
@@ -193,18 +210,22 @@ def f(a: int) -> int:
     return y
 [out]
 L0:
-    if a == a goto L1 else goto L2 :: int
+    r0 = a == a :: int
+    if r0 goto L1 else goto L2 :: bool
 L1:
-    x = 2
+    r1 = 2
+    x = r1
     dec_ref x :: int
     goto L4
 L2:
-    a = 1
+    r2 = 1
+    a = r2
 L3:
-    r0 = 1
-    y = a + r0 :: int
+    r3 = 1
+    r4 = a + r3 :: int
     dec_ref a :: int
-    dec_ref r0 :: int
+    dec_ref r3 :: int
+    y = r4
     return y
 L4:
     inc_ref a :: int
@@ -217,9 +238,11 @@ def f(a: int) -> int:
     return a
 [out]
 L0:
-    if a == a goto L1 else goto L3 :: int
+    r0 = a == a :: int
+    if r0 goto L1 else goto L3 :: bool
 L1:
-    a = 1
+    r1 = 1
+    a = r1
 L2:
     return a
 L3:
@@ -232,19 +255,20 @@ def f(a: int) -> int:
     x = 1
     x = x
     return x + a
+-- This is correct but bad code
 [out]
--- This is correct but not optimal
 L0:
     inc_ref a :: int
     a = a
-    x = 1
+    r0 = 1
+    x = r0
     inc_ref x :: int
     dec_ref x :: int
     x = x
-    r0 = x + a :: int
+    r1 = x + a :: int
     dec_ref x :: int
     dec_ref a :: int
-    return r0
+    return r1
 
 [case testIncrement1]
 def f(a: int) -> int:
@@ -255,18 +279,20 @@ def f(a: int) -> int:
 [out]
 L0:
     r0 = 1
-    a = a + r0 :: int
+    r1 = a + r0 :: int
     dec_ref r0 :: int
-    x = 1
-    r1 = 1
-    r3 = x
-    x = x + r1 :: int
-    dec_ref r1 :: int
+    a = r1
+    r2 = 1
+    x = r2
+    r3 = 1
+    r4 = x + r3 :: int
+    dec_ref x :: int
     dec_ref r3 :: int
-    r2 = a + x :: int
+    x = r4
+    r5 = a + x :: int
     dec_ref a :: int
     dec_ref x :: int
-    return r2
+    return r5
 
 [case testIncrement2]
 def f() -> None:
@@ -274,15 +300,16 @@ def f() -> None:
     x = x + 1
 [out]
 L0:
-    x = 1
     r0 = 1
-    r2 = x
-    x = x + r0 :: int
-    dec_ref r0 :: int
+    x = r0
+    r1 = 1
+    r2 = x + r1 :: int
     dec_ref x :: int
-    dec_ref r2 :: int
-    r1 = None
-    return r1
+    dec_ref r1 :: int
+    x = r2
+    dec_ref x :: int
+    r3 = None
+    return r3
 
 [case testAdd1]
 def f() -> None:
@@ -290,14 +317,16 @@ def f() -> None:
     x = y + 1
 [out]
 L0:
-    y = 1
     r0 = 1
-    x = y + r0 :: int
+    y = r0
+    r1 = 1
+    r2 = y + r1 :: int
     dec_ref y :: int
-    dec_ref r0 :: int
+    dec_ref r1 :: int
+    x = r2
     dec_ref x :: int
-    r1 = None
-    return r1
+    r3 = None
+    return r3
 
 [case testAdd2]
 def f(a: int) -> int:
@@ -307,11 +336,12 @@ def f(a: int) -> int:
     return x
 [out]
 L0:
-    a = a + a :: int
+    r0 = a + a :: int
+    a = r0
     x = a
-    r0 = x
-    x = x + x :: int
-    dec_ref r0 :: int
+    r1 = x + x :: int
+    dec_ref x :: int
+    x = r1
     return x
 
 [case testAdd3]
@@ -321,9 +351,11 @@ def f(a: int) -> int:
     return y
 [out]
 L0:
-    x = a + a :: int
-    y = x + x :: int
+    r0 = a + a :: int
+    x = r0
+    r1 = x + x :: int
     dec_ref x :: int
+    y = r1
     return y
 
 [case testAdd4]
@@ -333,14 +365,17 @@ def f(a: int) -> None:
     z = y + y
 [out]
 L0:
-    x = a + a :: int
+    r0 = a + a :: int
+    x = r0
     dec_ref x :: int
-    y = 1
-    z = y + y :: int
+    r1 = 1
+    y = r1
+    r2 = y + y :: int
     dec_ref y :: int
+    z = r2
     dec_ref z :: int
-    r0 = None
-    return r0
+    r3 = None
+    return r3
 
 [case testAdd5]
 def f(a: int) -> None:
@@ -349,15 +384,17 @@ def f(a: int) -> None:
     x = x + x
 [out]
 L0:
-    a = a + a :: int
+    r0 = a + a :: int
+    a = r0
     dec_ref a :: int
-    x = 1
-    r1 = x
-    x = x + x :: int
+    r1 = 1
+    x = r1
+    r2 = x + x :: int
     dec_ref x :: int
-    dec_ref r1 :: int
-    r0 = None
-    return r0
+    x = r2
+    dec_ref x :: int
+    r3 = None
+    return r3
 
 [case testReturnInMiddleOfFunction]
 def f() -> int:
@@ -370,21 +407,26 @@ def f() -> int:
     return x + y - a
 [out]
 L0:
-    x = 1
-    y = 2
-    z = 3
-    if z == z goto L3 else goto L4 :: int
+    r0 = 1
+    x = r0
+    r1 = 2
+    y = r1
+    r2 = 3
+    z = r2
+    r3 = z == z :: int
+    if r3 goto L3 else goto L4 :: bool
 L1:
     return z
 L2:
-    a = 1
-    r0 = x + y :: int
+    r4 = 1
+    a = r4
+    r5 = x + y :: int
     dec_ref x :: int
     dec_ref y :: int
-    r1 = r0 - a :: int
-    dec_ref r0 :: int
+    r6 = r5 - a :: int
+    dec_ref r5 :: int
     dec_ref a :: int
-    return r1
+    return r6
 L3:
     dec_ref x :: int
     dec_ref y :: int
@@ -403,19 +445,22 @@ def f(a: int) -> int:
     return sum
 [out]
 L0:
-    sum = 0
-    i = 0
+    r0 = 0
+    sum = r0
+    r1 = 0
+    i = r1
 L1:
-    if i <= a goto L2 else goto L4 :: int
+    r2 = i <= a :: int
+    if r2 goto L2 else goto L4 :: bool
 L2:
-    r1 = sum
-    sum = sum + i :: int
-    dec_ref r1 :: int
-    r0 = 1
-    r2 = i
-    i = i + r0 :: int
-    dec_ref r0 :: int
-    dec_ref r2 :: int
+    r3 = sum + i :: int
+    dec_ref sum :: int
+    sum = r3
+    r4 = 1
+    r5 = i + r4 :: int
+    dec_ref i :: int
+    dec_ref r4 :: int
+    i = r5
     goto L1
 L3:
     return sum
@@ -428,24 +473,12 @@ def f(a: int) -> int:
     return f(a + 1)
 [out]
 L0:
-    r1 = 1
-    r2 = a + r1 :: int
+    r0 = 1
+    r1 = a + r0 :: int
+    dec_ref r0 :: int
+    r2 = f(r1)
     dec_ref r1 :: int
-    r0 = f(r2)
-    dec_ref r2 :: int
-    return r0
-
-[case testCall]
-def f(a: int) -> int:
-    return f(a + 1)
-[out]
-L0:
-    r1 = 1
-    r2 = a + r1 :: int
-    dec_ref r1 :: int
-    r0 = f(r2)
-    dec_ref r2 :: int
-    return r0
+    return r2
 
 [case testError]
 def f(x: List[int]) -> None: pass # E: Name 'List' is not defined
@@ -457,15 +490,16 @@ def f() -> int:
 [out]
 L0:
     r0 = 0
-    r1 = box(int, r0)
-    r2 = 1
-    r3 = box(int, r2)
-    a = [r1, r3]
-    dec_ref r1
+    r1 = 1
+    r2 = box(int, r0)
+    r3 = box(int, r1)
+    r4 = [r2, r3]
+    dec_ref r2
     dec_ref r3
+    a = r4
     dec_ref a
-    r4 = 0
-    return r4
+    r5 = 0
+    return r5
 
 [case testReturnList]
 from typing import List
@@ -474,10 +508,10 @@ def f(x: int) -> List[int]:
 [out]
 L0:
     inc_ref x :: int
-    r1 = box(int, x)
-    r0 = [r1]
-    dec_ref r1
-    return r0
+    r0 = box(int, x)
+    r1 = [r0]
+    dec_ref r0
+    return r1
 
 [case testListSet]
 from typing import List
@@ -492,11 +526,11 @@ L0:
     r3 = unbox(int, r2)
     dec_ref r2
     r4 = box(int, r3)
-    a[r0] = r4 :: list
+    r5 = a.__setitem__(r0, r4) :: list
     dec_ref r0 :: int
     dec_ref r4
-    r5 = None
-    return r5
+    r6 = None
+    return r6
 
 [case testTupleRefcount]
 from typing import Tuple
@@ -517,13 +551,14 @@ def f() -> None:
     c.x = C()
 [out]
 L0:
-    c = C()
     r0 = C()
-    c.x = r0
+    c = r0
+    r1 = C()
+    c.x = r1; r2 = is_error
     dec_ref c
-    dec_ref r0
-    r1 = None
-    return r1
+    dec_ref r1
+    r3 = None
+    return r3
 
 [case testCastRefCount]
 class C: pass
@@ -534,16 +569,18 @@ def f() -> None:
 [out]
 L0:
     r0 = C()
-    a = [r0]
+    r1 = [r0]
     dec_ref r0
-    r1 = 0
-    r2 = a[r1] :: list
+    a = r1
+    r2 = 0
+    r3 = a[r2] :: list
     dec_ref a
-    dec_ref r1 :: int
-    d = cast(C, r2)
+    dec_ref r2 :: int
+    r4 = cast(C, r3)
+    d = r4
     dec_ref d
-    r3 = None
-    return r3
+    r5 = None
+    return r5
 
 [case testUnaryBranchSpecialCase]
 def f(x: bool) -> int:
@@ -559,3 +596,164 @@ L1:
 L2:
     r1 = 2
     return r1
+
+[case testUnicodeLiteral]
+def f() -> str:
+    return "some string"
+[out]
+L0:
+    r0 = __unicode_0 :: static
+    inc_ref r0
+    return r0
+
+[case testPyMethodCall]
+from typing import List
+def g(x: List[int], y: List[int]) -> None:
+    x.extend(y)
+[out]
+L0:
+    r0 = __unicode_0 :: static
+    r1 = x.r0(y) :: object
+    r2 = cast(None, r1)
+    dec_ref r2
+    r3 = None
+    return r3
+
+[case testListAppend]
+from typing import List
+def f(a: List[int], x: int) -> None:
+    a.append(x)
+[out]
+L0:
+    inc_ref x :: int
+    r0 = box(int, x)
+    r1 = a.append(r0) :: list
+    dec_ref r0
+    r2 = None
+    dec_ref r2
+    r3 = None
+    return r3
+
+[case testForDict]
+from typing import Dict
+
+def f(d: Dict[int, int]) -> None:
+    for key in d:
+        d[key]
+[out]
+L0:
+    r0 = iter d :: object
+L1:
+    r1 = next r0 :: object
+    if is_error(r1) goto L4 else goto L2
+L2:
+    key = r1
+    r2 = unbox(int, key)
+    dec_ref key
+    r3 = box(int, r2)
+    r4 = d[r3] :: dict
+    dec_ref r3
+    r5 = unbox(int, r4)
+    dec_ref r4
+    dec_ref r5 :: int
+    goto L1
+L3:
+    r6 = no_err_occurred 
+    r7 = None
+    return r7
+L4:
+    dec_ref r0
+    goto L3
+
+[case testForDictBreak]
+from typing import Dict
+
+def iterate_and_break(d: Dict[int, int]) -> None:
+    for key in d:
+        if d[key] % 2:
+            break
+[out]
+L0:
+    r0 = iter d :: object
+L1:
+    r1 = next r0 :: object
+    if is_error(r1) goto L7 else goto L2
+L2:
+    key = r1
+    r2 = unbox(int, key)
+    dec_ref key
+    r3 = box(int, r2)
+    r4 = d[r3] :: dict
+    dec_ref r3
+    r5 = unbox(int, r4)
+    dec_ref r4
+    r6 = 2
+    r7 = r5 % r6 :: int
+    dec_ref r5 :: int
+    dec_ref r6 :: int
+    if r7 goto L8 else goto L9 :: bool
+L3:
+    goto L6
+L4:
+L5:
+    goto L1
+L6:
+    r8 = no_err_occurred 
+    r9 = None
+    return r9
+L7:
+    dec_ref r0
+    goto L6
+L8:
+    dec_ref r0
+    dec_ref r7 :: int
+    goto L3
+L9:
+    dec_ref r7 :: int
+    goto L5
+
+[case testForDictContinue]
+from typing import Dict
+
+def iterate_and_continue(d: Dict[int, int]) -> None:
+    for key in d:
+        if d[key] % 2:
+            continue
+[out]
+L0:
+    r0 = iter d :: object
+L1:
+    r1 = next r0 :: object
+    if is_error(r1) goto L7 else goto L2
+L2:
+    key = r1
+    r2 = unbox(int, key)
+    dec_ref key
+    r3 = box(int, r2)
+    r4 = d[r3] :: dict
+    dec_ref r3
+    r5 = unbox(int, r4)
+    dec_ref r4
+    r6 = 2
+    r7 = r5 % r6 :: int
+    dec_ref r5 :: int
+    dec_ref r6 :: int
+    if r7 goto L8 else goto L9 :: bool
+L3:
+    goto L1
+L4:
+L5:
+    goto L1
+L6:
+    r8 = no_err_occurred 
+    r9 = None
+    return r9
+L7:
+    dec_ref r0
+    goto L6
+L8:
+    dec_ref r7 :: int
+    goto L3
+L9:
+    dec_ref r7 :: int
+    goto L5
