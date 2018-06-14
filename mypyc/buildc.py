@@ -128,8 +128,10 @@ def build_shared_lib_for_modules(cpath: str) -> str:
     base_name = 'stuff'
     out_file = 'lib%s.so' % base_name
     cmd = ['clang'] + basic_flags + ['-o', out_file, cpath] + py_flags + warning_flags
-    print(cmd)
-    subprocess.check_call(cmd)
+    try:
+        subprocess.check_call(cmd)
+    except subprocess.CalledProcessError as err:
+        raise BuildError(err.output)
     return out_file
 
 

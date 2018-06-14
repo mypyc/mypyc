@@ -65,6 +65,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
                  func_name: str,
                  source_path: str) -> None:
         self.emitter = emitter
+        self.names = emitter.names
         self.declarations = declarations
         self.env = self.emitter.env
         self.func_name = func_name
@@ -167,7 +168,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         self.emit_line('%s = CPY_GET_ATTR(%s, %d, %s, %s);' % (
             dest, obj,
             rtype.getter_index(op.attr),
-            rtype.struct_name(),
+            rtype.struct_name(self.names),
             rtype.attr_type(op.attr).ctype))
 
     def visit_set_attr(self, op: SetAttr) -> None:
@@ -181,7 +182,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
             obj,
             rtype.setter_index(op.attr),
             src,
-            rtype.struct_name(),
+            rtype.struct_name(self.names),
             rtype.attr_type(op.attr).ctype))
 
     def visit_load_static(self, op: LoadStatic) -> None:
@@ -232,7 +233,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         assert method is not None
         mtype = native_function_type(method)
         self.emit_line('{}CPY_GET_METHOD({}, {}, {}, {})({});'.format(
-            dest, obj, method_idx, rtype.struct_name(), mtype, args))
+            dest, obj, method_idx, rtype.struct_name(self.names), mtype, args))
 
     def visit_py_call(self, op: PyCall) -> None:
         dest = self.get_dest_assign(op)

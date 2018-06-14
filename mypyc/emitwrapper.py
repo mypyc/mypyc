@@ -21,6 +21,7 @@ def generate_wrapper_function(fn: FuncIR, emitter: Emitter) -> None:
     emitter.emit_line('{} {{'.format(wrapper_function_header(fn, emitter.names)))
 
     # If fn is a method, then the first argument is a self param
+    print('>>>', fn.cname(emitter.names), fn.args)
     real_args = fn.args[:]
     if fn.class_name:
         arg = real_args.pop(0)

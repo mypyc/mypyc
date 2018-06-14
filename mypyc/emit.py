@@ -6,7 +6,7 @@ from typing import List, Set, Dict, Optional
 from mypyc.common import REG_PREFIX
 from mypyc.ops import (
     Environment, Label, Value, Register, RType, RTuple, RInstance, ROptional,
-    RPrimitive, type_struct_name, is_int_rprimitive, is_float_rprimitive, is_bool_rprimitive,
+    RPrimitive, is_int_rprimitive, is_float_rprimitive, is_bool_rprimitive,
     short_name, is_list_rprimitive, is_dict_rprimitive, is_tuple_rprimitive, is_none_rprimitive,
     object_rprimitive, is_str_rprimitive
 )
@@ -199,7 +199,9 @@ class Emitter:
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
             self.emit_lines(
-                'if (PyObject_TypeCheck({}, &{}))'.format(src, type_struct_name(typ.name)),
+                'if (PyObject_TypeCheck({}, &{}))'.format(
+                    src,
+                    typ.class_ir.type_struct_name(self.names)),
                 '    {} = {};'.format(dest, src),
                 'else {',
                 err,

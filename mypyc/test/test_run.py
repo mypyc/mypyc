@@ -22,6 +22,7 @@ import pytest  # type: ignore  # no pytest in typeshed
 files = [
     'run.test',
     'run-classes.test',
+    'run-multimodule.test',
     'run-bench.test',
 ]
 
@@ -83,7 +84,17 @@ class TestRun(MypycDataSuite):
                 common_path = os.path.join(test_temp_dir, 'stuff.c')
                 with open(common_path, 'w') as f:
                     f.write(ctext)
-                shared_lib = buildc.build_shared_lib_for_modules(common_path)
+                try:
+                    shared_lib = buildc.build_shared_lib_for_modules(common_path)
+                except buildc.BuildError as err:
+                    heading('Generated C')
+                    with open(common_path) as f:
+                        print(f.read().rstrip())
+                    heading('End C')
+                    heading('Build output')
+                    print(err.output.decode('utf8').rstrip('\n'))
+                    heading('End output')
+                    raise
 
             for mod in module_names:
                 cpath = os.path.join(test_temp_dir, '%s.c' % mod)

@@ -271,8 +271,8 @@ class RInstance(RType):
     def c_undefined_value(self) -> str:
         return 'NULL'
 
-    def struct_name(self) -> str:
-        return self.class_ir.struct_name()
+    def struct_name(self, names: NameGenerator) -> str:
+        return self.class_ir.struct_name(names)
 
     def getter_index(self, name: str) -> int:
         return self.class_ir.vtable_entry(name)
@@ -1265,16 +1265,18 @@ class ClassIR:
             if name in ir.attributes: return ir.attributes[name]
         assert False, '%r has no attribute %r' % (self.name, name)
 
-    def struct_name(self) -> str:
-        return '{}Object'.format(self.name)
+    def name_prefix(self, names: NameGenerator) -> str:
+        return names.private_name(self.module_name, self.name)
+
+    def struct_name(self, names: NameGenerator) -> str:
+        return '{}Object'.format(self.name_prefix(names))
 
     def get_method(self, name: str) -> Optional[FuncIR]:
         matches = [func for func in self.methods if func.name == name]
         return matches[0] if matches else None
 
-    @property
-    def type_struct(self) -> str:
-        return '{}Type'.format(self.name)
+    def type_struct_name(self, names: NameGenerator) -> str:
+        return '{}Type'.format(self.name_prefix(names))
 
 
 class ModuleIR:
@@ -1294,10 +1296,6 @@ class ModuleIR:
 
         if 'builtins' not in self.imports:
             self.imports.insert(0, 'builtins')
-
-
-def type_struct_name(class_name: str) -> str:
-    return '{}Type'.format(class_name)
 
 
 class OpVisitor(Generic[T]):
