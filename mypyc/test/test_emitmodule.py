@@ -40,7 +40,7 @@ class TestCompiler(MypycDataSuite):
             source = build.BuildSource('prog.py', 'prog', text)
 
             try:
-                ctext = emitmodule.compile_module_to_c(
+                ctext = emitmodule.compile_modules_to_c(
                     sources=[source],
                     module_names=['prog'],
                     options=options,

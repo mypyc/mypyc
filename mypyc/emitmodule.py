@@ -25,8 +25,8 @@ class MarkedDeclaration:
         self.mark = False
 
 
-def compile_module_to_c(sources: List[BuildSource], module_names: List[str], options: Options,
-                        alt_lib_path: str) -> str:
+def compile_modules_to_c(sources: List[BuildSource], module_names: List[str], options: Options,
+                         alt_lib_path: str) -> str:
     """Compile Python module(s) to C that can be used from Python C extension modules."""
     assert options.strict_optional, 'strict_optional must be turned on'
     result = build(sources=sources,
@@ -148,7 +148,7 @@ class ModuleGenerator:
         emitter.emit_line()
 
         # Emit module init function
-        emitter.emit_lines('PyMODINIT_FUNC PyInit_{}(void)'.format(module_name),
+        emitter.emit_lines('PyObject * x_PyInit_{}(void)'.format(module_name),
                            '{',
                            'PyObject *m;')
         for cl in module.classes:
