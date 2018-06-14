@@ -322,6 +322,18 @@ assert f(a) is a
 assert g(None) == 1
 assert g(a) == 2
 
+[case testFromImport]
+from testmodule import g
+
+def f(x: int) -> int:
+    return g(x)
+[file testmodule.py]
+def g(x: int) -> int:
+    return x + 1
+[file driver.py]
+from native import f
+assert f(1) == 2
+
 [case testStr]
 def f() -> str:
     return 'some string'
@@ -655,6 +667,101 @@ big_int()
 9223372036854775808
 2147483647
 
+[case testForIterable]
+from typing import Iterable, Dict, Any
+def iterate_over_any(a: Any) -> None:
+    for element in a:
+        print(element)
+
+def iterate_over_iterable(iterable: Iterable[T]) -> None:
+    for element in iterable:
+        print(element)
+
+def iterate_and_delete(d: Dict[int, int]) -> None:
+    for key in d:
+        d.pop(key)
+
+def sum_over_values(d: Dict[int, int]) -> int:
+    s = 0
+    for key in d:
+        s = s + d[key]
+    return s
+
+def sum_over_even_values(d: Dict[int, int]) -> int:
+    s = 0
+    for key in d:
+        if d[key] % 2:
+            continue
+        s = s + d[key]
+    return s
+
+def sum_over_two_values(d: Dict[int, int]) -> int:
+    s = 0
+    i = 0
+    for key in d:
+        if i == 2:
+            break
+        s = s + d[key]
+        i = i + 1
+    return s
+
+[file driver.py]
+from native import iterate_over_any, iterate_over_iterable, iterate_and_delete, sum_over_values, sum_over_even_values, sum_over_two_values
+import traceback
+def broken_generator(n):
+    num = 0
+    while num < n:
+        yield num
+        num += 1
+    raise Exception('Exception Manually Raised')
+
+d = {1:1, 2:2, 3:3, 4:4, 5:5}
+print(sum_over_values(d))
+print(sum_over_even_values(d))
+print(sum_over_two_values(d))
+
+try:
+    iterate_over_any(5)
+except TypeError:
+    traceback.print_exc()
+try:
+    iterate_over_iterable(broken_generator(5))
+except Exception:
+    traceback.print_exc()
+try:
+    iterate_and_delete(d)
+except RuntimeError:
+    traceback.print_exc()
+[out]
+Traceback (most recent call last):
+  File "tmp/driver.py", line 16, in <module>
+    iterate_over_any(5)
+  File "tmp/py/native.py", line 3, in iterate_over_any
+    for element in a:
+TypeError: 'int' object is not iterable
+Traceback (most recent call last):
+  File "tmp/driver.py", line 20, in <module>
+    iterate_over_iterable(broken_generator(5))
+  File "tmp/py/native.py", line 7, in iterate_over_iterable
+    for element in iterable:
+  File "tmp/driver.py", line 8, in broken_generator
+    raise Exception('Exception Manually Raised')
+Exception: Exception Manually Raised
+Traceback (most recent call last):
+  File "tmp/driver.py", line 24, in <module>
+    iterate_and_delete(d)
+  File "tmp/py/native.py", line 11, in iterate_and_delete
+    for key in d:
+RuntimeError: dictionary changed size during iteration
+15
+6
+3
+0
+1
+2
+3
+4
+
 [case testNeg]
 def neg(x: int) -> int:
     return -x
@@ -701,3 +808,53 @@ except TypeError:
     pass
 else:
     assert False
+
+[case testContinueFor]
+def f() -> None:
+    for n in range(5):
+        continue
+[file driver.py]
+from native import f
+f()
+
+[case testCallableTypes]
+from typing import Callable
+def absolute_value(x: int) -> int:
+    return x if x > 0 else -x
+
+def call_native_function(x: int) -> int:
+    return absolute_value(x)
+
+def call_python_function(x: int) -> int:
+    return int(x)
+
+def return_float() -> float:
+    return 5.0
+
+def return_callable_type() -> Callable[[], float]:
+    return return_float
+
+def call_callable_type() -> float:
+    f = return_callable_type()
+    return f()
+
+def return_passed_in_callable_type(f: Callable[[], float]) -> Callable[[], float]:
+    return f
+
+def call_passed_in_callable_type(f: Callable[[], float]) -> float:
+    return f()
+
+[file driver.py]
+from native import call_native_function, call_python_function, return_float, return_callable_type, call_callable_type, return_passed_in_callable_type, call_passed_in_callable_type
+a = call_native_function(1)
+b = call_python_function(1)
+c = return_callable_type()
+d = call_callable_type()
+e = return_passed_in_callable_type(return_float)
+f = call_passed_in_callable_type(return_float)
+assert a == 1
+assert b == 1
+assert c() == 5.0
+assert d == 5.0
+assert e() == 5.0
+assert f == 5.0

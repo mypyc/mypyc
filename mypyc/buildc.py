@@ -35,8 +35,13 @@ class BuildError(Exception):
         self.output = output
 
 
-def build_c_extension(cpath: str, module_name: str) -> str:
+def build_c_extension(cpath: str, module_name: str, preserve_setup: bool = False) -> str:
     tempdir = tempfile.mkdtemp()
+    if preserve_setup:
+        tempdir = '.'
+    else:
+        tempdir = tempfile.mkdtemp()
+    include_dir = os.path.join(os.path.dirname(__file__), '..', 'lib-rt')
     try:
         setup_path = os.path.join(tempdir, 'setup.py')
         basename = os.path.basename(cpath)
@@ -54,7 +59,8 @@ def build_c_extension(cpath: str, module_name: str) -> str:
         assert len(so_path) == 1
         return so_path[0]
     finally:
-        shutil.rmtree(tempdir)
+        if not preserve_setup:
+            shutil.rmtree(tempdir)
 
 
 # TODO: Make compiler arguments platform-specific.

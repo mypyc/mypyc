@@ -497,15 +497,42 @@ def factorial(x: int) -> int:
 [out]
 def f(x):
     x :: int
-    r0, r1, r2, r3 :: object
-    r4 :: int
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: int
 L0:
     r0 = module_testmodule :: static
-    r1 = r0.factorial :: object
-    r2 = box(int, x)
-    r3 = r1(r2) :: object
-    r4 = unbox(int, r3)
-    return r4
+    r1 = __unicode_0 :: static
+    r2 = r0.r1 :: object
+    r3 = box(int, x)
+    r4 = r2(r3) :: object
+    r5 = unbox(int, r4)
+    return r5
+
+[case testFromImport]
+from testmodule import g
+
+def f(x: int) -> int:
+    return g(x)
+[file testmodule.py]
+def g(x: int) -> int:
+    return x + 1
+[out]
+def f(x):
+    x :: int
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: int
+L0:
+    r0 = _globals :: static
+    r1 = __unicode_0 :: static
+    r2 = r0[r1] :: dict
+    r3 = box(int, x)
+    r4 = r2(r3) :: object
+    r5 = unbox(int, r4)
+    return r5
 
 [case testPrintFullname]
 import builtins
@@ -514,19 +541,22 @@ def f(x: int) -> None:
 [out]
 def f(x):
     x :: int
-    r0, r1 :: object
-    r2 :: int
-    r3, r4 :: object
-    r5, r6 :: None
+    r0 :: object
+    r1 :: str
+    r2 :: object
+    r3 :: int
+    r4, r5 :: object
+    r6, r7 :: None
 L0:
     r0 = module_builtins :: static
-    r1 = r0.print :: object
-    r2 = 5
-    r3 = box(int, r2)
-    r4 = r1(r3) :: object
-    r5 = cast(None, r4)
-    r6 = None
-    return r6
+    r1 = __unicode_0 :: static
+    r2 = r0.r1 :: object
+    r3 = 5
+    r4 = box(int, r3)
+    r5 = r2(r4) :: object
+    r6 = cast(None, r5)
+    r7 = None
+    return r7
 
 [case testPrint]
 import builtins
@@ -535,17 +565,20 @@ def f(x: int) -> None:
 [out]
 def f(x):
     x, r0 :: int
-    r1, r2, r3, r4 :: object
-    r5, r6 :: None
+    r1 :: object
+    r2 :: str
+    r3, r4, r5 :: object
+    r6, r7 :: None
 L0:
     r0 = 5
     r1 = module_builtins :: static
-    r2 = r1.print :: object
-    r3 = box(int, r0)
-    r4 = r2(r3) :: object
-    r5 = cast(None, r4)
-    r6 = None
-    return r6
+    r2 = __unicode_0 :: static
+    r3 = r1.r2 :: object
+    r4 = box(int, r0)
+    r5 = r3(r4) :: object
+    r6 = cast(None, r5)
+    r7 = None
+    return r7
 
 [case testUnicodeLiteral]
 def f() -> str:
@@ -811,24 +844,24 @@ def assign_and_return_float_sum() -> float:
     f3 = 3.0
     return f1 * f2 + f3
 [out]
-def assign_and_return_float_sum():            
-    f1, r0, f2, r1, f3, r2 :: float           
-    r3 :: object                              
-    r4 :: float                               
-    r5 :: object                              
-    r6 :: float                               
-L0:                                           
-    r0 = __float_0 :: static                  
-    f1 = r0                                   
-    r1 = __float_1 :: static                  
-    f2 = r1                                   
-    r2 = __float_2 :: static                  
-    f3 = r2                                   
-    r3 = f1 * f2                              
-    r4 = cast(float, r3)                      
-    r5 = r4 + f3                              
-    r6 = cast(float, r5)                      
-    return r6                                 
+def assign_and_return_float_sum():
+    f1, r0, f2, r1, f3, r2 :: float
+    r3 :: object
+    r4 :: float
+    r5 :: object
+    r6 :: float
+L0:
+    r0 = __float_0 :: static
+    f1 = r0
+    r1 = __float_1 :: static
+    f2 = r1
+    r2 = __float_2 :: static
+    f3 = r2
+    r3 = f1 * f2
+    r4 = cast(float, r3)
+    r5 = r4 + f3
+    r6 = cast(float, r5)
+    return r6
 
 [case testBigIntLiteral]
 def big_int() -> None:
@@ -860,3 +893,83 @@ L0:
     max_32_bit = r6
     r7 = None
     return r7
+
+[case testCallableTypes]
+from typing import Callable
+def absolute_value(x: int) -> int:
+    return x if x > 0 else -x
+
+def call_native_function(x: int) -> int:
+    return absolute_value(x)
+
+def call_python_function(x: int) -> int:
+    return int(x)
+
+def return_float() -> float:
+    return 5.0
+
+def return_callable_type() -> Callable[[], float]:
+    return return_float
+
+def call_callable_type() -> float:
+    f = return_callable_type()
+    return f()
+[out]
+def absolute_value(x):
+    x, r0 :: int
+    r1 :: bool
+    r2, r3 :: int
+L0:
+    r0 = 0
+    r1 = x > r0 :: int
+    if r1 goto L1 else goto L2 :: bool
+L1:
+    r2 = x
+    goto L3
+L2:
+    r3 = -x :: int
+    r2 = r3
+L3:
+    return r2
+def call_native_function(x):
+    x, r0 :: int
+L0:
+    r0 = absolute_value(x)
+    return r0
+def call_python_function(x):
+    x :: int
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: int
+L0:
+    r0 = module_builtins :: static
+    r1 = __unicode_0 :: static
+    r2 = r0.r1 :: object
+    r3 = box(int, x)
+    r4 = r2(r3) :: object
+    r5 = unbox(int, r4)
+    return r5
+def return_float():
+    r0 :: float
+L0:
+    r0 = __float_1 :: static
+    return r0
+def return_callable_type():
+    r0 :: object
+    r1 :: str
+    r2 :: object
+L0:
+    r0 = _globals :: static
+    r1 = __unicode_2 :: static
+    r2 = r0[r1] :: dict
+    return r2
+def call_callable_type():
+    f, r0, r1 :: object
+    r2 :: float
+L0:
+    r0 = return_callable_type()
+    f = r0
+    r1 = f() :: object
+    r2 = cast(float, r1)
+    return r2

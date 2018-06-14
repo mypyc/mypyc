@@ -51,8 +51,8 @@ from mypyc.ops import (
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import list_len_op, list_get_item_op, new_list_op
-from mypyc.ops_dict import new_dict_op
-from mypyc.ops_misc import none_op
+from mypyc.ops_dict import new_dict_op, dict_get_item_op
+from mypyc.ops_misc import none_op, iter_op, next_op, no_err_occurred_op
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
 
@@ -63,7 +63,13 @@ def build_ir(module: MypyFile,
     builder = IRBuilder(types, mapper)
     module.accept(builder)
 
-    return ModuleIR(builder.imports, builder.literals, builder.functions, builder.classes)
+    return ModuleIR(
+        builder.imports,
+        builder.from_imports,
+        builder.literals,
+        builder.functions,
+        builder.classes
+    )
 
 
 class Mapper:
@@ -88,10 +94,10 @@ class Mapper:
                 return dict_rprimitive
             elif typ.type.fullname() == 'builtins.tuple':
                 return tuple_rprimitive  # Varying-length tuple
-            elif typ.type.fullname() == 'builtins.object':
-                return object_rprimitive
             elif typ.type in self.type_to_ir:
                 return RInstance(self.type_to_ir[typ.type])
+            else:
+                return object_rprimitive
         elif isinstance(typ, TupleType):
             return RTuple([self.type_to_rtype(t) for t in typ.items])
         elif isinstance(typ, CallableType):
@@ -170,6 +176,8 @@ class IRBuilder(NodeVisitor[Value]):
         self.continue_gotos = []  # type: List[List[Goto]]
 
         self.mapper = mapper
+        self.imports = []  # type: List[str]
+        self.from_imports = {}  # type: Dict[str, List[Tuple[str, str]]]
         self.imports = []  # type: List[str]
 
         # Maps integer, float, and unicode literals to the static c name for that literal
@@ -255,10 +263,16 @@ class IRBuilder(NodeVisitor[Value]):
     def visit_import_from(self, node: ImportFrom) -> Value:
         if node.is_unreachable or node.is_mypy_only:
             pass
-        if not node.is_top_level:
-            assert False, "non-toplevel imports not supported"
 
-        self.imports.append(node.id)
+        # TODO support these?
+        assert not node.relative
+
+        if node.id not in self.from_imports:
+            self.from_imports[node.id] = []
+
+        for name, maybe_as_name in node.names:
+            as_name = maybe_as_name or name
+            self.from_imports[node.id].append((name, as_name))
 
         return INVALID_VALUE
 
@@ -536,7 +550,7 @@ class IRBuilder(NodeVisitor[Value]):
             self.pop_loop_stack(end_block, next)
             return INVALID_VALUE
 
-        if is_list_rprimitive(self.node_type(s.expr)):
+        elif is_list_rprimitive(self.node_type(s.expr)):
             self.push_loop_stack()
 
             expr_reg = self.accept(s.expr)
@@ -584,16 +598,60 @@ class IRBuilder(NodeVisitor[Value]):
 
             return INVALID_VALUE
 
-        assert False, 'for not supported'
+        else:
+            self.push_loop_stack()
+
+            assert isinstance(s.index, NameExpr)
+            assert isinstance(s.index.node, Var)
+            lvalue_reg = self.environment.add_local(s.index.node, object_rprimitive)
+
+            # Define registers to contain the expression, along with the iterator that will be used
+            # for the for-loop.
+            expr_reg = self.accept(s.expr)
+            iter_reg = self.add(PrimitiveOp([expr_reg], iter_op, s.line))
+
+            # Create a block for where the __next__ function will be called on the iterator and
+            # checked to see if the value returned is NULL, which would signal either the end of
+            # the Iterable being traversed or an exception being raised. Note that Branch.IS_ERROR
+            # checks only for NULL (an exception does not necessarily have to be raised).
+            next_block = self.goto_new_block()
+            next_reg = self.add(PrimitiveOp([iter_reg], next_op, s.line))
+            branch = Branch(next_reg, INVALID_LABEL, INVALID_LABEL, Branch.IS_ERROR)
+            self.add(branch)
+            branches = [branch]
+
+            # Create a new block for the body of the loop. Set the previous branch to go here if
+            # the conditional evaluates to false. Assign the value obtained from __next__ to the
+            # lvalue so that it can be referenced by code in the body of the loop. At the end of
+            # the body, goto the label that calls the iterator's __next__ function again.
+            body_block = self.new_block()
+            self.set_branches(branches, False, body_block)
+            self.add(Assign(lvalue_reg, next_reg))
+            s.body.accept(self)
+            self.add(Goto(next_block.label))
+
+            # Create a new block for when the loop is finished. Set the branch to go here if the
+            # conditional evaluates to true. If an exception was raised during the loop, then
+            # err_reg wil be set to True. If no_err_occurred_op returns False, then the exception
+            # will be propagated using the ERR_FALSE flag.
+            end_block = self.new_block()
+            self.set_branches(branches, True, end_block)
+            self.add(PrimitiveOp([], no_err_occurred_op, s.line))
+
+            self.pop_loop_stack(next_block, end_block)
+
+            return INVALID_VALUE
 
     def visit_break_stmt(self, node: BreakStmt) -> Value:
         self.break_gotos[-1].append(Goto(INVALID_LABEL))
         self.add(self.break_gotos[-1][-1])
+        self.new_block()
         return INVALID_VALUE
 
     def visit_continue_stmt(self, node: ContinueStmt) -> Value:
         self.continue_gotos[-1].append(Goto(INVALID_LABEL))
         self.add(self.continue_gotos[-1][-1])
+        self.new_block()
         return INVALID_VALUE
 
     def visit_unary_expr(self, expr: UnaryExpr) -> Value:
@@ -695,13 +753,28 @@ class IRBuilder(NodeVisitor[Value]):
             assert desc.result_type is not None
             return self.add(PrimitiveOp([], desc, expr.line))
 
+        if self.is_global_name(expr.name):
+            return self.load_global(expr)
+
         if not self.is_native_name_expr(expr):
             return self.load_static_module_attr(expr)
 
-        # TODO: We assume that this is a Var node, which is very limited
-        assert isinstance(expr.node, Var)
+        # TODO: We assume that this is a Var or FuncDef node, which is very limited
+        if isinstance(expr.node, Var):
+            return self.environment.lookup(expr.node)
+        if isinstance(expr.node, FuncDef):
+            # If we have a function, then we can look it up in the global variables dictionary.
+            return self.load_global(expr)
 
-        return self.environment.lookup(expr.node)
+        assert False, 'node must be of either Var or FuncDef type'
+
+    def is_global_name(self, name: str) -> bool:
+        # TODO: this is pretty hokey
+        for _, names in self.from_imports.items():
+            for _, as_name in names:
+                if name == as_name:
+                    return True
+        return False
 
     def is_module_member_expr(self, expr: MemberExpr) -> bool:
         return isinstance(expr.expr, RefExpr) and expr.expr.kind == MODULE_REF
@@ -714,14 +787,11 @@ class IRBuilder(NodeVisitor[Value]):
             if isinstance(obj.type, RInstance):
                 return self.add(GetAttr(obj, expr.name, expr.line))
             else:
-                return self.add(PyGetAttr(obj, expr.name, expr.line))
+                return self.py_get_attr(obj, expr.name, expr.line)
 
-    def load_static_module_attr(self, expr: RefExpr) -> Value:
-        assert expr.node, "RefExpr not resolved"
-        module = '.'.join(expr.node.fullname().split('.')[:-1])
-        name = expr.node.fullname().split('.')[-1]
-        left = self.add(LoadStatic(object_rprimitive, c_module_name(module)))
-        return self.add(PyGetAttr(left, name, expr.line))
+    def py_get_attr(self, obj: Value, attr: str, line: int) -> Value:
+        key = self.load_static_unicode(attr)
+        return self.add(PyGetAttr(obj, key, line))
 
     def py_call(self, function: Value, args: List[Value],
                 target_type: RType, line: int) -> Value:
@@ -1221,6 +1291,16 @@ class IRBuilder(NodeVisitor[Value]):
     def box_expr(self, expr: Expression) -> Value:
         return self.box(self.accept(expr))
 
+    def load_global(self, expr: NameExpr) -> Value:
+        """Loads a Python-level global.
+
+        This takes a NameExpr and uses its name as a key to retrieve the corresponding PyObject *
+        from the _globals dictionary in the C-generated code.
+        """
+        _globals = self.add(LoadStatic(object_rprimitive, '_globals'))
+        reg = self.load_static_unicode(expr.name)
+        return self.add(PrimitiveOp([_globals, reg], dict_get_item_op, expr.line))
+
     def load_static_int(self, value: int) -> Value:
         """Loads a static integer value into a register."""
         if value not in self.literals:
@@ -1245,6 +1325,13 @@ class IRBuilder(NodeVisitor[Value]):
             self.literals[value] = '__unicode_' + str(len(self.literals))
         static_symbol = self.literals[value]
         return self.add(LoadStatic(str_rprimitive, static_symbol))
+
+    def load_static_module_attr(self, expr: RefExpr) -> Value:
+        assert expr.node, "RefExpr not resolved"
+        module = '.'.join(expr.node.fullname().split('.')[:-1])
+        name = expr.node.fullname().split('.')[-1]
+        left = self.add(LoadStatic(object_rprimitive, c_module_name(module)))
+        return self.py_get_attr(left, name, expr.line)
 
     def coerce(self, src: Value, target_type: RType, line: int) -> Value:
         """Generate a coercion/cast from one type to other (only if needed).

@@ -94,7 +94,7 @@ class TestRun(MypycDataSuite):
                     if use_shared_lib:
                         native_lib_path = buildc.build_c_extension_shim(mod, shared_lib)
                     else:
-                        native_lib_path = buildc.build_c_extension(cpath, mod)
+                        native_lib_path = buildc.build_c_extension(cpath, mod, preserve_setup=True)
                 except buildc.BuildError as err:
                     heading('Generated C')
                     with open(cpath) as f:
