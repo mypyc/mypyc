@@ -41,7 +41,6 @@ def build_c_extension(cpath: str, module_name: str, preserve_setup: bool = False
         tempdir = '.'
     else:
         tempdir = tempfile.mkdtemp()
-    include_dir = os.path.join(os.path.dirname(__file__), '..', 'lib-rt')
     try:
         setup_path = os.path.join(tempdir, 'setup.py')
         basename = os.path.basename(cpath)
