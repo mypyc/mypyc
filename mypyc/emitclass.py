@@ -19,6 +19,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     """
     name = cl.name
     name_prefix = cl.name_prefix(emitter.names)
+    tp_call = cl.tp_call
     fullname = '{}.{}'.format(module, name)
     setup_name = '{}_setup'.format(name_prefix)
     new_name = '{}_new'.format(name_prefix)
@@ -50,7 +51,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
 
     emitter.emit_line('static PyObject *{}(void);'.format(setup_name))
     # TODO: Use RInstance
-    ctor = FuncIR(cl.name, None, module, init_args, object_rprimitive, [], Environment())
+    ctor = FuncIR(cl.name, None, module, None, init_args, object_rprimitive, [], Environment())
     emitter.emit_line(native_function_header(ctor, emitter.names) + ';')
 
     emit_line()
@@ -88,7 +89,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
             0,                         /* tp_as_sequence */
             0,                         /* tp_as_mapping */
             0,                         /* tp_hash  */
-            0,                         /* tp_call */
+            {tp_call},                 /* tp_call */
             0,                         /* tp_str */
             0,                         /* tp_getattro */
             0,                         /* tp_setattro */
@@ -119,6 +120,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
                     traverse_name=traverse_name,
                     clear_name=clear_name,
                     dealloc_name=dealloc_name,
+                    tp_call=tp_call,
                     new_name=new_name,
                     methods_name=methods_name,
                     getseters_name=getseters_name,

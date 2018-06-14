@@ -973,3 +973,68 @@ L0:
     r1 = f() :: object
     r2 = cast(float, r1)
     return r2
+
+[case testNestedFunctions]
+from typing import Callable
+
+def outer() -> Callable[[], str]:
+    def inner() -> str:
+        return 'inner: nested function'
+    return inner
+
+def first() -> Callable[[], Callable[[], str]]:
+    def second() -> Callable[[], str]:
+        def third() -> str:
+            return 'third: nested function'
+        return third
+    return second
+
+def inner() -> str:
+    return 'inner: normal function'
+
+def second() -> str:
+    return 'second: normal function'
+
+def third() -> str:
+    return 'third: normal function'
+[out]
+def inner():
+    r0 :: str
+L0:
+    r0 = __unicode_0 :: static
+    return r0
+def outer():
+    r0 :: object
+L0:
+    r0 = CPyDef_inner_outer_obj() :: static
+    return r0
+def third():
+    r0 :: str
+L0:
+    r0 = __unicode_1 :: static
+    return r0
+def second():
+    r0 :: object
+L0:
+    r0 = CPyDef_third_first_second_obj() :: static
+    return r0
+def first():
+    r0 :: object
+L0:
+    r0 = CPyDef_second_first_obj() :: static
+    return r0
+def inner():
+    r0 :: str
+L0:
+    r0 = __unicode_2 :: static
+    return r0
+def second():
+    r0 :: str
+L0:
+    r0 = __unicode_3 :: static
+    return r0
+def third():
+    r0 :: str
+L0:
+    r0 = __unicode_4 :: static
+    return r0

@@ -18,7 +18,7 @@ from typing import (
 )
 from collections import OrderedDict
 
-from mypy.nodes import Var
+from mypy.nodes import Var, FuncDef
 
 from mypyc.namegen import NameGenerator
 
@@ -322,9 +322,12 @@ class ROptional(RType):
 class Environment:
     """Maintain the register symbol table and manage temp generation"""
 
-    def __init__(self) -> None:
+    def __init__(self, name: Optional[str] = None) -> None:
+        self.name = name
         self.indexes = OrderedDict()  # type: Dict[Value, int]
         self.symtable = {}  # type: Dict[Var, Register]
+        self.functions = {}  # type: Dict[str, FuncDef]
+        self.ret_type = none_rprimitive  # type: RType
         self.temp_index = 0
 
     def regs(self) -> Iterable['Value']:
@@ -341,6 +344,10 @@ class Environment:
         self.symtable[var] = reg
         self.add(reg, var.name())
         return reg
+
+    def add_func(self, func: FuncDef) -> None:
+        assert isinstance(func, FuncDef)
+        self.functions[func.name()] = func
 
     def lookup(self, var: Var) -> 'Register':
         return self.symtable[var]
@@ -1152,6 +1159,7 @@ class FuncIR:
                  name: str,
                  class_name: Optional[str],
                  module_name: str,
+                 namespace: Optional[str],
                  args: List[RuntimeArg],
                  ret_type: RType,
                  blocks: List[BasicBlock],
@@ -1159,6 +1167,7 @@ class FuncIR:
         self.name = name
         self.class_name = class_name
         self.module_name = module_name
+        self.namespace = namespace
         self.args = args
         self.ret_type = ret_type
         self.blocks = blocks
@@ -1168,6 +1177,8 @@ class FuncIR:
         name = self.name
         if self.class_name:
             name += '_' + self.class_name
+        if self.namespace:
+            name += '_' + self.namespace
         return names.private_name(self.module_name, name)
 
     def __str__(self) -> str:
@@ -1182,9 +1193,10 @@ class ClassIR:
 
     # TODO: Use dictionary for attributes in addition to (or instead of) list.
 
-    def __init__(self, name: str, module_name: str) -> None:
+    def __init__(self, name: str, module_name: str, tp_call: str = '0') -> None:
         self.name = name
         self.module_name = module_name
+        self.tp_call = tp_call
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
         self.methods = []  # type: List[FuncIR]
         self.vtable = None  # type: Optional[Dict[str, int]]

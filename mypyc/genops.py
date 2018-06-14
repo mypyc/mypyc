@@ -238,6 +238,8 @@ class IRBuilder(NodeVisitor[Value]):
 
         self.current_module_name = None  # type: Optional[str]
 
+        self.env_prefix = ''
+
     def visit_mypy_file(self, mypyfile: MypyFile) -> Value:
         if mypyfile.fullname() in ('typing', 'abc'):
             # These module are special; their contents are currently all
@@ -307,26 +309,39 @@ class IRBuilder(NodeVisitor[Value]):
         return INVALID_VALUE
 
     def gen_func_def(self, fdef: FuncDef, class_name: Optional[str] = None) -> FuncIR:
-        self.enter()
+        self.environment.add_func(fdef)
+        namespace = self.generate_function_namespace()
+        self.enter(fdef.name())
 
         for arg in fdef.arguments:
             assert arg.variable.type, "Function argument missing type"
             self.environment.add_local(arg.variable, self.type_to_rtype(arg.variable.type),
                                        is_arg=True)
-        self.ret_type = self.convert_return_type(fdef)
+        self.environment.ret_type = self.convert_return_type(fdef)
+
         fdef.body.accept(self)
 
-        if is_none_rprimitive(self.ret_type) or is_object_rprimitive(self.ret_type):
+        if (is_none_rprimitive(self.environment.ret_type) or
+                is_object_rprimitive(self.environment.ret_type)):
             self.add_implicit_return()
         else:
             self.add_implicit_unreachable()
 
         blocks, env = self.leave()
         args = self.convert_args(fdef)
-        return FuncIR(fdef.name(), class_name, self.module_name, args, self.ret_type, blocks, env)
+
+        return FuncIR(fdef.name(), class_name, self.module_name, namespace, args, env.ret_type,
+                      blocks, env)
 
     def visit_func_def(self, fdef: FuncDef) -> Value:
-        self.functions.append(self.gen_func_def(fdef))
+        ir = self.gen_func_def(fdef)
+        self.functions.append(ir)
+        if len(self.environments) > 1:
+            # If there is more than one environment in the environment stack, then we are visiting
+            # a non-global function, and want to instantiate an object for it.
+            self.classes.append(ClassIR(name='{}_{}_obj'.format(ir.name, ir.namespace),
+                                        module_name=self.module_name,
+                                        tp_call='CPyPy_{}_{}'.format(ir.name, ir.namespace)))
         return INVALID_VALUE
 
     def convert_args(self, fdef: FuncDef) -> List[RuntimeArg]:
@@ -362,7 +377,7 @@ class IRBuilder(NodeVisitor[Value]):
     def visit_return_stmt(self, stmt: ReturnStmt) -> Value:
         if stmt.expr:
             retval = self.accept(stmt.expr)
-            retval = self.coerce(retval, self.ret_type, stmt.line)
+            retval = self.coerce(retval, self.environment.ret_type, stmt.line)
         else:
             retval = self.add(PrimitiveOp([], none_op, line=-1))
         self.add(Return(retval))
@@ -800,8 +815,15 @@ class IRBuilder(NodeVisitor[Value]):
         if isinstance(expr.node, Var):
             return self.environment.lookup(expr.node)
         if isinstance(expr.node, FuncDef):
-            # If we have a function, then we can look it up in the global variables dictionary.
-            return self.load_global(expr)
+            if expr.kind == LDEF:
+                namespace = self.get_function_namespace(expr.name)
+                if namespace:
+                    return self.add(LoadStatic(object_rprimitive,
+                                    'CPyDef_{}_{}_obj()'.format(expr.name, namespace)))
+                else:
+                    assert False, 'function %s not defined in current scope'.format(expr.name)
+            else:
+                return self.load_global(expr)
 
         assert False, 'node must be of either Var or FuncDef type'
 
@@ -1247,8 +1269,8 @@ class IRBuilder(NodeVisitor[Value]):
 
     # Helpers
 
-    def enter(self) -> None:
-        self.environment = Environment()
+    def enter(self, name: Optional[str] = None) -> None:
+        self.environment = Environment(name)
         self.environments.append(self.environment)
         self.blocks.append([])
         self.new_block()
@@ -1276,6 +1298,20 @@ class IRBuilder(NodeVisitor[Value]):
         if isinstance(op, RegisterOp):
             self.environment.add_op(op)
         return op
+
+    def generate_function_namespace(self) -> str:
+        return '_'.join(env.name for env in self.environments if env.name)
+
+    def get_function_namespace(self, funcName: str) -> Optional[str]:
+        valid_function = False
+        namespaces = []
+        for env in self.environments:
+            if env.name:
+                namespaces.append(env.name)
+            if funcName in env.functions:
+                valid_function = True
+                break
+        return '_'.join(namespaces) if valid_function else None
 
     def primitive_op(self, desc: OpDescription, args: List[Value], line: int) -> Value:
         assert desc.result_type is not None
