@@ -269,10 +269,7 @@ class IRBuilder(NodeVisitor[Value]):
             self.from_imports[node.id] = []
 
         for name, maybe_as_name in node.names:
-            if maybe_as_name:
-                as_name = maybe_as_name
-            else:
-                as_name = name
+            as_name = maybe_as_name or name
             self.from_imports[node.id].append((name, as_name))
 
         return INVALID_VALUE

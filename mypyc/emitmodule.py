@@ -265,7 +265,7 @@ class ModuleGenerator:
                     '    return NULL;',
                 )
                 # and add it to the namespace of the current module, which eats the ref
-                emitter.emit_line('if(-1 == PyModule_AddObject(m, "{}", {}))'.format(
+                emitter.emit_line('if (PyModule_AddObject(m, "{}", {}) < 0)'.format(
                     as_name,
                     object_temp_name,
                 ))
