@@ -74,10 +74,16 @@ class TestRun(MypycDataSuite):
                     print(line)
                 assert False, 'Compile error'
 
-            common_path = os.path.join(test_temp_dir, 'stuff.c')
-            with open(common_path, 'w') as f:
-                f.write(ctext)
-            shared_lib = buildc.build_shared_lib_for_modules(common_path)
+            # If compiling more than one native module, compile a shared
+            # library that contains all the modules. Also generate shims that
+            # just call into the shared lib.
+            use_shared_lib = len(module_names) > 1
+
+            if use_shared_lib:
+                common_path = os.path.join(test_temp_dir, 'stuff.c')
+                with open(common_path, 'w') as f:
+                    f.write(ctext)
+                shared_lib = buildc.build_shared_lib_for_modules(common_path)
 
             for mod in module_names:
                 cpath = os.path.join(test_temp_dir, '%s.c' % mod)
@@ -85,7 +91,10 @@ class TestRun(MypycDataSuite):
                     f.write(ctext)
 
                 try:
-                    native_lib_path = buildc.build_c_extension_shim(mod, shared_lib)
+                    if use_shared_lib:
+                        native_lib_path = buildc.build_c_extension_shim(mod, shared_lib)
+                    else:
+                        native_lib_path = buildc.build_c_extension(cpath, mod)
                 except buildc.BuildError as err:
                     heading('Generated C')
                     with open(cpath) as f:
@@ -96,8 +105,8 @@ class TestRun(MypycDataSuite):
                     heading('End output')
                     raise
 
-            # TODO: is the location of the shared lib good?
-            shared_lib = buildc.build_shared_lib_for_modules(cpath)
+            # # TODO: is the location of the shared lib good?
+            # shared_lib = buildc.build_shared_lib_for_modules(cpath)
 
             for p in to_delete:
                 os.remove(p)

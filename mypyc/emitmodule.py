@@ -147,8 +147,16 @@ class ModuleGenerator:
                            '};')
         emitter.emit_line()
 
-        # Emit module init function
-        emitter.emit_lines('PyObject * x_PyInit_{}(void)'.format(module_name),
+        # Emit module init function. If we are compiling just one module, this
+        # will be the C API init function. If we are compiling 2+ modules, we
+        # generate a shared library for the modules and shims that call into
+        # the shared library, and in this case we use an internal module
+        # initialized function that will be called by the shim.
+        if len(self.modules) == 1:
+            declaration = 'PyMODINIT_FUNC PyInit_{}(void)'
+        else:
+            declaration = 'PyObject *x_PyInit_{}(void)'
+        emitter.emit_lines(declaration.format(module_name),
                            '{',
                            'PyObject *m;')
         for cl in module.classes:
