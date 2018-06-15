@@ -671,7 +671,9 @@ class Call(RegisterOp):
 
     def to_str(self, env: Environment) -> str:
         args = ', '.join(env.format('%r', arg) for arg in self.args)
-        s = '%s(%s)' % (self.fn, args)
+        # TODO: Display long name?
+        short_name = self.fn.rpartition('.')[2]
+        s = '%s(%s)' % (short_name, args)
         if not self.is_void:
             s = env.format('%r = ', self) + s
         return s

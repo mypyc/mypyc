@@ -89,7 +89,7 @@ class TestRun(MypycDataSuite):
                 except buildc.BuildError as err:
                     heading('Generated C')
                     with open(common_path) as f:
-                        print(f.read().rstrip())
+                        print_with_line_nums(f.read().rstrip())
                     heading('End C')
                     heading('Build output')
                     print(err.output.decode('utf8').rstrip('\n'))
@@ -152,3 +152,9 @@ class TestRun(MypycDataSuite):
 
 def heading(text: str) -> None:
     print('=' * 20 + ' ' + text + ' ' + '=' * 20)
+
+
+def print_with_line_nums(s: str) -> None:
+    lines = s.splitlines()
+    for i, line in enumerate(lines):
+        print('%-4d %s' % (i, line))

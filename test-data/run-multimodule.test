@@ -87,17 +87,27 @@ else:
 [case testMultiModuleImportClass]
 from other import C
 
+class D(C):
+    def __init__(self, x: int) -> None:
+        self.x = x
+
 def f(c: C) -> int:
-    return c.x + 1
+    d = D(3)
+    return c.x + c.f() + d.x + 1
 [file other.py]
 class C:
     x: int
+
+    def __init__(self, x: int) -> None:
+        self.x = x
+
+    def f(self) -> int:
+        return 2
 [file driver.py]
 from native import f
 from other import C
-c = C()
-c.x = 4
-assert f(c) == 5
+c = C(4)
+assert f(c) == 4 + 2 + 3 + 1
 try:
     f(1)
 except TypeError:

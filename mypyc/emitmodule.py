@@ -1,7 +1,7 @@
 """Generate C code for a Python C extension module from Python source code."""
 
 from collections import OrderedDict
-from typing import List, Tuple, Dict, Iterable
+from typing import List, Tuple, Dict, Iterable, Set, TypeVar
 
 from mypy.build import BuildSource, build
 from mypy.errors import CompileError
@@ -94,9 +94,13 @@ class ModuleGenerator:
             for fn in module.functions:
                 generate_function_declaration(fn, emitter)
 
+        classes = []
         for module_name, module in self.modules:
-            for cl in module.classes:
-                generate_class(cl, module_name, emitter)
+            classes.extend([(module_name, cl) for cl in module.classes])
+        # We must topo sort so that base classes are generated first.
+        classes = sort_classes(classes)
+        for module_name, cl in classes:
+            generate_class(cl, module_name, emitter)
 
         emitter.emit_line()
 
@@ -302,3 +306,43 @@ class ModuleGenerator:
             # and not keep it around
             if imp not in imps:
                 emitter.emit_line('Py_DECREF({});'.format(c_module_name(imp)))
+
+
+def sort_classes(classes: List[Tuple[str, ClassIR]]) -> List[Tuple[str, ClassIR]]:
+    mod_name = {ir: name for name, ir in classes}
+    irs = [ir for _, ir in classes]
+    deps = OrderedDict()  # type: Dict[ClassIR, Set[ClassIR]]
+    for ir in irs:
+        if ir not in deps:
+            deps[ir] = set()
+        if ir.base:
+            deps[ir].add(ir.base)
+    sorted_irs = toposort(deps)
+    return [(mod_name[ir], ir) for ir in sorted_irs]
+
+
+T = TypeVar('T')
+
+
+def toposort(deps: Dict[T, Set[T]]) -> List[T]:
+    """Topologically sort a dict from item to dependencies.
+
+    This runs in O(V + E).
+    """
+    result = []
+    visited = set()  # type: Set[T]
+
+    def visit(item: T) -> None:
+        if item in visited:
+            return
+
+        for child in deps[item]:
+            visit(child)
+
+        result.append(item)
+        visited.add(item)
+
+    for item in deps:
+        visit(item)
+
+    return result

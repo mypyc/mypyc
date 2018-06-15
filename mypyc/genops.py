@@ -61,22 +61,27 @@ def build_ir(modules: List[MypyFile],
              types: Dict[Expression, Type]) -> List[Tuple[str, ModuleIR]]:
     result = []
     mapper = Mapper()
+
     # Collect all classes defined in the compilation unit.
     classes = []
     for module in modules:
         module_classes = [node for node in module.defs if isinstance(node, ClassDef)]
         classes.extend([(module.fullname(), cdef) for cdef in module_classes])
+
     # Collect all class mappings so that we can bind arbitrary class name
     # references even if there are import cycles.
     for module_name, cdef in classes:
         class_ir = ClassIR(cdef.name, module_name)
         mapper.type_to_ir[cdef.info] = class_ir
+
     # Populate structural information in class IR.
     for _, cdef in classes:
         prepare_class_def(cdef, mapper)
+
     # Generate IR for all modules.
     for module in modules:
-        builder = IRBuilder(types, mapper)
+        module_names = [mod.fullname() for mod in modules]
+        builder = IRBuilder(types, mapper, module_names)
         module.accept(builder)
         ir = ModuleIR(
             builder.imports,
@@ -86,6 +91,11 @@ def build_ir(modules: List[MypyFile],
             builder.classes
         )
         result.append((module.fullname(), ir))
+
+    # Compute vtables.
+    for _, cdef in classes:
+        mapper.type_to_ir[cdef.info].compute_vtable()
+
     return result
 
 
@@ -196,13 +206,17 @@ class AssignmentTargetAttr(AssignmentTarget):
 
 
 class IRBuilder(NodeVisitor[Value]):
-    def __init__(self, types: Dict[Expression, Type], mapper: Mapper) -> None:
+    def __init__(self,
+                 types: Dict[Expression, Type],
+                 mapper: Mapper,
+                 modules: List[str]) -> None:
         self.types = types
         self.environment = Environment()
         self.environments = [self.environment]
         self.blocks = []  # type: List[List[BasicBlock]]
         self.functions = []  # type: List[FuncIR]
         self.classes = []  # type: List[ClassIR]
+        self.modules = set(modules)
 
         # These lists operate as stack frames for loops. Each loop adds a new
         # frame (i.e. adds a new empty list [] to the outermost list). Each
@@ -241,10 +255,6 @@ class IRBuilder(NodeVisitor[Value]):
         self.current_module_name = mypyfile.fullname()
         for node in mypyfile.defs:
             node.accept(self)
-
-        # Compute vtables.
-        for cls in classes:
-            self.mapper.type_to_ir[cls.info].compute_vtable()
 
         return INVALID_VALUE
 
@@ -745,7 +755,7 @@ class IRBuilder(NodeVisitor[Value]):
         assert expr.node, "RefExpr not resolved"
         if '.' in expr.node.fullname():
             module_name = '.'.join(expr.node.fullname().split('.')[:-1])
-            return module_name == self.current_module_name
+            return module_name in self.modules
 
         return True
 
@@ -860,13 +870,13 @@ class IRBuilder(NodeVisitor[Value]):
             if target:
                 return target
 
-        fn = callee.name  # TODO: fullname
+        fn = callee.fullname
         # Try to generate a native call. Don't rely on the inferred callee
         # type, since it may have type variable substitutions that aren't
         # valid at runtime (due to type erasure). Instead pick the declared
         # signature of the native function as the true signature.
         signature = self.get_native_signature(callee)
-        if signature:
+        if signature and fn:
             # Native call
             arg_types = [self.type_to_rtype(arg_type) for arg_type in signature.arg_types]
             args = self.coerce_native_call_args(args, arg_types, expr.line)
