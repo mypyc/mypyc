@@ -161,7 +161,7 @@ class ModuleGenerator:
         if len(self.modules) == 1:
             declaration = 'PyMODINIT_FUNC PyInit_{}(void)'
         else:
-            declaration = 'PyObject *x_PyInit_{}(void)'
+            declaration = 'PyObject *CPyInit_{}(void)'
         emitter.emit_lines(declaration.format(module_name),
                            '{',
                            'PyObject *m;')

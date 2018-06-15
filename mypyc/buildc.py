@@ -83,12 +83,12 @@ setup(name='{package_name}',
 shim_format = """\
 #include <Python.h>
 
-PyObject *x_PyInit_{modname}(void);
+PyObject *CPyInit_{modname}(void);
 
 PyMODINIT_FUNC
 PyInit_{modname}(void)
 {{
-    return x_PyInit_{modname}();
+    return CPyInit_{modname}();
 }}
 """
 
