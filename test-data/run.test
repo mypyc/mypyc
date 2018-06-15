@@ -835,7 +835,7 @@ assert e() == 5.0
 assert f == 5.0
 
 [case testArbitraryLvalues]
-from typing import List
+from typing import List, Dict
 
 class O(object):
     def __init__(self) -> None:
@@ -850,7 +850,13 @@ def increment_all_indices(l: List[int]) -> List[int]:
         l[i] += 1
     return l
 
+def increment_all_keys(d: Dict[str, int]) -> Dict[str, int]:
+    for k in d:
+        d[k] += 1
+    return d
+
 [file driver.py]
-from native import O, increment_attr, increment_all_indices
+from native import O, increment_attr, increment_all_indices, increment_all_keys
 assert increment_attr(O()).x == 2
 assert increment_all_indices([1, 2, 3]) == [2, 3, 4]
+assert increment_all_keys({'a':1, 'b':2, 'c':3}) == {'a':2, 'b':3, 'c':4}
