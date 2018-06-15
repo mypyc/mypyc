@@ -1275,6 +1275,8 @@ class ClassIR:
 
     def get_method(self, name: str) -> Optional[FuncIR]:
         matches = [func for func in self.methods if func.name == name]
+        if not matches and self.base:
+            return self.base.get_method(name)
         return matches[0] if matches else None
 
     def type_struct_name(self, names: NameGenerator) -> str:

@@ -93,7 +93,7 @@ class D(C):
 
 def f(c: C) -> int:
     d = D(3)
-    return c.x + c.f() + d.x + 1
+    return c.x + c.f() + d.x + d.f() + 1
 [file other.py]
 class C:
     x: int
@@ -107,7 +107,7 @@ class C:
 from native import f
 from other import C
 c = C(4)
-assert f(c) == 4 + 2 + 3 + 1
+assert f(c) == 4 + 2 + 3 + 2 + 1
 try:
     f(1)
 except TypeError:
