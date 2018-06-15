@@ -57,19 +57,22 @@ from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
 
 
-def build_ir(module: MypyFile,
-             types: Dict[Expression, Type]) -> ModuleIR:
-    mapper = Mapper()
-    builder = IRBuilder(types, mapper)
-    module.accept(builder)
-
-    return ModuleIR(
-        builder.imports,
-        builder.from_imports,
-        builder.literals,
-        builder.functions,
-        builder.classes
-    )
+def build_ir(modules: List[MypyFile],
+             types: Dict[Expression, Type]) -> List[Tuple[str, ModuleIR]]:
+    result = []
+    for module in modules:
+        mapper = Mapper()
+        builder = IRBuilder(types, mapper)
+        module.accept(builder)
+        ir = ModuleIR(
+            builder.imports,
+            builder.from_imports,
+            builder.literals,
+            builder.functions,
+            builder.classes
+        )
+        result.append((module.fullname(), ir))
+    return result
 
 
 class Mapper:

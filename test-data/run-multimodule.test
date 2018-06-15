@@ -60,3 +60,46 @@ assert isinstance(native.D(), native.C)
 assert isinstance(other.D(), other.C)
 assert not isinstance(native.D(), other.C)
 assert not isinstance(other.D(), native.C)
+
+[case testMultiModuleInitializeImportedModules]
+from other import f
+
+def g() -> int:
+    return f(1)
+[file other.py]
+def f(x: int) -> int:
+    return x + 4
+[file driver.py]
+import sys
+assert 'other' not in sys.modules
+from native import g
+assert 'other' in sys.modules
+assert g() == 5
+f = sys.modules['other'].f
+assert f(1) == 5
+try:
+    f(1.1)
+except TypeError:
+    pass
+else:
+    assert False
+
+[case testMultiModuleImportClass]
+from other import C
+
+def f(c: C) -> int:
+    return 1
+[file other.py]
+class C:
+    pass
+[file driver.py]
+from native import f
+from other import C
+c = C()
+assert f(c) == 1
+try:
+    f(1)
+except TypeError:
+    pass
+else:
+    assert False
