@@ -409,7 +409,10 @@ class IRBuilder(NodeVisitor[Value]):
                 return reg
             assert False, target.base.type
         if isinstance(target, AssignmentTargetAttr):
-            return self.add(GetAttr(target.obj, target.attr, line))
+            if isinstance(target.obj.type, RInstance):
+                return self.add(GetAttr(target.obj, target.attr, line))
+            else:
+                return self.py_get_attr(target.obj, target.attr, line)
 
         assert False, 'Unsupported lvalue: %r' % target
 
