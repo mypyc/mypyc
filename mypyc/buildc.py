@@ -15,7 +15,9 @@ from distutils.core import setup, Extension
 module = Extension('{package_name}',
                    sources=['{cpath}'],
                    extra_compile_args=['-Wno-unused-function', '-Wno-unused-label', '-Werror',
-                                       '-Wno-unreachable-code'])
+                                       '-Wno-unreachable-code'],
+                   libraries=[{libraries}],
+                   library_dirs=[{library_dirs}])
 
 setup(name='{package_name}',
       version='1.0',
@@ -46,10 +48,15 @@ def build_c_extension(cpath: str, module_name: str, preserve_setup: bool = False
         basename = os.path.basename(cpath)
         package_name = os.path.splitext(basename)[0]
         with open(setup_path, 'w') as f:
-            f.write(setup_format.format(
-                cpath=cpath,
-                package_name=package_name,
-                include_dir=include_dir()))
+            f.write(
+                setup_format.format(
+                    cpath=cpath,
+                    package_name=package_name,
+                    include_dir=include_dir(),
+                    libraries='',
+                    library_dirs=''
+                )
+            )
         try:
             subprocess.check_output(['python', setup_path, 'build'], stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError as err:
@@ -62,25 +69,7 @@ def build_c_extension(cpath: str, module_name: str, preserve_setup: bool = False
             shutil.rmtree(tempdir)
 
 
-# TODO: Make compiler arguments platform-specific.
-setup_format_shim = """\
-from distutils.core import setup, Extension
-
-module = Extension('{package_name}',
-                   sources=['{cpath}'],
-                   extra_compile_args=['-Wno-unused-function', '-Wno-unused-label', '-Werror',
-                                       '-Wno-unreachable-code'],
-                   libraries=['{sharedlib}'],
-                   library_dirs=['{libdir}'])
-
-setup(name='{package_name}',
-      version='1.0',
-      description='{package_name}',
-      include_dirs=['{include_dir}'],
-      ext_modules=[module])
-"""
-
-shim_format = """\
+shim_template = """\
 #include <Python.h>
 
 PyObject *CPyInit_{modname}(void);
@@ -97,18 +86,21 @@ def build_c_extension_shim(module_name: str, shared_lib: str) -> str:
     tempdir = tempfile.mkdtemp()
     cpath = os.path.join(tempdir, '%s.c' % module_name)
     with open(cpath, 'w') as f:
-        f.write(shim_format.format(modname=module_name))
+        f.write(shim_template.format(modname=module_name))
     try:
         setup_path = os.path.join(tempdir, 'setup.py')
         basename = os.path.basename(cpath)
         package_name = os.path.splitext(basename)[0]
         with open(setup_path, 'w') as f:
-            f.write(setup_format_shim.format(
-                package_name=package_name,
-                cpath=cpath,
-                sharedlib='stuff',
-                libdir='.',
-                include_dir=include_dir()))
+            f.write(
+                setup_format.format(
+                    package_name=package_name,
+                    cpath=cpath,
+                    libraries=repr('stuff'),
+                    library_dirs=repr('.'),
+                    include_dir=include_dir()
+                )
+            )
         try:
             subprocess.check_output(['python', setup_path, 'build'], stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError as err:
