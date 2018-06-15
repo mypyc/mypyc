@@ -8,29 +8,6 @@ import tempfile
 from typing import List
 
 
-# TODO: Make compiler arguments platform-specific.
-setup_format = """\
-from distutils.core import setup, Extension
-
-module = Extension('{package_name}',
-                   sources=['{cpath}'],
-                   extra_compile_args=['-Wno-unused-function', '-Wno-unused-label', '-Werror',
-                                       '-Wno-unreachable-code'],
-                   libraries=[{libraries}],
-                   library_dirs=[{library_dirs}])
-
-setup(name='{package_name}',
-      version='1.0',
-      description='{package_name}',
-      include_dirs=['{include_dir}'],
-      ext_modules=[module])
-"""
-
-
-def include_dir() -> str:
-    return os.path.join(os.path.dirname(__file__), '..', 'lib-rt')
-
-
 class BuildError(Exception):
     def __init__(self, output: bytes) -> None:
         super().__init__('Build failed')
@@ -44,26 +21,8 @@ def build_c_extension(cpath: str, module_name: str, preserve_setup: bool = False
     else:
         tempdir = tempfile.mkdtemp()
     try:
-        setup_path = os.path.join(tempdir, 'setup.py')
-        basename = os.path.basename(cpath)
-        package_name = os.path.splitext(basename)[0]
-        with open(setup_path, 'w') as f:
-            f.write(
-                setup_format.format(
-                    cpath=cpath,
-                    package_name=package_name,
-                    include_dir=include_dir(),
-                    libraries='',
-                    library_dirs=''
-                )
-            )
-        try:
-            subprocess.check_output(['python', setup_path, 'build'], stderr=subprocess.STDOUT)
-        except subprocess.CalledProcessError as err:
-            raise BuildError(err.output)
-        so_path = glob.glob('build/*/%s*.so' % module_name)
-        assert len(so_path) == 1
-        return so_path[0]
+        setup_path = make_setup_py(cpath, tempdir, '', '')
+        return run_setup_py_build(setup_path, module_name)
     finally:
         if not preserve_setup:
             shutil.rmtree(tempdir)
@@ -88,35 +47,21 @@ def build_c_extension_shim(module_name: str, shared_lib: str) -> str:
     with open(cpath, 'w') as f:
         f.write(shim_template.format(modname=module_name))
     try:
-        setup_path = os.path.join(tempdir, 'setup.py')
-        basename = os.path.basename(cpath)
-        package_name = os.path.splitext(basename)[0]
-        with open(setup_path, 'w') as f:
-            f.write(
-                setup_format.format(
-                    package_name=package_name,
-                    cpath=cpath,
-                    libraries=repr('stuff'),
-                    library_dirs=repr('.'),
-                    include_dir=include_dir()
-                )
-            )
-        try:
-            subprocess.check_output(['python', setup_path, 'build'], stderr=subprocess.STDOUT)
-        except subprocess.CalledProcessError as err:
-            raise BuildError(err.output)
-        so_path = glob.glob('build/*/%s*.so' % module_name)
-        assert len(so_path) == 1
-        return so_path[0]
+        setup_path = make_setup_py(cpath, tempdir, libraries=repr('stuff'), library_dirs=repr('.'))
+        return run_setup_py_build(setup_path, module_name)
     finally:
         shutil.rmtree(tempdir)
 
 
 def build_shared_lib_for_modules(cpath: str) -> str:
-    """Build the shared lib for a set of modules."""
+    """Build the shared lib for a set of modules.
+
+    This is not the actual C extensions -- the C extensions will be
+    simple shims that link into this shared lib.
+    """
     basic_flags = ['-arch', 'x86_64', '-shared', '-I', include_dir()]
     warning_flags = ['-Wno-unused-label', '-Wno-unused-function', '-Wno-unreachable-code']
-    py_flags = get_python_flags()
+    py_flags = get_python_build_flags()
     base_name = 'stuff'
     out_file = 'lib%s.so' % base_name
     cmd = ['clang'] + basic_flags + ['-o', out_file, cpath] + py_flags + warning_flags
@@ -127,6 +72,56 @@ def build_shared_lib_for_modules(cpath: str) -> str:
     return out_file
 
 
-def get_python_flags() -> List[str]:
+def include_dir() -> str:
+    return os.path.join(os.path.dirname(__file__), '..', 'lib-rt')
+
+
+def get_python_build_flags() -> List[str]:
     out = subprocess.check_output(['python-config', '--cflags', '--ldflags']).decode()
     return out.strip().split()
+
+
+# TODO: Make compiler arguments platform-specific.
+setup_format = """\
+from distutils.core import setup, Extension
+
+module = Extension('{package_name}',
+                   sources=['{cpath}'],
+                   extra_compile_args=['-Wno-unused-function', '-Wno-unused-label', '-Werror',
+                                       '-Wno-unreachable-code'],
+                   libraries=[{libraries}],
+                   library_dirs=[{library_dirs}])
+
+setup(name='{package_name}',
+      version='1.0',
+      description='{package_name}',
+      include_dirs=['{include_dir}'],
+      ext_modules=[module])
+"""
+
+
+def make_setup_py(cpath: str, dirname: str, libraries: str, library_dirs: str) -> str:
+    setup_path = os.path.join(dirname, 'setup.py')
+    basename = os.path.basename(cpath)
+    package_name = os.path.splitext(basename)[0]
+    with open(setup_path, 'w') as f:
+        f.write(
+            setup_format.format(
+                package_name=package_name,
+                cpath=cpath,
+                libraries=libraries,
+                library_dirs=library_dirs,
+                include_dir=include_dir()
+            )
+        )
+    return setup_path
+
+
+def run_setup_py_build(setup_path: str, module_name: str) -> str:
+    try:
+        subprocess.check_output(['python', setup_path, 'build'], stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as err:
+        raise BuildError(err.output)
+    so_path = glob.glob('build/*/%s*.so' % module_name)
+    assert len(so_path) == 1
+    return so_path[0]
