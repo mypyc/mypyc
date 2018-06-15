@@ -55,58 +55,15 @@ def build_c_extension_shim(module_name: str, shared_lib: str) -> str:
 
 
 def build_shared_lib_for_modules(cpath: str) -> str:
-    """Build the shared lib for a set of modules.
-
-    This is not the actual C extensions -- the C extensions will be
-    simple shims that link into this shared lib.
-    """
-    warning_flags = ['-Wno-unused-label', '-Wno-unused-function', '-Wno-unreachable-code']
-    py_cflags, py_ldflags = get_python_build_flags()
-    base_name = 'stuff'
-    if sys.platform == 'darwin':
-        # macOS
-        basic_flags = ['-arch', 'x86_64', '-shared', '-I', include_dir()]
-        out_file = 'lib%s.so' % base_name
-        cmd = (['clang'] + basic_flags + ['-o', out_file, cpath] + py_cflags +
-               py_ldflags)
-        try:
-            subprocess.check_call(cmd)
-        except subprocess.CalledProcessError as err:
-            raise BuildError(err.output)
-    else:
-        # Linux
-        basic_flags = ['-fPIC', '-I', include_dir()]
-        linker_flags = ['-shared']
-        cc = 'gcc'
-
-        # Build .o file
-        obj_file = '%s.o' % base_name
-        cmd = [cc] + basic_flags + ['-c', '-o', obj_file, cpath] + py_cflags + warning_flags
-        try:
-            subprocess.check_call(cmd)
-        except subprocess.CalledProcessError as err:
-            raise BuildError(err.output)
-
-        # Build .so file
-        out_file = 'lib%s.so' % base_name
-        cmd = [cc] + basic_flags + linker_flags + ['-o', out_file, obj_file] + py_ldflags
-        try:
-            subprocess.check_call(cmd)
-        except subprocess.CalledProcessError as err:
-            raise BuildError(err.output)
-        print(os.getcwd(), os.path.isfile('libstuff.so'))
-
+    out_file = 'libstuff.so'
+    name = os.path.splitext(os.path.basename(cpath))[0]
+    lib_path = build_c_extension(cpath, name, preserve_setup = True)
+    shutil.copy(lib_path, out_file)
     return out_file
 
 
 def include_dir() -> str:
     return os.path.join(os.path.dirname(__file__), '..', 'lib-rt')
-
-
-def get_python_build_flags() -> Tuple[List[str], List[str]]:
-    out = subprocess.check_output(['python-config', '--cflags', '--ldflags']).decode()
-    cflags, ldflags = out.strip().split('\n')
-    return cflags.split(), ldflags.split()
 
 
 # TODO: Make compiler arguments platform-specific.

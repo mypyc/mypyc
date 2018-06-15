@@ -82,7 +82,7 @@ class TestRun(MypycDataSuite):
             use_shared_lib = len(module_names) > 1
 
             if use_shared_lib:
-                common_path = os.path.join(test_temp_dir, 'stuff.c')
+                common_path = os.path.join(test_temp_dir, '__shared_stuff.c')
                 with open(common_path, 'w') as f:
                     f.write(ctext)
                 try:
