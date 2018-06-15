@@ -88,15 +88,16 @@ else:
 from other import C
 
 def f(c: C) -> int:
-    return 1
+    return c.x + 1
 [file other.py]
 class C:
-    pass
+    x: int
 [file driver.py]
 from native import f
 from other import C
 c = C()
-assert f(c) == 1
+c.x = 4
+assert f(c) == 5
 try:
     f(1)
 except TypeError:

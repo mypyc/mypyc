@@ -61,10 +61,19 @@ def build_ir(modules: List[MypyFile],
              types: Dict[Expression, Type]) -> List[Tuple[str, ModuleIR]]:
     result = []
     mapper = Mapper()
-    # First collect all class mappings so that we can bind arbitrary class name
-    # references even if there are import cycles.
+    # Collect all classes defined in the compilation unit.
+    classes = []
     for module in modules:
-        add_class_mappings(module, mapper)
+        module_classes = [node for node in module.defs if isinstance(node, ClassDef)]
+        classes.extend([(module.fullname(), cdef) for cdef in module_classes])
+    # Collect all class mappings so that we can bind arbitrary class name
+    # references even if there are import cycles.
+    for module_name, cdef in classes:
+        class_ir = ClassIR(cdef.name, module_name)
+        mapper.type_to_ir[cdef.info] = class_ir
+    # Populate structural information in class IR.
+    for _, cdef in classes:
+        prepare_class_def(cdef, mapper)
     # Generate IR for all modules.
     for module in modules:
         builder = IRBuilder(types, mapper)
@@ -129,11 +138,24 @@ class Mapper:
         assert False, '%s unsupported' % type(typ)
 
 
-def add_class_mappings(module: MypyFile, mapper: Mapper) -> None:
-    classes = [node for node in module.defs if isinstance(node, ClassDef)]
-    for cdef in classes:
-        ir = ClassIR(cdef.name, module.fullname())
-        mapper.type_to_ir[cdef.info] = ir
+def prepare_class_def(cdef: ClassDef, mapper: Mapper) -> None:
+    ir = mapper.type_to_ir[cdef.info]
+    info = cdef.info
+    for name, node in info.names.items():
+        if isinstance(node.node, Var):
+            assert node.node.type, "Class member missing type"
+            ir.attributes[name] = mapper.type_to_rtype(node.node.type)
+
+    # Set up the parent class
+    assert len(info.bases) == 1, "Only single inheritance is supported"
+    mro = []
+    for cls in info.mro:
+        if cls.fullname() == 'builtins.object': continue
+        assert cls in mapper.type_to_ir, "Can't subclass cpython types yet"
+        mro.append(mapper.type_to_ir[cls])
+    if len(mro) > 1:
+        ir.base = mro[1]
+    ir.mro = mro
 
 
 class AssignmentTarget(object):
@@ -210,14 +232,10 @@ class IRBuilder(NodeVisitor[Value]):
 
         classes = [node for node in mypyfile.defs if isinstance(node, ClassDef)]
 
-        # Build ClassIRs and TypeInfo-to-ClassIR mapping.
+        # Collect all classes.
         for cls in classes:
             ir = self.mapper.type_to_ir[cls.info]
             self.classes.append(ir)
-
-        # Do class def setup
-        for cls in classes:
-            self.prepare_class_def(cls)
 
         # Generate ops.
         self.current_module_name = mypyfile.fullname()
@@ -229,25 +247,6 @@ class IRBuilder(NodeVisitor[Value]):
             self.mapper.type_to_ir[cls.info].compute_vtable()
 
         return INVALID_VALUE
-
-    def prepare_class_def(self, cdef: ClassDef) -> None:
-        ir = self.mapper.type_to_ir[cdef.info]
-        info = cdef.info
-        for name, node in info.names.items():
-            if isinstance(node.node, Var):
-                assert node.node.type, "Class member missing type"
-                ir.attributes[name] = self.type_to_rtype(node.node.type)
-
-        # Set up the parent class
-        assert len(info.bases) == 1, "Only single inheritance is supported"
-        mro = []
-        for cls in info.mro:
-            if cls.fullname() == 'builtins.object': continue
-            assert cls in self.mapper.type_to_ir, "Can't subclass cpython types yet"
-            mro.append(self.mapper.type_to_ir[cls])
-        if len(mro) > 1:
-            ir.base = mro[1]
-        ir.mro = mro
 
     def visit_class_def(self, cdef: ClassDef) -> Value:
         ir = self.mapper.type_to_ir[cdef.info]
