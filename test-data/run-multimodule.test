@@ -85,6 +85,7 @@ else:
     assert False
 
 [case testMultiModuleImportClass]
+from typing import cast
 from other import C
 
 class D(C):
@@ -93,6 +94,8 @@ class D(C):
 
 def f(c: C) -> int:
     d = D(3)
+    o: object = c
+    c = cast(C, o)
     return c.x + c.f() + d.x + d.f() + 1
 [file other.py]
 class C:

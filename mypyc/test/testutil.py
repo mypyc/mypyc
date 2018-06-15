@@ -133,3 +133,23 @@ def assert_test_output(testcase: DataDrivenTestCase, actual: List[str],
     assert_string_arrays_equal(
         expected_output, actual,
         '{} ({}, line {})'.format(message, testcase.file, testcase.line))
+
+
+def print_with_line_numbers(s: str) -> None:
+    lines = s.splitlines()
+    for i, line in enumerate(lines):
+        print('%-4d %s' % (i, line))
+
+
+def heading(text: str) -> None:
+    print('=' * 20 + ' ' + text + ' ' + '=' * 20)
+
+
+def show_c_error(cpath: str, output: bytes) -> None:
+    heading('Generated C')
+    with open(cpath) as f:
+        print_with_line_numbers(f.read().rstrip())
+    heading('End C')
+    heading('Build output')
+    print(output.decode('utf8').rstrip('\n'))
+    heading('End output')

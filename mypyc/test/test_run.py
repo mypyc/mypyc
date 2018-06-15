@@ -15,6 +15,7 @@ from mypyc import emitmodule
 from mypyc import buildc
 from mypyc.test.testutil import (
     ICODE_GEN_BUILTINS, use_custom_builtins, MypycDataSuite, assert_test_output,
+    show_c_error, heading,
 )
 
 import pytest  # type: ignore  # no pytest in typeshed
@@ -87,13 +88,7 @@ class TestRun(MypycDataSuite):
                 try:
                     shared_lib = buildc.build_shared_lib_for_modules(common_path)
                 except buildc.BuildError as err:
-                    heading('Generated C')
-                    with open(common_path) as f:
-                        print_with_line_nums(f.read().rstrip())
-                    heading('End C')
-                    heading('Build output')
-                    print(err.output.decode('utf8').rstrip('\n'))
-                    heading('End output')
+                    show_c_error(common_path, err.output)
                     raise
 
             for mod in module_names:
@@ -107,13 +102,7 @@ class TestRun(MypycDataSuite):
                     else:
                         native_lib_path = buildc.build_c_extension(cpath, mod, preserve_setup=True)
                 except buildc.BuildError as err:
-                    heading('Generated C')
-                    with open(cpath) as f:
-                        print(f.read().rstrip())
-                    heading('End C')
-                    heading('Build output')
-                    print(err.output.decode('utf8').rstrip('\n'))
-                    heading('End output')
+                    show_c_error(cpath, err.output)
                     raise
 
             # # TODO: is the location of the shared lib good?
@@ -148,13 +137,3 @@ class TestRun(MypycDataSuite):
                 assert_test_output(testcase, outlines, 'Invalid output')
 
             assert proc.returncode == 0
-
-
-def heading(text: str) -> None:
-    print('=' * 20 + ' ' + text + ' ' + '=' * 20)
-
-
-def print_with_line_nums(s: str) -> None:
-    lines = s.splitlines()
-    for i, line in enumerate(lines):
-        print('%-4d %s' % (i, line))
