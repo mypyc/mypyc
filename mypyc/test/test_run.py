@@ -115,6 +115,8 @@ class TestRun(MypycDataSuite):
             env = os.environ.copy()
             env['PYTHONPATH'] = os.path.dirname(native_lib_path)
             env['MYPYC_RUN_BENCH'] = '1' if bench else '0'
+            env['LD_LIBRARY_PATH'] = os.getcwd()
+
             proc = subprocess.Popen(['python', driver_path], stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, env=env)
             output, _ = proc.communicate()

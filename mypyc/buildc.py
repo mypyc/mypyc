@@ -5,7 +5,8 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import List
+import sys
+from typing import List, Tuple
 
 
 class BuildError(Exception):
@@ -59,16 +60,42 @@ def build_shared_lib_for_modules(cpath: str) -> str:
     This is not the actual C extensions -- the C extensions will be
     simple shims that link into this shared lib.
     """
-    basic_flags = ['-arch', 'x86_64', '-shared', '-I', include_dir()]
     warning_flags = ['-Wno-unused-label', '-Wno-unused-function', '-Wno-unreachable-code']
-    py_flags = get_python_build_flags()
+    py_cflags, py_ldflags = get_python_build_flags()
     base_name = 'stuff'
-    out_file = 'lib%s.so' % base_name
-    cmd = ['clang'] + basic_flags + ['-o', out_file, cpath] + py_flags + warning_flags
-    try:
-        subprocess.check_call(cmd)
-    except subprocess.CalledProcessError as err:
-        raise BuildError(err.output)
+    if sys.platform == 'darwin':
+        # macOS
+        basic_flags = ['-arch', 'x86_64', '-shared', '-I', include_dir()]
+        out_file = 'lib%s.so' % base_name
+        cmd = (['clang'] + basic_flags + ['-o', out_file, cpath] + py_cflags +
+               py_ldflags)
+        try:
+            subprocess.check_call(cmd)
+        except subprocess.CalledProcessError as err:
+            raise BuildError(err.output)
+    else:
+        # Linux
+        basic_flags = ['-fPIC', '-I', include_dir()]
+        linker_flags = ['-shared']
+        cc = 'gcc'
+
+        # Build .o file
+        obj_file = '%s.o' % base_name
+        cmd = [cc] + basic_flags + ['-c', '-o', obj_file, cpath] + py_cflags + warning_flags
+        try:
+            subprocess.check_call(cmd)
+        except subprocess.CalledProcessError as err:
+            raise BuildError(err.output)
+
+        # Build .so file
+        out_file = 'lib%s.so' % base_name
+        cmd = [cc] + basic_flags + linker_flags + ['-o', out_file, obj_file] + py_ldflags
+        try:
+            subprocess.check_call(cmd)
+        except subprocess.CalledProcessError as err:
+            raise BuildError(err.output)
+        print(os.getcwd(), os.path.isfile('libstuff.so'))
+
     return out_file
 
 
@@ -76,9 +103,10 @@ def include_dir() -> str:
     return os.path.join(os.path.dirname(__file__), '..', 'lib-rt')
 
 
-def get_python_build_flags() -> List[str]:
+def get_python_build_flags() -> Tuple[List[str], List[str]]:
     out = subprocess.check_output(['python-config', '--cflags', '--ldflags']).decode()
-    return out.strip().split()
+    cflags, ldflags = out.strip().split('\n')
+    return cflags.split(), ldflags.split()
 
 
 # TODO: Make compiler arguments platform-specific.
