@@ -60,8 +60,13 @@ from mypyc.sametype import is_same_type
 def build_ir(modules: List[MypyFile],
              types: Dict[Expression, Type]) -> List[Tuple[str, ModuleIR]]:
     result = []
+    mapper = Mapper()
+    # First collect all class mappings so that we can bind arbitrary class name
+    # references even if there are import cycles.
     for module in modules:
-        mapper = Mapper()
+        add_class_mappings(module, mapper)
+    # Generate IR for all modules.
+    for module in modules:
         builder = IRBuilder(types, mapper)
         module.accept(builder)
         ir = ModuleIR(
@@ -122,6 +127,13 @@ class Mapper:
             assert not typ.values, 'TypeVar with value restriction not supported'
             return self.type_to_rtype(typ.upper_bound)
         assert False, '%s unsupported' % type(typ)
+
+
+def add_class_mappings(module: MypyFile, mapper: Mapper) -> None:
+    classes = [node for node in module.defs if isinstance(node, ClassDef)]
+    for cdef in classes:
+        ir = ClassIR(cdef.name, module.fullname())
+        mapper.type_to_ir[cdef.info] = ir
 
 
 class AssignmentTarget(object):
@@ -200,7 +212,8 @@ class IRBuilder(NodeVisitor[Value]):
 
         # Build ClassIRs and TypeInfo-to-ClassIR mapping.
         for cls in classes:
-            self.create_class_def(cls)
+            ir = self.mapper.type_to_ir[cls.info]
+            self.classes.append(ir)
 
         # Do class def setup
         for cls in classes:
@@ -216,13 +229,6 @@ class IRBuilder(NodeVisitor[Value]):
             self.mapper.type_to_ir[cls.info].compute_vtable()
 
         return INVALID_VALUE
-
-    def create_class_def(self, cdef: ClassDef) -> None:
-        # We want to collect the attributes first so they are available
-        # while generating the methods
-        ir = ClassIR(cdef.name, self.module_name)
-        self.classes.append(ir)
-        self.mapper.type_to_ir[cdef.info] = ir
 
     def prepare_class_def(self, cdef: ClassDef) -> None:
         ir = self.mapper.type_to_ir[cdef.info]
