@@ -13,8 +13,8 @@ can hold various things:
 from abc import abstractmethod, abstractproperty
 import re
 from typing import (
-    List, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType, Callable, Union,
-    Iterable,
+    List, Sequence, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType, Callable,
+    Union, Iterable,
 )
 from collections import OrderedDict
 
@@ -1145,6 +1145,16 @@ class RuntimeArg:
         return 'RuntimeArg(name=%s, type=%s)' % (self.name, self.type)
 
 
+class FuncSignature:
+    # TODO: track if method?
+    def __init__(self, args: Sequence[RuntimeArg], ret_type: RType) -> None:
+        self.args = tuple(args)
+        self.ret_type = ret_type
+
+    def __repr__(self) -> str:
+        return 'FuncSignature(args=%r, ret=%r)' % (self.args, self.ret_type)
+
+
 class FuncIR:
     """Intermediate representation of a function with contextual information."""
 
@@ -1152,17 +1162,24 @@ class FuncIR:
                  name: str,
                  class_name: Optional[str],
                  module_name: str,
-                 args: List[RuntimeArg],
+                 args: Sequence[RuntimeArg],
                  ret_type: RType,
                  blocks: List[BasicBlock],
                  env: Environment) -> None:
         self.name = name
         self.class_name = class_name
         self.module_name = module_name
-        self.args = args
-        self.ret_type = ret_type
         self.blocks = blocks
         self.env = env
+        self.sig = FuncSignature(args, ret_type)
+
+    @property
+    def args(self) -> Sequence[RuntimeArg]:
+        return self.sig.args
+
+    @property
+    def ret_type(self) -> RType:
+        return self.sig.ret_type
 
     def cname(self, names: NameGenerator) -> str:
         name = self.name
@@ -1186,26 +1203,9 @@ class ClassIR:
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
         self.methods = OrderedDict()  # type: OrderedDict[str, FuncIR]
         self.vtable = None  # type: Optional[Dict[str, int]]
-        self.vtable_size = 0
+        self.vtable_entries = []  # type: List[Union[FuncIR, Tuple[ClassIR, str, bool]]]
         self.base = None  # type: Optional[ClassIR]
         self.mro = []  # type: List[ClassIR]
-
-    def compute_vtable(self) -> None:
-        if self.vtable is not None: return
-        self.vtable = {}
-        base = 0
-        if self.base:
-            self.base.compute_vtable()
-            assert self.base.vtable is not None
-            self.vtable.update(self.base.vtable)
-            base = self.base.vtable_size
-
-        for i, attr in enumerate(self.attributes):
-            self.vtable[attr] = base + i * 2
-        base += len(self.attributes) * 2
-        for i, fn in enumerate(self.methods.values()):
-            self.vtable[fn.name] = base + i
-        self.vtable_size = base + len(self.methods)
 
     def vtable_entry(self, name: str) -> int:
         assert self.vtable is not None, "vtable not computed yet"

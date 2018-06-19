@@ -81,8 +81,8 @@ def build_ir(modules: List[MypyFile],
         prepare_class_def(cdef, mapper)
 
     # Generate IR for all modules.
+    module_names = [mod.fullname() for mod in modules]
     for module in modules:
-        module_names = [mod.fullname() for mod in modules]
         builder = IRBuilder(types, mapper, module_names)
         module.accept(builder)
         ir = ModuleIR(
@@ -96,9 +96,41 @@ def build_ir(modules: List[MypyFile],
 
     # Compute vtables.
     for _, cdef in classes:
-        mapper.type_to_ir[cdef.info].compute_vtable()
+        compute_vtable(mapper.type_to_ir[cdef.info])
 
     return result
+
+
+# XXX: MOVE
+def compute_vtable(cls: ClassIR) -> None:
+    if cls.vtable is not None: return
+    cls.vtable = {}
+    entries = cls.vtable_entries
+    if cls.base:
+        compute_vtable(cls.base)
+        assert cls.base.vtable is not None
+        cls.vtable.update(cls.base.vtable)
+        prefix = cls.base.vtable_entries
+    else:
+        prefix = []
+
+    for entry in prefix:
+        if isinstance(entry, FuncIR):
+            if entry.name in cls.methods:
+                # XXX: THE STUFF
+                entries.append(cls.methods[entry.name])
+            else:
+                entries.append(entry)
+        else:
+            entries.append(entry)
+
+    for attr in cls.attributes:
+        cls.vtable[attr] = len(entries)
+        entries.append((cls, attr, True))
+        entries.append((cls, attr, False))
+    for fn in cls.methods.values():
+        cls.vtable[fn.name] = len(entries)
+        entries.append(fn)
 
 
 class Mapper:

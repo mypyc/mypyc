@@ -41,7 +41,8 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
             Var('tt'), RTuple([RTuple([int_rprimitive, bool_rprimitive]), bool_rprimitive]))
         ir = ClassIR('A', 'mod')
         ir.attributes = OrderedDict([('x', bool_rprimitive), ('y', int_rprimitive)])
-        ir.compute_vtable()
+        ir.vtable = OrderedDict([('x', 0), ('y', 2)])
+        ir.vtable_entries = [(ir, 'x', True), (ir, 'x', False), (ir, 'y', True), (ir, 'y', False)]
         ir.mro = [ir]
         self.r = self.env.add_local(Var('r'), RInstance(ir))
 

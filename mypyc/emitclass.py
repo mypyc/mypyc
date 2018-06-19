@@ -200,22 +200,14 @@ def generate_vtable(base: ClassIR,
                     vtable_name: str,
                     emitter: Emitter) -> None:
     emitter.emit_line('static CPyVTableItem {}[] = {{'.format(vtable_name))
-    for cl in reversed(base.mro):
-        for attr in cl.attributes:
-            emitter.emit_line(
-                '(CPyVTableItem){},'.format(native_getter_name(cl, attr, emitter.names)))
-            emitter.emit_line(
-                '(CPyVTableItem){},'.format(native_setter_name(cl, attr, emitter.names)))
-        for fn in cl.methods.values():
-            # TODO: This is gross, and inefficient, and wrong if the type changes.
-            # This logic should all live on the genops side, I think
-            search = base.mro if fn.name != '__init__' else [cl]
-            for cl2 in search:
-                m = cl2.get_method(fn.name)
-                if m:
-                    emitter.emit_line('(CPyVTableItem){}{},'.format(NATIVE_PREFIX,
-                                                                    m.cname(emitter.names)))
-                    break
+    for entry in base.vtable_entries:
+        if isinstance(entry, FuncIR):
+            emitter.emit_line('(CPyVTableItem){}{},'.format(NATIVE_PREFIX,
+                                                            entry.cname(emitter.names)))
+        else:
+            cl, attr, is_getter = entry
+            namer = native_getter_name if is_getter else native_setter_name
+            emitter.emit_line('(CPyVTableItem){},'.format(namer(cl, attr, emitter.names)))
     emitter.emit_line('};')
 
 
