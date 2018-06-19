@@ -14,7 +14,7 @@ It would be translated to something that conceptually looks like this:
    return r3
 """
 
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Tuple, Optional, Union, Sequence
 
 from mypy.nodes import (
     Node, MypyFile, FuncDef, ReturnStmt, AssignmentStmt, OpExpr, IntExpr, NameExpr, LDEF, Var,
@@ -47,7 +47,8 @@ from mypyc.ops import (
     is_int_rprimitive, float_rprimitive, is_float_rprimitive, bool_rprimitive, list_rprimitive,
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp,
-    ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive,
+    ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, FuncSignature,
+    VTableAttr, VTableMethod,
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import list_len_op, list_get_item_op, list_set_item_op, new_list_op
@@ -56,7 +57,7 @@ from mypyc.ops_misc import (
     none_op, iter_op, next_op, no_err_occurred_op, py_getattr_op, py_setattr_op,
 )
 from mypyc.subtype import is_subtype
-from mypyc.sametype import is_same_type
+from mypyc.sametype import is_same_type, is_same_method_signature
 
 
 def build_ir(modules: List[MypyFile],
@@ -101,8 +102,8 @@ def build_ir(modules: List[MypyFile],
     return result
 
 
-# XXX: MOVE
 def compute_vtable(cls: ClassIR) -> None:
+    """Compute the vtable structure for a class."""
     if cls.vtable is not None: return
     cls.vtable = {}
     entries = cls.vtable_entries
@@ -114,23 +115,24 @@ def compute_vtable(cls: ClassIR) -> None:
     else:
         prefix = []
 
+    # Include the vtable from the parent classes, but handle method overrides.
     for entry in prefix:
-        if isinstance(entry, FuncIR):
-            if entry.name in cls.methods:
-                # XXX: THE STUFF
-                entries.append(cls.methods[entry.name])
-            else:
-                entries.append(entry)
-        else:
-            entries.append(entry)
+        if isinstance(entry, VTableMethod):
+            method = entry.method
+            if method.name in cls.methods:
+                if is_same_method_signature(method.sig, cls.methods[method.name].sig):
+                    entry = VTableMethod(cls, cls.methods[method.name])
+                else:
+                    entry = VTableMethod(cls, cls.glue_methods[(entry.cls, method.name)])
+        entries.append(entry)
 
     for attr in cls.attributes:
         cls.vtable[attr] = len(entries)
-        entries.append((cls, attr, True))
-        entries.append((cls, attr, False))
+        entries.append(VTableAttr(cls, attr, is_getter=True))
+        entries.append(VTableAttr(cls, attr, is_getter=False))
     for fn in cls.methods.values():
         cls.vtable[fn.name] = len(entries)
-        entries.append(fn)
+        entries.append(VTableMethod(cls, fn))
 
 
 class Mapper:
@@ -181,6 +183,13 @@ class Mapper:
             return self.type_to_rtype(typ.upper_bound)
         assert False, '%s unsupported' % type(typ)
 
+    def fdef_to_sig(self, fdef: FuncDef) -> FuncSignature:
+        assert isinstance(fdef.type, CallableType)
+        args = [RuntimeArg(arg.variable.name(), self.type_to_rtype(fdef.type.arg_types[i]))
+                for i, arg in enumerate(fdef.arguments)]
+        ret = self.type_to_rtype(fdef.type.ret_type)
+        return FuncSignature(args, ret)
+
 
 def prepare_class_def(cdef: ClassDef, mapper: Mapper) -> None:
     ir = mapper.type_to_ir[cdef.info]
@@ -189,6 +198,8 @@ def prepare_class_def(cdef: ClassDef, mapper: Mapper) -> None:
         if isinstance(node.node, Var):
             assert node.node.type, "Class member missing type"
             ir.attributes[name] = mapper.type_to_rtype(node.node.type)
+        elif isinstance(node.node, FuncDef):
+            ir.method_types[name] = mapper.fdef_to_sig(node.node)
 
     # Set up the parent class
     assert len(info.bases) == 1, "Only single inheritance is supported"
@@ -296,9 +307,21 @@ class IRBuilder(NodeVisitor[Value]):
         ir = self.mapper.type_to_ir[cdef.info]
         for name, node in sorted(cdef.info.names.items(), key=lambda x: x[0]):
             if isinstance(node.node, FuncDef):
-                func = self.gen_func_def(node.node, cdef.name)
+                func = self.gen_func_def(node.node, ir.method_sig(node.node.name()), cdef.name)
                 self.functions.append(func)
                 ir.methods[func.name] = func
+
+                # If this overrides a parent class method with a different type, we need
+                # to generate a glue method to mediate between them.
+                for cls in ir.mro[1:]:
+                    if (name in cls.method_types
+                            and not is_same_method_signature(ir.method_types[name],
+                                                             cls.method_types[name])):
+                        f = self.gen_glue_func(cls.method_types[name], func, ir, cls,
+                                               node.node.line)
+                        ir.glue_methods[(cls, name)] = f
+                        self.functions.append(f)
+
         return INVALID_VALUE
 
     def visit_import(self, node: Import) -> Value:
@@ -338,14 +361,42 @@ class IRBuilder(NodeVisitor[Value]):
 
         return INVALID_VALUE
 
-    def gen_func_def(self, fdef: FuncDef, class_name: Optional[str] = None) -> FuncIR:
+    def gen_glue_func(self, sig: FuncSignature, target: FuncIR,
+                      cls: ClassIR, base: ClassIR, line: int) -> FuncIR:
+        self.enter()
+
+        rt_args = (RuntimeArg(sig.args[0].name, RInstance(cls)),) + sig.args[1:]
+
+        # The environment operates on Vars, so we make some up
+        fake_vars = [(Var(arg.name), arg.type) for arg in rt_args]
+        args = [self.environment.add_local(var, type, is_arg=True)
+                for var, type in fake_vars]  # type: List[Value]
+        self.ret_type = sig.ret_type
+
+        arg_types = [arg.type for arg in target.sig.args]
+        args = self.coerce_native_call_args(args, arg_types, line)
+        retval = self.add(MethodCall(target.ret_type,
+                                     args[0],
+                                     target.name,
+                                     args[1:],
+                                     line))
+        retval = self.coerce(retval, sig.ret_type, line)
+        self.add(Return(retval))
+
+        blocks, env = self.leave()
+        return FuncIR(target.name + '__' + base.name + '_glue',
+                      cls.name, self.module_name,
+                      FuncSignature(rt_args, self.ret_type), blocks, env)
+
+    def gen_func_def(self, fdef: FuncDef, sig: FuncSignature,
+                     class_name: Optional[str] = None) -> FuncIR:
         self.enter()
 
         for arg in fdef.arguments:
             assert arg.variable.type, "Function argument missing type"
             self.environment.add_local(arg.variable, self.type_to_rtype(arg.variable.type),
                                        is_arg=True)
-        self.ret_type = self.convert_return_type(fdef)
+        self.ret_type = sig.ret_type
         fdef.body.accept(self)
 
         if is_none_rprimitive(self.ret_type) or is_object_rprimitive(self.ret_type):
@@ -354,22 +405,11 @@ class IRBuilder(NodeVisitor[Value]):
             self.add_implicit_unreachable()
 
         blocks, env = self.leave()
-        args = self.convert_args(fdef)
-        return FuncIR(fdef.name(), class_name, self.module_name, args, self.ret_type, blocks, env)
+        return FuncIR(fdef.name(), class_name, self.module_name, sig, blocks, env)
 
     def visit_func_def(self, fdef: FuncDef) -> Value:
-        self.functions.append(self.gen_func_def(fdef))
+        self.functions.append(self.gen_func_def(fdef, self.mapper.fdef_to_sig(fdef)))
         return INVALID_VALUE
-
-    def convert_args(self, fdef: FuncDef) -> List[RuntimeArg]:
-        assert isinstance(fdef.type, CallableType)
-        ann = fdef.type
-        return [RuntimeArg(arg.variable.name(), self.type_to_rtype(ann.arg_types[i]))
-                for i, arg in enumerate(fdef.arguments)]
-
-    def convert_return_type(self, fdef: FuncDef) -> RType:
-        assert isinstance(fdef.type, CallableType)
-        return self.type_to_rtype(fdef.type.ret_type)
 
     def add_implicit_return(self) -> None:
         block = self.blocks[-1][-1]
@@ -877,8 +917,8 @@ class IRBuilder(NodeVisitor[Value]):
         return self.add(PyMethodCall(obj, method, arg_boxes))
 
     def coerce_native_call_args(self,
-                                args: List[Value],
-                                arg_types: List[RType],
+                                args: Sequence[Value],
+                                arg_types: Sequence[RType],
                                 line: int) -> List[Value]:
         coerced_arg_regs = []
         for reg, arg_type in zip(args, arg_types):

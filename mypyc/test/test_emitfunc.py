@@ -10,8 +10,9 @@ from mypyc.ops import (
     IncRef, DecRef, Branch, Call, Unbox, Box, RTuple, TupleGet, GetAttr, PrimitiveOp,
     RegisterOp,
     ClassIR, RInstance, SetAttr, Op, Label, Value, int_rprimitive, bool_rprimitive,
-    list_rprimitive, dict_rprimitive, object_rprimitive,
+    list_rprimitive, dict_rprimitive, object_rprimitive, FuncSignature,
 )
+from mypyc.genops import compute_vtable
 from mypyc.emit import Emitter, EmitterContext
 from mypyc.emitfunc import generate_native_function, FunctionEmitterVisitor
 from mypyc.ops_primitive import binary_ops
@@ -41,8 +42,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
             Var('tt'), RTuple([RTuple([int_rprimitive, bool_rprimitive]), bool_rprimitive]))
         ir = ClassIR('A', 'mod')
         ir.attributes = OrderedDict([('x', bool_rprimitive), ('y', int_rprimitive)])
-        ir.vtable = OrderedDict([('x', 0), ('y', 2)])
-        ir.vtable_entries = [(ir, 'x', True), (ir, 'x', False), (ir, 'y', True), (ir, 'y', False)]
+        compute_vtable(ir)
         ir.mro = [ir]
         self.r = self.env.add_local(Var('r'), RInstance(ir))
 
@@ -269,7 +269,8 @@ class TestGenerateFunction(unittest.TestCase):
 
     def test_simple(self) -> None:
         self.block.ops.append(Return(self.reg))
-        fn = FuncIR('myfunc', None, 'mod', [self.arg], int_rprimitive, [self.block], self.env)
+        fn = FuncIR('myfunc', None, 'mod', FuncSignature([self.arg], int_rprimitive),
+                    [self.block], self.env)
         emitter = Emitter(EmitterContext(['mod']))
         generate_native_function(fn, emitter, 'prog.py')
         result = emitter.fragments
@@ -287,7 +288,8 @@ class TestGenerateFunction(unittest.TestCase):
         op = LoadInt(5)
         self.block.ops.append(op)
         self.env.add_op(op)
-        fn = FuncIR('myfunc', None, 'mod', [self.arg], list_rprimitive, [self.block], self.env)
+        fn = FuncIR('myfunc', None, 'mod', FuncSignature([self.arg], list_rprimitive),
+                    [self.block], self.env)
         emitter = Emitter(EmitterContext(['mod']))
         generate_native_function(fn, emitter, 'prog.py')
         result = emitter.fragments

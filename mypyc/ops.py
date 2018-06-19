@@ -345,9 +345,9 @@ class Environment:
     def lookup(self, var: Var) -> 'Register':
         return self.symtable[var]
 
-    def add_temp(self, typ: RType) -> 'Register':
+    def add_temp(self, typ: RType, is_arg: bool = False) -> 'Register':
         assert isinstance(typ, RType)
-        reg = Register(typ)
+        reg = Register(typ, is_arg=is_arg)
         self.add(reg, 'r%d' % self.temp_index)
         self.temp_index += 1
         return reg
@@ -663,10 +663,10 @@ class Call(RegisterOp):
     error_kind = ERR_MAGIC
 
     # TODO: take a FuncIR and extract the ret type
-    def __init__(self, ret_type: RType, fn: str, args: List[Value], line: int) -> None:
+    def __init__(self, ret_type: RType, fn: str, args: Sequence[Value], line: int) -> None:
         super().__init__(line)
         self.fn = fn
-        self.args = args
+        self.args = list(args)
         self.type = ret_type
 
     def to_str(self, env: Environment) -> str:
@@ -1162,8 +1162,7 @@ class FuncIR:
                  name: str,
                  class_name: Optional[str],
                  module_name: str,
-                 args: Sequence[RuntimeArg],
-                 ret_type: RType,
+                 sig: FuncSignature,
                  blocks: List[BasicBlock],
                  env: Environment) -> None:
         self.name = name
@@ -1171,7 +1170,7 @@ class FuncIR:
         self.module_name = module_name
         self.blocks = blocks
         self.env = env
-        self.sig = FuncSignature(args, ret_type)
+        self.sig = sig
 
     @property
     def args(self) -> Sequence[RuntimeArg]:
@@ -1191,6 +1190,17 @@ class FuncIR:
         return '\n'.join(format_func(self))
 
 
+VTableMethod = NamedTuple(
+    'VTableMethod', [('cls', 'ClassIR'),
+                     ('method', FuncIR)])
+
+
+VTableAttr = NamedTuple(
+    'VTableAttr', [('cls', 'ClassIR'),
+                   ('name', str),
+                   ('is_getter', bool)])
+
+
 class ClassIR:
     """Intermediate representation of a class.
 
@@ -1201,9 +1211,14 @@ class ClassIR:
         self.name = name
         self.module_name = module_name
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
+        self.method_types = OrderedDict()  # type: OrderedDict[str, FuncSignature]
         self.methods = OrderedDict()  # type: OrderedDict[str, FuncIR]
+        # glue methods for boxing/unboxing when a class changes the type
+        # while overriding a method. Maps from (parent class overrided, method)
+        # to IR of glue method.
+        self.glue_methods = {}  # type: Dict[Tuple[ClassIR, str], FuncIR]
         self.vtable = None  # type: Optional[Dict[str, int]]
-        self.vtable_entries = []  # type: List[Union[FuncIR, Tuple[ClassIR, str, bool]]]
+        self.vtable_entries = []  # type: List[Union[VTableMethod, VTableAttr]]
         self.base = None  # type: Optional[ClassIR]
         self.mro = []  # type: List[ClassIR]
 
@@ -1216,6 +1231,11 @@ class ClassIR:
         for ir in self.mro:
             if name in ir.attributes: return ir.attributes[name]
         assert False, '%r has no attribute %r' % (self.name, name)
+
+    def method_sig(self, name: str) -> FuncSignature:
+        for ir in self.mro:
+            if name in ir.method_types: return ir.method_types[name]
+        assert False, '%r has no method %r' % (self.name, name)
 
     def name_prefix(self, names: NameGenerator) -> str:
         return names.private_name(self.module_name, self.name)

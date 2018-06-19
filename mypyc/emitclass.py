@@ -7,7 +7,10 @@ from typing import Optional
 from mypyc.common import PREFIX, NATIVE_PREFIX, REG_PREFIX
 from mypyc.emit import Emitter
 from mypyc.emitfunc import native_function_header
-from mypyc.ops import ClassIR, FuncIR, RType, Environment, object_rprimitive
+from mypyc.ops import (
+    ClassIR, FuncIR, RType, Environment, object_rprimitive, FuncSignature,
+    VTableMethod, VTableAttr,
+)
 from mypyc.sametype import is_same_type
 from mypyc.namegen import NameGenerator
 
@@ -50,7 +53,8 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
 
     emitter.emit_line('static PyObject *{}(void);'.format(setup_name))
     # TODO: Use RInstance
-    ctor = FuncIR(cl.name, None, module, init_args, object_rprimitive, [], Environment())
+    ctor = FuncIR(cl.name, None, module, FuncSignature(init_args, object_rprimitive),
+                  [], Environment())
     emitter.emit_line(native_function_header(ctor, emitter.names) + ';')
 
     emit_line()
@@ -201,9 +205,9 @@ def generate_vtable(base: ClassIR,
                     emitter: Emitter) -> None:
     emitter.emit_line('static CPyVTableItem {}[] = {{'.format(vtable_name))
     for entry in base.vtable_entries:
-        if isinstance(entry, FuncIR):
+        if isinstance(entry, VTableMethod):
             emitter.emit_line('(CPyVTableItem){}{},'.format(NATIVE_PREFIX,
-                                                            entry.cname(emitter.names)))
+                                                            entry.method.cname(emitter.names)))
         else:
             cl, attr, is_getter = entry
             namer = native_getter_name if is_getter else native_setter_name
