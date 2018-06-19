@@ -1193,10 +1193,10 @@ class ClassIR:
 
     # TODO: Use dictionary for attributes in addition to (or instead of) list.
 
-    def __init__(self, name: str, module_name: str, tp_call: str = '0') -> None:
+    def __init__(self, name: str, module_name: str, callable: Optional[str] = None) -> None:
         self.name = name
         self.module_name = module_name
-        self.tp_call = tp_call
+        self.callable = callable
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
         self.methods = []  # type: List[FuncIR]
         self.vtable = None  # type: Optional[Dict[str, int]]

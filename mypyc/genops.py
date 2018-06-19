@@ -238,8 +238,6 @@ class IRBuilder(NodeVisitor[Value]):
 
         self.current_module_name = None  # type: Optional[str]
 
-        self.env_prefix = ''
-
     def visit_mypy_file(self, mypyfile: MypyFile) -> Value:
         if mypyfile.fullname() in ('typing', 'abc'):
             # These module are special; their contents are currently all
@@ -309,8 +307,18 @@ class IRBuilder(NodeVisitor[Value]):
         return INVALID_VALUE
 
     def gen_func_def(self, fdef: FuncDef, class_name: Optional[str] = None) -> FuncIR:
+        # Add the newly defined function to the current environment (before entering that function)
+        # and generated a namespace to differentiate same-named functions in different scopes.
         self.environment.add_func(fdef)
         namespace = self.generate_function_namespace()
+
+        # If there is more than one environment in the environment stack, then we are visiting a
+        # non-global function, and want to instantiate a class for it.
+        if len(self.environments) > 1:
+            self.classes.append(ClassIR(name='{}_{}_obj'.format(fdef.name(), namespace),
+                                        module_name=self.module_name,
+                                        callable='CPyPy_{}_{}'.format(fdef.name(), namespace)))
+
         self.enter(fdef.name())
 
         for arg in fdef.arguments:
@@ -336,12 +344,6 @@ class IRBuilder(NodeVisitor[Value]):
     def visit_func_def(self, fdef: FuncDef) -> Value:
         ir = self.gen_func_def(fdef)
         self.functions.append(ir)
-        if len(self.environments) > 1:
-            # If there is more than one environment in the environment stack, then we are visiting
-            # a non-global function, and want to instantiate an object for it.
-            self.classes.append(ClassIR(name='{}_{}_obj'.format(ir.name, ir.namespace),
-                                        module_name=self.module_name,
-                                        tp_call='CPyPy_{}_{}'.format(ir.name, ir.namespace)))
         return INVALID_VALUE
 
     def convert_args(self, fdef: FuncDef) -> List[RuntimeArg]:
@@ -818,8 +820,7 @@ class IRBuilder(NodeVisitor[Value]):
             if expr.kind == LDEF:
                 namespace = self.get_function_namespace(expr.name)
                 if namespace:
-                    return self.add(LoadStatic(object_rprimitive,
-                                    'CPyDef_{}_{}_obj()'.format(expr.name, namespace)))
+                    return self.load_static_function(expr.name, namespace)
                 else:
                     assert False, 'function %s not defined in current scope'.format(expr.name)
             else:
@@ -1398,6 +1399,10 @@ class IRBuilder(NodeVisitor[Value]):
             self.literals[value] = '__unicode_' + str(len(self.literals))
         static_symbol = self.literals[value]
         return self.add(LoadStatic(str_rprimitive, static_symbol, ann=value))
+
+    def load_static_function(self, function: str, namespace: str) -> Value:
+        return self.add(LoadStatic(object_rprimitive,
+                                   'CPyDef_{}_{}_obj()'.format(function, namespace)))
 
     def load_static_module_attr(self, expr: RefExpr) -> Value:
         assert expr.node, "RefExpr not resolved"

@@ -19,7 +19,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     """
     name = cl.name
     name_prefix = cl.name_prefix(emitter.names)
-    tp_call = cl.tp_call
+    tp_call = cl.callable if cl.callable else '0'
     fullname = '{}.{}'.format(module, name)
     setup_name = '{}_setup'.format(name_prefix)
     new_name = '{}_new'.format(name_prefix)
