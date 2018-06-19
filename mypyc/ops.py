@@ -1180,13 +1180,11 @@ class ClassIR:
     This also describes the runtime structure of native instances.
     """
 
-    # TODO: Use dictionary for attributes in addition to (or instead of) list.
-
     def __init__(self, name: str, module_name: str) -> None:
         self.name = name
         self.module_name = module_name
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
-        self.methods = []  # type: List[FuncIR]
+        self.methods = OrderedDict()  # type: OrderedDict[str, FuncIR]
         self.vtable = None  # type: Optional[Dict[str, int]]
         self.vtable_size = 0
         self.base = None  # type: Optional[ClassIR]
@@ -1205,7 +1203,7 @@ class ClassIR:
         for i, attr in enumerate(self.attributes):
             self.vtable[attr] = base + i * 2
         base += len(self.attributes) * 2
-        for i, fn in enumerate(self.methods):
+        for i, fn in enumerate(self.methods.values()):
             self.vtable[fn.name] = base + i
         self.vtable_size = base + len(self.methods)
 
@@ -1226,10 +1224,10 @@ class ClassIR:
         return '{}Object'.format(self.name_prefix(names))
 
     def get_method(self, name: str) -> Optional[FuncIR]:
-        matches = [func for func in self.methods if func.name == name]
-        if not matches and self.base:
-            return self.base.get_method(name)
-        return matches[0] if matches else None
+        match = self.methods.get(name)
+        if not match and self.base:
+            match = self.base.get_method(name)
+        return match
 
     def type_struct_name(self, names: NameGenerator) -> str:
         return '{}Type'.format(self.name_prefix(names))

@@ -266,7 +266,7 @@ class IRBuilder(NodeVisitor[Value]):
             if isinstance(node.node, FuncDef):
                 func = self.gen_func_def(node.node, cdef.name)
                 self.functions.append(func)
-                ir.methods.append(func)
+                ir.methods[func.name] = func
         return INVALID_VALUE
 
     def visit_import(self, node: Import) -> Value:

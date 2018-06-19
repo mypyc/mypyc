@@ -206,7 +206,7 @@ def generate_vtable(base: ClassIR,
                 '(CPyVTableItem){},'.format(native_getter_name(cl, attr, emitter.names)))
             emitter.emit_line(
                 '(CPyVTableItem){},'.format(native_setter_name(cl, attr, emitter.names)))
-        for fn in cl.methods:
+        for fn in cl.methods.values():
             # TODO: This is gross, and inefficient, and wrong if the type changes.
             # This logic should all live on the genops side, I think
             search = base.mro if fn.name != '__init__' else [cl]
@@ -336,7 +336,7 @@ def generate_methods_table(cl: ClassIR,
                            name: str,
                            emitter: Emitter) -> None:
     emitter.emit_line('static PyMethodDef {}[] = {{'.format(name))
-    for fn in cl.methods:
+    for fn in cl.methods.values():
         emitter.emit_line('{{"{}",'.format(fn.name))
         emitter.emit_line(' (PyCFunction){}{},'.format(PREFIX, fn.cname(emitter.names)))
         emitter.emit_line(' METH_VARARGS | METH_KEYWORDS, NULL},')
