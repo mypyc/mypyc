@@ -815,7 +815,7 @@ class PySetAttr(RegisterOp):
 
     error_kind = ERR_FALSE
 
-    def __init__(self, obj: Value, attr: str, value: Value, line: int) -> None:
+    def __init__(self, obj: Value, attr: Value, value: Value, line: int) -> None:
         super().__init__(line)
         self.obj = obj
         self.attr = attr
@@ -823,11 +823,11 @@ class PySetAttr(RegisterOp):
         self.type = bool_rprimitive
 
     def sources(self) -> List[Value]:
-        return [self.obj, self.value]
+        return [self.obj, self.attr, self.value]
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = setattr(%r, %s, %r)',
-                          self, self.obj, repr(self.attr), self.value)
+        return env.format('%r = setattr(%r, %r, %r)',
+                          self, self.obj, self.attr, self.value)
 
     def can_raise(self) -> bool:
         return True
