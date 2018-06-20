@@ -1,0 +1,17 @@
+[case testTraitBasic]
+from mypy_extensions import trait
+
+class A:
+    line: int
+
+@trait
+class T:
+    def foo(self) -> None:
+        print("yooooo")
+
+#class C(A, T):
+#    pass
+class C: pass
+
+[file driver.py]
+from native import A, T, C

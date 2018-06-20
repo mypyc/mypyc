@@ -13,6 +13,8 @@ class object:
 
 class type: pass
 
+class ellipsis: pass
+
 # Primitive types are special in generated code.
 
 class int:

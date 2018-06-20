@@ -6,7 +6,7 @@ from typing import List
 
 from mypy import build
 from mypy.test.data import parse_test_cases, DataDrivenTestCase
-from mypy.test.config import test_temp_dir
+from mypy.test.config import test_temp_dir, PREFIX
 from mypy.errors import CompileError
 from mypy.options import Options
 
@@ -23,6 +23,7 @@ import pytest  # type: ignore  # no pytest in typeshed
 files = [
     'run.test',
     'run-classes.test',
+    'run-traits.test',
     'run-multimodule.test',
     'run-bench.test',
 ]
@@ -113,7 +114,8 @@ class TestRun(MypycDataSuite):
 
             driver_path = os.path.join(test_temp_dir, 'driver.py')
             env = os.environ.copy()
-            env['PYTHONPATH'] = os.path.dirname(native_lib_path)
+            path = [os.path.dirname(native_lib_path), os.path.join(PREFIX, 'extensions')]
+            env['PYTHONPATH'] = ':'.join(path)
             env['MYPYC_RUN_BENCH'] = '1' if bench else '0'
             env['LD_LIBRARY_PATH'] = os.getcwd()
 
