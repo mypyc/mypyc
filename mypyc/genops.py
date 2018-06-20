@@ -42,7 +42,7 @@ from mypyc.common import MAX_SHORT_INT
 from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Value, Register, Label, Return, FuncIR, Assign,
     Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple, Unreachable, TupleGet, TupleSet,
-    ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, PyCall, ROptional,
+    ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, ROptional,
     c_module_name, MethodCall, INVALID_VALUE, INVALID_LABEL, int_rprimitive,
     is_int_rprimitive, float_rprimitive, is_float_rprimitive, bool_rprimitive, list_rprimitive,
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
@@ -53,7 +53,7 @@ from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, nam
 from mypyc.ops_list import list_len_op, list_get_item_op, list_set_item_op, new_list_op
 from mypyc.ops_dict import new_dict_op, dict_get_item_op
 from mypyc.ops_misc import (
-    none_op, iter_op, next_op, no_err_occurred_op, py_getattr_op, py_setattr_op,
+    none_op, iter_op, next_op, no_err_occurred_op, py_getattr_op, py_setattr_op, pycall_op,
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type
@@ -833,7 +833,7 @@ class IRBuilder(NodeVisitor[Value]):
     def py_call(self, function: Value, args: List[Value],
                 target_type: RType, line: int) -> Value:
         arg_boxes = [self.box(arg) for arg in args]  # type: List[Value]
-        return self.add(PyCall(function, arg_boxes, line))
+        return self.add(PrimitiveOp([function] + arg_boxes, pycall_op, line))
 
     def coerce_native_call_args(self,
                                 args: List[Value],

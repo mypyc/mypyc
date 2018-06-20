@@ -6,7 +6,9 @@ from mypyc.ops import (
     EmitterInterface, PrimitiveOp, none_rprimitive, bool_rprimitive, object_rprimitive, ERR_NEVER,
     ERR_MAGIC, ERR_FALSE
 )
-from mypyc.ops_primitive import name_ref_op, simple_emit, binary_op, unary_op, func_op, method_op
+from mypyc.ops_primitive import (
+    name_ref_op, simple_emit, binary_op, unary_op, func_op, method_op, custom_op,
+)
 
 
 def emit_none(emitter: EmitterInterface, args: List[str], dest: str) -> None:
@@ -148,3 +150,15 @@ py_setattr_op = func_op(
     error_kind=ERR_FALSE,
     emit=simple_emit('{dest} = PyObject_SetAttr({args[0]}, {args[1]}, {args[2]}) >= 0;')
 )
+
+
+def emit_pycall(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+    emitter.emit_line('%s = PyObject_CallFunctionObjArgs(%s, NULL); ' % (dest, ", ".join(args)))
+
+
+pycall_op = custom_op(arg_types=[object_rprimitive],
+                      result_type=object_rprimitive,
+                      is_var_arg=True,
+                      error_kind=ERR_MAGIC,
+                      format_str = '{dest} = pycall({comma_args})',
+                      emit=emit_pycall)
