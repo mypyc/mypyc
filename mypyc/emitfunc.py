@@ -6,7 +6,7 @@ from mypyc.common import REG_PREFIX, NATIVE_PREFIX
 from mypyc.emit import Emitter
 from mypyc.ops import (
     FuncIR, OpVisitor, Goto, Branch, Return, Assign, LoadInt, LoadErrorValue, GetAttr, SetAttr,
-    LoadStatic, TupleGet, TupleSet, Call, PyCall, IncRef, DecRef, Box, Cast, Unbox,
+    LoadStatic, TupleGet, TupleSet, Call, IncRef, DecRef, Box, Cast, Unbox,
     Label, Value, Register, RType, RTuple, MethodCall, PrimitiveOp, EmitterInterface,
     Unreachable, is_int_rprimitive
 )
@@ -223,14 +223,6 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         mtype = native_function_type(method)
         self.emit_line('{}CPY_GET_METHOD({}, {}, {}, {})({});'.format(
             dest, obj, method_idx, rtype.struct_name(self.names), mtype, args))
-
-    def visit_py_call(self, op: PyCall) -> None:
-        dest = self.get_dest_assign(op)
-        function = self.reg(op.function)
-        args = ', '.join(self.reg(arg) for arg in op.args)
-        if args:
-            args += ', '
-        self.emit_line('{}PyObject_CallFunctionObjArgs({}, {}NULL);'.format(dest, function, args))
 
     def visit_inc_ref(self, op: IncRef) -> None:
         src = self.reg(op.src)

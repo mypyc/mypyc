@@ -719,40 +719,6 @@ class MethodCall(RegisterOp):
         return visitor.visit_method_call(self)
 
 
-# Python-interopability operations are prefixed with Py. Typically these act as a replacement
-# for native operations (without the Py prefix) which call into Python rather than compiled
-# native code. For example, this is needed to call builtins.
-
-
-class PyCall(RegisterOp):
-    """Python call f(arg, ...).
-
-    All registers must be unboxed. Corresponds to PyObject_CallFunctionObjArgs in C.
-    """
-
-    error_kind = ERR_MAGIC
-
-    def __init__(self, function: Value, args: List[Value],
-                 line: int) -> None:
-        super().__init__(line)
-        self.function = function
-        self.args = args
-        self.type = object_rprimitive
-
-    def to_str(self, env: Environment) -> str:
-        args = ', '.join(env.format('%r', arg) for arg in self.args)
-        s = env.format('%r(%s)', self.function, args)
-        if not self.is_void:
-            s = env.format('%r = ', self) + s
-        return s + ' :: object'
-
-    def sources(self) -> List[Value]:
-        return self.args[:] + [self.function]
-
-    def accept(self, visitor: 'OpVisitor[T]') -> T:
-        return visitor.visit_py_call(self)
-
-
 class EmitterInterface:
     @abstractmethod
     def reg(self, name: Value) -> str:
@@ -1280,10 +1246,6 @@ class OpVisitor(Generic[T]):
 
     @abstractmethod
     def visit_call(self, op: Call) -> T:
-        raise NotImplementedError
-
-    @abstractmethod
-    def visit_py_call(self, op: PyCall) -> T:
         raise NotImplementedError
 
     @abstractmethod
