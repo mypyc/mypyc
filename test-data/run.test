@@ -894,7 +894,9 @@ def uno(num: float) -> Callable[[str], str]:
 def eins(num: float) -> str:
     def zwei(s: str) -> str:
         return s + '?'
-    return zwei('eins')
+    a = zwei('eins')
+    b = zwei('zwei')
+    return a
 
 def inner() -> str:
     return 'inner: normal function'

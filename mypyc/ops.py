@@ -18,7 +18,7 @@ from typing import (
 )
 from collections import OrderedDict
 
-from mypy.nodes import Var, FuncDef
+from mypy.nodes import SymbolNode, Var, FuncDef
 
 from mypyc.namegen import NameGenerator
 
@@ -325,7 +325,7 @@ class Environment:
     def __init__(self, name: Optional[str] = None) -> None:
         self.name = name
         self.indexes = OrderedDict()  # type: Dict[Value, int]
-        self.symtable = {}  # type: Dict[Var, Register]
+        self.symtable = {}  # type: Dict[SymbolNode, Register]
         self.functions = {}  # type: Dict[str, FuncDef]
         self.ret_type = none_rprimitive  # type: RType
         self.temp_index = 0
@@ -337,20 +337,20 @@ class Environment:
         reg.name = name
         self.indexes[reg] = len(self.indexes)
 
-    def add_local(self, var: Var, typ: RType, is_arg: bool = False) -> 'Register':
-        assert isinstance(var, Var)
-        reg = Register(typ, var.line, is_arg = is_arg)
+    def add_local(self, symbol: SymbolNode, typ: RType, is_arg: bool = False) -> 'Register':
+        assert isinstance(symbol, SymbolNode)
+        reg = Register(typ, symbol.line, is_arg = is_arg)
 
-        self.symtable[var] = reg
-        self.add(reg, var.name())
+        self.symtable[symbol] = reg
+        self.add(reg, symbol.name())
         return reg
 
     def add_func(self, func: FuncDef) -> None:
         assert isinstance(func, FuncDef)
         self.functions[func.name()] = func
 
-    def lookup(self, var: Var) -> 'Register':
-        return self.symtable[var]
+    def lookup(self, symbol: SymbolNode) -> 'Register':
+        return self.symtable[symbol]
 
     def add_temp(self, typ: RType) -> 'Register':
         assert isinstance(typ, RType)
@@ -1189,7 +1189,7 @@ class ClassIR:
 
     # TODO: Use dictionary for attributes in addition to (or instead of) list.
 
-    def __init__(self, name: str, module_name: str, callable: Optional[FuncIR] = None) -> None:
+    def __init__(self, name: str, module_name: str) -> None:
         self.name = name
         self.module_name = module_name
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
@@ -1198,8 +1198,6 @@ class ClassIR:
         self.vtable_size = 0
         self.base = None  # type: Optional[ClassIR]
         self.mro = []  # type: List[ClassIR]
-        if callable:
-            self.methods.append(callable)
 
     def compute_vtable(self) -> None:
         if self.vtable is not None: return
