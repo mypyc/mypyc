@@ -43,7 +43,7 @@ from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Value, Register, Label, Return, FuncIR, Assign,
     Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple, Unreachable, TupleGet, TupleSet,
     ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, PyCall, ROptional,
-    c_module_name, PyMethodCall, MethodCall, INVALID_VALUE, INVALID_LABEL, int_rprimitive,
+    c_module_name, MethodCall, INVALID_VALUE, INVALID_LABEL, int_rprimitive,
     is_int_rprimitive, float_rprimitive, is_float_rprimitive, bool_rprimitive, list_rprimitive,
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp,
@@ -835,15 +835,6 @@ class IRBuilder(NodeVisitor[Value]):
         arg_boxes = [self.box(arg) for arg in args]  # type: List[Value]
         return self.add(PyCall(function, arg_boxes, line))
 
-    def py_method_call(self,
-                       obj: Value,
-                       method: Value,
-                       args: List[Value],
-                       target_type: RType,
-                       line: int) -> Value:
-        arg_boxes = [self.box(arg) for arg in args]  # type: List[Value]
-        return self.add(PyMethodCall(obj, method, arg_boxes))
-
     def coerce_native_call_args(self,
                                 args: List[Value],
                                 arg_types: List[RType],
@@ -966,9 +957,8 @@ class IRBuilder(NodeVisitor[Value]):
                                                arg_regs, expr.line))
 
             # Fall back to Python method call
-            method_name = self.load_static_unicode(callee.name)
-            return self.py_method_call(
-                obj, method_name, args, self.node_type(expr), expr.line)
+            method_obj = self.py_get_attr(obj, callee.name, expr.line)
+            return self.py_call(method_obj, args, self.node_type(expr), expr.line)
 
     def translate_cast_expr(self, expr: CastExpr) -> Value:
         src = self.accept(expr.expr)

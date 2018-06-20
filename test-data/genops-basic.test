@@ -603,20 +603,22 @@ def f(x):
     x :: list
     y :: int
     r0 :: str
-    r1 :: object
-    r2 :: int
-    r3 :: str
-    r4 :: object
-    r5 :: int
+    r1, r2 :: object
+    r3 :: int
+    r4 :: str
+    r5, r6 :: object
+    r7 :: int
 L0:
     r0 = __unicode_0 :: static
-    r1 = x.r0() :: object
-    r2 = unbox(int, r1)
-    y = r2
-    r3 = __unicode_0 :: static
-    r4 = x.r3() :: object
-    r5 = unbox(int, r4)
-    return r5
+    r1 = getattr x, r0
+    r2 = r1() :: object
+    r3 = unbox(int, r2)
+    y = r3
+    r4 = __unicode_0 :: static
+    r5 = getattr x, r4
+    r6 = r5() :: object
+    r7 = unbox(int, r6)
+    return r7
 
 [case testObjectType]
 def g(y: object) -> None:

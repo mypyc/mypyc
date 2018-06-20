@@ -613,11 +613,13 @@ def g(x: List[int], y: List[int]) -> None:
 [out]
 L0:
     r0 = __unicode_0 :: static
-    r1 = x.r0(y) :: object
-    r2 = cast(None, r1)
-    dec_ref r2
-    r3 = None
-    return r3
+    r1 = getattr x, r0
+    r2 = r1(y) :: object
+    dec_ref r1
+    r3 = cast(None, r2)
+    dec_ref r3
+    r4 = None
+    return r4
 
 [case testListAppend]
 from typing import List
