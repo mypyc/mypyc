@@ -989,6 +989,16 @@ def first() -> Callable[[], Callable[[], str]]:
         return third
     return second
 
+def uno(num: float) -> Callable[[str], str]:
+    def dos(s: str) -> str:
+        return s + '!'
+    return dos
+
+def eins(num: float) -> str:
+    def zwei(s: str) -> str:
+        return s + '?'
+    return zwei('eins')
+
 def inner() -> str:
     return 'inner: normal function'
 
@@ -998,43 +1008,77 @@ def second() -> str:
 def third() -> str:
     return 'third: normal function'
 [out]
-def inner():
+def __call__(self):
+    self :: object
     r0 :: str
 L0:
     r0 = __unicode_0 :: static
     return r0
 def outer():
-    r0 :: object
+    r0 :: str
 L0:
-    r0 = CPyDef_inner_outer_obj() :: static
+    r0 = inner_outer_obj()
     return r0
-def third():
+def __call__(self):
+    self :: object
     r0 :: str
 L0:
     r0 = __unicode_1 :: static
     return r0
-def second():
-    r0 :: object
+def __call__(self):
+    self :: object
+    r0 :: str
 L0:
-    r0 = CPyDef_third_first_second_obj() :: static
+    r0 = third_first_second_obj()
     return r0
 def first():
     r0 :: object
 L0:
-    r0 = CPyDef_second_first_obj() :: static
+    r0 = second_first_obj()
     return r0
+def __call__(self, s):
+    self :: object
+    s, r0, r1 :: str
+L0:
+    r0 = __unicode_2 :: static
+    r1 = s + r0
+    return r1
+def uno(num):
+    num :: float
+    r0 :: str
+L0:
+    r0 = dos_uno_obj()
+    return r0
+def __call__(self, s):
+    self :: object
+    s, r0, r1 :: str
+L0:
+    r0 = __unicode_3 :: static
+    r1 = s + r0
+    return r1
+def eins(num):
+    num :: float
+    r0, r1 :: str
+    r2 :: object
+    r3 :: str
+L0:
+    r0 = __unicode_4 :: static
+    r1 = zwei_eins_obj()
+    r2 = r1(r0) :: object
+    r3 = cast(str, r2)
+    return r3
 def inner():
     r0 :: str
 L0:
-    r0 = __unicode_2 :: static
+    r0 = __unicode_5 :: static
     return r0
 def second():
     r0 :: str
 L0:
-    r0 = __unicode_3 :: static
+    r0 = __unicode_6 :: static
     return r0
 def third():
     r0 :: str
 L0:
-    r0 = __unicode_4 :: static
+    r0 = __unicode_7 :: static
     return r0

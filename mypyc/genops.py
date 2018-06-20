@@ -307,20 +307,19 @@ class IRBuilder(NodeVisitor[Value]):
         return INVALID_VALUE
 
     def gen_func_def(self, fdef: FuncDef, class_name: Optional[str] = None) -> FuncIR:
-        # Add the newly defined function to the current environment (before entering that function)
-        # and generated a namespace to differentiate same-named functions in different scopes.
         self.environment.add_func(fdef)
-        namespace = self.generate_function_namespace()
 
         # If there is more than one environment in the environment stack, then we are visiting a
-        # non-global function, and want to instantiate a class for it.
-        if len(self.environments) > 1:
-            self.classes.append(ClassIR(name='{}_{}_obj'.format(fdef.name(), namespace),
-                                        module_name=self.module_name,
-                                        callable='CPyPy_{}_{}'.format(fdef.name(), namespace)))
+        # non-global function, and set a flag to note this.
+        is_nested = True if len(self.environments) > 1 else False
 
         self.enter(fdef.name())
 
+        if is_nested:
+            # If this is a nested function, then add a 'self' field to the environment, since we
+            # will be instantiating the function as a method of a new class representing that
+            # original function.
+            self.environment.add_local(Var('self'), object_rprimitive, is_arg=True)
         for arg in fdef.arguments:
             assert arg.variable.type, "Function argument missing type"
             self.environment.add_local(arg.variable, self.type_to_rtype(arg.variable.type),
@@ -338,8 +337,16 @@ class IRBuilder(NodeVisitor[Value]):
         blocks, env = self.leave()
         args = self.convert_args(fdef)
 
-        return FuncIR(fdef.name(), class_name, self.module_name, namespace, args, env.ret_type,
-                      blocks, env)
+        # If this is a nested function, we create a callable class to represent this function, and
+        # change the function name to instead be the '__call__' method of the newly created class.
+        if is_nested:
+            class_name = '{}_{}_obj'.format(fdef.name(), self.generate_function_namespace())
+            args.insert(0, RuntimeArg('self', object_rprimitive))
+            ir = FuncIR('__call__', class_name, self.module_name, args, env.ret_type, blocks, env)
+            self.classes.append(ClassIR(class_name, self.module_name, ir))
+        else:
+            ir = FuncIR(fdef.name(), class_name, self.module_name, args, env.ret_type, blocks, env)
+        return ir
 
     def visit_func_def(self, fdef: FuncDef) -> Value:
         ir = self.gen_func_def(fdef)
@@ -820,7 +827,7 @@ class IRBuilder(NodeVisitor[Value]):
             if expr.kind == LDEF:
                 namespace = self.get_function_namespace(expr.name)
                 if namespace:
-                    return self.load_static_function(expr.name, namespace)
+                    return self.load_function_class(expr, namespace)
                 else:
                     assert False, 'function %s not defined in current scope'.format(expr.name)
             else:
@@ -1375,6 +1382,14 @@ class IRBuilder(NodeVisitor[Value]):
         reg = self.load_static_unicode(expr.name)
         return self.add(PrimitiveOp([_globals, reg], dict_get_item_op, expr.line))
 
+    def load_function_class(self, expr: NameExpr, namespace: str) -> Value:
+        """Loads a callable class representing a nested function into a register."""
+        assert isinstance(expr.node, FuncDef)
+        return self.add(Call(self.convert_return_type(expr.node),
+                             '{}.{}_{}_obj'.format(self.module_name, expr.name, namespace),
+                             [],
+                             expr.line))
+
     def load_static_int(self, value: int) -> Value:
         """Loads a static integer value into a register."""
         if value not in self.literals:
@@ -1399,10 +1414,6 @@ class IRBuilder(NodeVisitor[Value]):
             self.literals[value] = '__unicode_' + str(len(self.literals))
         static_symbol = self.literals[value]
         return self.add(LoadStatic(str_rprimitive, static_symbol, ann=value))
-
-    def load_static_function(self, function: str, namespace: str) -> Value:
-        return self.add(LoadStatic(object_rprimitive,
-                                   'CPyDef_{}_{}_obj()'.format(function, namespace)))
 
     def load_static_module_attr(self, expr: RefExpr) -> Value:
         assert expr.node, "RefExpr not resolved"

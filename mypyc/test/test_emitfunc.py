@@ -268,7 +268,7 @@ class TestGenerateFunction(unittest.TestCase):
 
     def test_simple(self) -> None:
         self.block.ops.append(Return(self.reg))
-        fn = FuncIR('myfunc', None, 'mod', None, [self.arg], int_rprimitive, [self.block],
+        fn = FuncIR('myfunc', None, 'mod', [self.arg], int_rprimitive, [self.block],
                     self.env)
         emitter = Emitter(EmitterContext(['mod']))
         generate_native_function(fn, emitter, 'prog.py')
@@ -287,7 +287,7 @@ class TestGenerateFunction(unittest.TestCase):
         op = LoadInt(5)
         self.block.ops.append(op)
         self.env.add_op(op)
-        fn = FuncIR('myfunc', None, 'mod', None, [self.arg], list_rprimitive, [self.block],
+        fn = FuncIR('myfunc', None, 'mod', [self.arg], list_rprimitive, [self.block],
                     self.env)
         emitter = Emitter(EmitterContext(['mod']))
         generate_native_function(fn, emitter, 'prog.py')

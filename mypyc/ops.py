@@ -14,7 +14,7 @@ from abc import abstractmethod, abstractproperty
 import re
 from typing import (
     List, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType, Callable, Union,
-    Iterable,
+    Iterable, Sequence
 )
 from collections import OrderedDict
 
@@ -670,7 +670,7 @@ class Call(RegisterOp):
     error_kind = ERR_MAGIC
 
     # TODO: take a FuncIR and extract the ret type
-    def __init__(self, ret_type: RType, fn: str, args: List[Value], line: int) -> None:
+    def __init__(self, ret_type: RType, fn: str, args: Sequence[Value], line: int) -> None:
         super().__init__(line)
         self.fn = fn
         self.args = args
@@ -686,7 +686,7 @@ class Call(RegisterOp):
         return s
 
     def sources(self) -> List[Value]:
-        return self.args[:]
+        return list(self.args[:])
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_call(self)
@@ -1159,7 +1159,6 @@ class FuncIR:
                  name: str,
                  class_name: Optional[str],
                  module_name: str,
-                 namespace: Optional[str],
                  args: List[RuntimeArg],
                  ret_type: RType,
                  blocks: List[BasicBlock],
@@ -1167,7 +1166,6 @@ class FuncIR:
         self.name = name
         self.class_name = class_name
         self.module_name = module_name
-        self.namespace = namespace
         self.args = args
         self.ret_type = ret_type
         self.blocks = blocks
@@ -1177,8 +1175,6 @@ class FuncIR:
         name = self.name
         if self.class_name:
             name += '_' + self.class_name
-        if self.namespace:
-            name += '_' + self.namespace
         return names.private_name(self.module_name, name)
 
     def __str__(self) -> str:
@@ -1193,16 +1189,17 @@ class ClassIR:
 
     # TODO: Use dictionary for attributes in addition to (or instead of) list.
 
-    def __init__(self, name: str, module_name: str, callable: Optional[str] = None) -> None:
+    def __init__(self, name: str, module_name: str, callable: Optional[FuncIR] = None) -> None:
         self.name = name
         self.module_name = module_name
-        self.callable = callable
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
         self.methods = []  # type: List[FuncIR]
         self.vtable = None  # type: Optional[Dict[str, int]]
         self.vtable_size = 0
         self.base = None  # type: Optional[ClassIR]
         self.mro = []  # type: List[ClassIR]
+        if callable:
+            self.methods.append(callable)
 
     def compute_vtable(self) -> None:
         if self.vtable is not None: return
