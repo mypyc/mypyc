@@ -506,7 +506,7 @@ L0:
     r1 = __unicode_0 :: static
     r2 = getattr r0, r1
     r3 = box(int, x)
-    r4 = r2(r3) :: object
+    r4 = pycall(r2, r3)
     r5 = unbox(int, r4)
     return r5
 
@@ -530,7 +530,7 @@ L0:
     r1 = __unicode_0 :: static
     r2 = r0[r1] :: dict
     r3 = box(int, x)
-    r4 = r2(r3) :: object
+    r4 = pycall(r2, r3)
     r5 = unbox(int, r4)
     return r5
 
@@ -553,7 +553,7 @@ L0:
     r2 = getattr r0, r1
     r3 = 5
     r4 = box(int, r3)
-    r5 = r2(r4) :: object
+    r5 = pycall(r2, r4)
     r6 = cast(None, r5)
     r7 = None
     return r7
@@ -575,7 +575,7 @@ L0:
     r2 = __unicode_0 :: static
     r3 = getattr r1, r2
     r4 = box(int, r0)
-    r5 = r3(r4) :: object
+    r5 = pycall(r3, r4)
     r6 = cast(None, r5)
     r7 = None
     return r7
@@ -611,12 +611,12 @@ def f(x):
 L0:
     r0 = __unicode_0 :: static
     r1 = getattr x, r0
-    r2 = r1() :: object
+    r2 = pycall(r1)
     r3 = unbox(int, r2)
     y = r3
     r4 = __unicode_0 :: static
     r5 = getattr x, r4
-    r6 = r5() :: object
+    r6 = pycall(r5)
     r7 = unbox(int, r6)
     return r7
 
@@ -949,7 +949,7 @@ L0:
     r1 = __unicode_0 :: static
     r2 = getattr r0, r1
     r3 = box(int, x)
-    r4 = r2(r3) :: object
+    r4 = pycall(r2, r3)
     r5 = unbox(int, r4)
     return r5
 def return_float():
@@ -972,6 +972,6 @@ def call_callable_type():
 L0:
     r0 = return_callable_type()
     f = r0
-    r1 = f() :: object
+    r1 = pycall(f)
     r2 = cast(float, r1)
     return r2

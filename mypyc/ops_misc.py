@@ -153,7 +153,7 @@ py_setattr_op = func_op(
 
 
 def emit_pycall(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-    emitter.emit_line('%s = PyObject_CallFunctionObjArgs(%s, NULL); ' % (dest, ", ".join(args)))
+    emitter.emit_line('{} = PyObject_CallFunctionObjArgs({}, NULL);'.format(dest, ", ".join(args)))
 
 
 pycall_op = custom_op(arg_types=[object_rprimitive],

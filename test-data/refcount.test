@@ -614,7 +614,7 @@ def g(x: List[int], y: List[int]) -> None:
 L0:
     r0 = __unicode_0 :: static
     r1 = getattr x, r0
-    r2 = r1(y) :: object
+    r2 = pycall(r1, y)
     dec_ref r1
     r3 = cast(None, r2)
     dec_ref r3
