@@ -1008,7 +1008,7 @@ def second() -> str:
 def third() -> str:
     return 'third: normal function'
 [out]
-def __call__(self):
+def inner_outer_obj.__call__(self):
     self :: object
     r0 :: str
 L0:
@@ -1019,13 +1019,13 @@ def outer():
 L0:
     r0 = inner_outer_obj()
     return r0
-def __call__(self):
+def third_first_second_obj.__call__(self):
     self :: object
     r0 :: str
 L0:
     r0 = __unicode_1 :: static
     return r0
-def __call__(self):
+def second_first_obj.__call__(self):
     self :: object
     r0 :: str
 L0:
@@ -1036,7 +1036,7 @@ def first():
 L0:
     r0 = second_first_obj()
     return r0
-def __call__(self, s):
+def dos_uno_obj.__call__(self, s):
     self :: object
     s, r0, r1 :: str
 L0:
@@ -1049,7 +1049,7 @@ def uno(num):
 L0:
     r0 = dos_uno_obj()
     return r0
-def __call__(self, s):
+def zwei_eins_obj.__call__(self, s):
     self :: object
     s, r0, r1 :: str
 L0:
