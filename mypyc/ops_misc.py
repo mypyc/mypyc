@@ -134,7 +134,7 @@ method_op('__setitem__',
           priority=0)
 
 py_getattr_op = func_op(
-    name='getattr',
+    name='builtins.getattr',
     arg_types=[object_rprimitive, object_rprimitive],
     result_type=object_rprimitive,
     error_kind=ERR_MAGIC,
@@ -142,7 +142,7 @@ py_getattr_op = func_op(
 )
 
 py_setattr_op = func_op(
-    name='setattr',
+    name='builtins.setattr',
     arg_types=[object_rprimitive, object_rprimitive, object_rprimitive],
     result_type=bool_rprimitive,
     error_kind=ERR_FALSE,
