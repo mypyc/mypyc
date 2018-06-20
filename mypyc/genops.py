@@ -317,8 +317,8 @@ class IRBuilder(NodeVisitor[Value]):
                     if (name in cls.method_types
                             and not is_same_method_signature(ir.method_types[name],
                                                              cls.method_types[name])):
-                        f = self.gen_glue_func(cls.method_types[name], func, ir, cls,
-                                               node.node.line)
+                        f = self.gen_glue_method(cls.method_types[name], func, ir, cls,
+                                                 node.node.line)
                         ir.glue_methods[(cls, name)] = f
                         self.functions.append(f)
 
@@ -361,8 +361,25 @@ class IRBuilder(NodeVisitor[Value]):
 
         return INVALID_VALUE
 
-    def gen_glue_func(self, sig: FuncSignature, target: FuncIR,
-                      cls: ClassIR, base: ClassIR, line: int) -> FuncIR:
+    def gen_glue_method(self, sig: FuncSignature, target: FuncIR,
+                        cls: ClassIR, base: ClassIR, line: int) -> FuncIR:
+        """Generate glue methods that mediate between different method types in subclasses.
+
+        For example, if we have:
+        class A:
+            def f(self, x: int) -> object: ...
+        then it is totally permissable to have a subclass
+        class B(A):
+            def f(self, x: object) -> int: ...
+        since '(object) -> int' is a subtype of '(int) -> object' by the usual
+        contra/co-variant function subtyping rules.
+
+        The trickiness here is that int and object have different
+        runtime representations in mypyc, so A.f and B.f have
+        different signatures at the native C level. To deal with this,
+        we need to generate glue methods that mediate between the
+        different versions by coercing the arguments and return
+        values. """
         self.enter()
 
         rt_args = (RuntimeArg(sig.args[0].name, RInstance(cls)),) + sig.args[1:]
