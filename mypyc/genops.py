@@ -366,11 +366,15 @@ class IRBuilder(NodeVisitor[Value]):
         """Generate glue methods that mediate between different method types in subclasses.
 
         For example, if we have:
+
         class A:
             def f(self, x: int) -> object: ...
+
         then it is totally permissable to have a subclass
+
         class B(A):
             def f(self, x: object) -> int: ...
+
         since '(object) -> int' is a subtype of '(int) -> object' by the usual
         contra/co-variant function subtyping rules.
 
@@ -379,7 +383,8 @@ class IRBuilder(NodeVisitor[Value]):
         different signatures at the native C level. To deal with this,
         we need to generate glue methods that mediate between the
         different versions by coercing the arguments and return
-        values. """
+        values.
+        """
         self.enter()
 
         rt_args = (RuntimeArg(sig.args[0].name, RInstance(cls)),) + sig.args[1:]

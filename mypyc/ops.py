@@ -1190,6 +1190,9 @@ class FuncIR:
         return '\n'.join(format_func(self))
 
 
+# Descriptions of method and attribute entries in class vtables.
+# The 'cls' field is the class that the method/attr was defined in,
+# which might be a parent class.
 VTableMethod = NamedTuple(
     'VTableMethod', [('cls', 'ClassIR'),
                      ('method', FuncIR)])
@@ -1211,9 +1214,11 @@ class ClassIR:
         self.name = name
         self.module_name = module_name
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
+        # We populate method_types with the signatures of every method before
+        # we generate methods, and we rely on this information being present.
         self.method_types = OrderedDict()  # type: OrderedDict[str, FuncSignature]
         self.methods = OrderedDict()  # type: OrderedDict[str, FuncIR]
-        # glue methods for boxing/unboxing when a class changes the type
+        # Glue methods for boxing/unboxing when a class changes the type
         # while overriding a method. Maps from (parent class overrided, method)
         # to IR of glue method.
         self.glue_methods = {}  # type: Dict[Tuple[ClassIR, str], FuncIR]
@@ -1229,12 +1234,14 @@ class ClassIR:
 
     def attr_type(self, name: str) -> RType:
         for ir in self.mro:
-            if name in ir.attributes: return ir.attributes[name]
+            if name in ir.attributes:
+                return ir.attributes[name]
         assert False, '%r has no attribute %r' % (self.name, name)
 
     def method_sig(self, name: str) -> FuncSignature:
         for ir in self.mro:
-            if name in ir.method_types: return ir.method_types[name]
+            if name in ir.method_types:
+                return ir.method_types[name]
         assert False, '%r has no method %r' % (self.name, name)
 
     def name_prefix(self, names: NameGenerator) -> str:
