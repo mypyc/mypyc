@@ -215,6 +215,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.types = types
         self.environment = Environment()
         self.environments = [self.environment]
+        self.ret_types = []  # type: List[RType]
         self.blocks = []  # type: List[List[BasicBlock]]
         self.functions = []  # type: List[FuncIR]
         self.classes = []  # type: List[ClassIR]
@@ -307,10 +308,8 @@ class IRBuilder(NodeVisitor[Value]):
         return INVALID_VALUE
 
     def gen_func_def(self, fdef: FuncDef, class_name: Optional[str] = None) -> FuncIR:
-        self.environment.add_func(fdef)
-
         # If there is more than one environment in the environment stack, then we are visiting a
-        # non-global function, and set a flag to note this.
+        # non-global function.
         is_nested = len(self.environments) > 1
 
         self.enter(fdef.name())
@@ -324,40 +323,28 @@ class IRBuilder(NodeVisitor[Value]):
             assert arg.variable.type, "Function argument missing type"
             self.environment.add_local(arg.variable, self.type_to_rtype(arg.variable.type),
                                        is_arg=True)
-        self.environment.ret_type = self.convert_return_type(fdef)
+        self.ret_types[-1] = self.convert_return_type(fdef)
 
         fdef.body.accept(self)
 
-        if (is_none_rprimitive(self.environment.ret_type) or
-                is_object_rprimitive(self.environment.ret_type)):
+        if (is_none_rprimitive(self.ret_types[-1]) or
+                is_object_rprimitive(self.ret_types[-1])):
             self.add_implicit_return()
         else:
             self.add_implicit_unreachable()
 
-        blocks, env = self.leave()
+        blocks, env, ret_type = self.leave()
         args = self.convert_args(fdef)
 
         if is_nested:
-            # If this is a nested function, create a callable class to represent it, and change the
-            # function to instead be the '__call__' method of the newly created class. The class
-            # name is generated using the names of the functions that enclose this. A 'self'
-            # argument is added to the function which gets changed into a class method.
             namespace = self.generate_function_namespace()
-            class_name = '{}_{}_obj'.format(fdef.name(), namespace)
-            args.insert(0, RuntimeArg('self', object_rprimitive))
-            func_ir = FuncIR('__call__', class_name, self.module_name, args, env.ret_type, blocks,
-                             env)
-            class_ir = ClassIR(class_name, self.module_name)
-            class_ir.methods.append(func_ir)
-            self.classes.append(class_ir)
+            func_ir = self.generate_function_class(fdef, namespace, blocks, env, ret_type)
 
-            # Whenever a function definition is encountered, instantiate the callable class
-            # representing the function, and load it into a register in the current environment.
-            temp_reg = self.load_function_class(fdef, namespace)
-            func_reg = self.environment.add_local(fdef, object_rprimitive)
-            self.add(Assign(func_reg, temp_reg))
+            # Instantiate the callable class and load it into a register in the current environment
+            # immediately so that it does not have to be loaded every time the function is called.
+            self.instantiate_function_class(fdef, namespace)
         else:
-            func_ir = FuncIR(fdef.name(), class_name, self.module_name, args, env.ret_type, blocks,
+            func_ir = FuncIR(fdef.name(), class_name, self.module_name, args, ret_type, blocks,
                              env)
         return func_ir
 
@@ -398,7 +385,7 @@ class IRBuilder(NodeVisitor[Value]):
     def visit_return_stmt(self, stmt: ReturnStmt) -> Value:
         if stmt.expr:
             retval = self.accept(stmt.expr)
-            retval = self.coerce(retval, self.environment.ret_type, stmt.line)
+            retval = self.coerce(retval, self.ret_types[-1], stmt.line)
         else:
             retval = self.add(PrimitiveOp([], none_op, line=-1))
         self.add(Return(retval))
@@ -833,7 +820,6 @@ class IRBuilder(NodeVisitor[Value]):
             return self.load_static_module_attr(expr)
 
         # TODO: Behavior currently only defined for Var and FuncDef node types.
-        assert isinstance(expr.node, SymbolNode), 'node must be SymbolNode type'
         if expr.kind == LDEF:
             try:
                 return self.environment.lookup(expr.node)
@@ -1287,6 +1273,7 @@ class IRBuilder(NodeVisitor[Value]):
     def enter(self, name: Optional[str] = None) -> None:
         self.environment = Environment(name)
         self.environments.append(self.environment)
+        self.ret_types.append(none_rprimitive)
         self.blocks.append([])
         self.new_block()
 
@@ -1302,11 +1289,12 @@ class IRBuilder(NodeVisitor[Value]):
         goto.label = block.label
         return block
 
-    def leave(self) -> Tuple[List[BasicBlock], Environment]:
+    def leave(self) -> Tuple[List[BasicBlock], Environment, RType]:
         blocks = self.blocks.pop()
         env = self.environments.pop()
+        ret_type = self.ret_types.pop()
         self.environment = self.environments[-1]
-        return blocks, env
+        return blocks, env, ret_type
 
     def add(self, op: Op) -> Value:
         self.blocks[-1][-1].ops.append(op)
@@ -1316,17 +1304,6 @@ class IRBuilder(NodeVisitor[Value]):
 
     def generate_function_namespace(self) -> str:
         return '_'.join(env.name for env in self.environments if env.name)
-
-    def get_function_namespace(self, funcName: str) -> Optional[str]:
-        valid_function = False
-        namespaces = []
-        for env in self.environments:
-            if env.name:
-                namespaces.append(env.name)
-            if funcName in env.functions:
-                valid_function = True
-                break
-        return '_'.join(namespaces) if valid_function else None
 
     def primitive_op(self, desc: OpDescription, args: List[Value], line: int) -> Value:
         assert desc.result_type is not None
@@ -1379,6 +1356,44 @@ class IRBuilder(NodeVisitor[Value]):
     def box_expr(self, expr: Expression) -> Value:
         return self.box(self.accept(expr))
 
+    def generate_function_class(self,
+                                fdef: FuncDef,
+                                namespace: str,
+                                blocks: List[BasicBlock],
+                                env: Environment,
+                                ret_type: RType) -> FuncIR:
+        """Generates a callable class representing a nested function.
+
+        This takes a FuncDef and its associated namespace, blocks, environment, and return type and
+        builds a ClassIR with its '__call__' method implemented to represent the function. Note
+        that the name of the function is changed to be '__call__', and a 'self' parameter is added
+        to its list of arguments, as it becomes a class method. The name of the newly constructed
+        class is generated using the names of the functions that enclose the given nested function.
+
+        Returns a newly constructed FuncIR associated with the given FuncDef.
+        """
+        class_name = '{}_{}_obj'.format(fdef.name(), namespace)
+        args = self.convert_args(fdef)
+        args.insert(0, RuntimeArg('self', object_rprimitive))
+        func_ir = FuncIR('__call__', class_name, self.module_name, args, ret_type, blocks, env)
+        class_ir = ClassIR(class_name, self.module_name)
+        class_ir.methods.append(func_ir)
+        self.classes.append(class_ir)
+        return func_ir
+
+    def instantiate_function_class(self, fdef: FuncDef, namespace: str) -> Value:
+        """Assigns a callable class to a register named after the given function definition."""
+        temp_reg = self.load_function_class(fdef, namespace)
+        func_reg = self.environment.add_local(fdef, object_rprimitive)
+        return self.add(Assign(func_reg, temp_reg))
+
+    def load_function_class(self, fdef: FuncDef, namespace: str) -> Value:
+        """Loads a callable class representing a nested function into a register."""
+        return self.add(Call(self.convert_return_type(fdef),
+                             '{}.{}_{}_obj'.format(self.module_name, fdef.name(), namespace),
+                             [],
+                             fdef.line))
+
     def load_global(self, expr: NameExpr) -> Value:
         """Loads a Python-level global.
 
@@ -1388,13 +1403,6 @@ class IRBuilder(NodeVisitor[Value]):
         _globals = self.add(LoadStatic(object_rprimitive, '_globals'))
         reg = self.load_static_unicode(expr.name)
         return self.add(PrimitiveOp([_globals, reg], dict_get_item_op, expr.line))
-
-    def load_function_class(self, fdef: FuncDef, namespace: str) -> Value:
-        """Loads a callable class representing a nested function into a register."""
-        return self.add(Call(self.convert_return_type(fdef),
-                             '{}.{}_{}_obj'.format(self.module_name, fdef.name(), namespace),
-                             [],
-                             fdef.line))
 
     def load_static_int(self, value: int) -> Value:
         """Loads a static integer value into a register."""

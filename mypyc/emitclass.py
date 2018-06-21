@@ -49,7 +49,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
         init_args = []
 
     call_fn = cl.get_method('__call__')
-    call_name = '{}{}_{}'.format(PREFIX, '__call__', name_prefix) if call_fn else '0'
+    call_name = '{}{}'.format(PREFIX, call_fn.cname(emitter.names)) if call_fn else '0'
 
     emitter.emit_line('static PyObject *{}(void);'.format(setup_name))
     # TODO: Use RInstance

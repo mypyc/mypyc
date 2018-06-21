@@ -326,8 +326,6 @@ class Environment:
         self.name = name
         self.indexes = OrderedDict()  # type: Dict[Value, int]
         self.symtable = {}  # type: Dict[SymbolNode, Register]
-        self.functions = {}  # type: Dict[str, FuncDef]
-        self.ret_type = none_rprimitive  # type: RType
         self.temp_index = 0
 
     def regs(self) -> Iterable['Value']:
@@ -344,10 +342,6 @@ class Environment:
         self.symtable[symbol] = reg
         self.add(reg, symbol.name())
         return reg
-
-    def add_func(self, func: FuncDef) -> None:
-        assert isinstance(func, FuncDef)
-        self.functions[func.name()] = func
 
     def lookup(self, symbol: SymbolNode) -> 'Register':
         return self.symtable[symbol]
