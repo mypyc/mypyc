@@ -319,13 +319,50 @@ class ROptional(RType):
         return hash(('optional', self.value_type))
 
 
+class AssignmentTarget(object):
+    type = None  # type: RType
+
+
+class AssignmentTargetRegister(AssignmentTarget):
+    """Register as assignment target"""
+
+    def __init__(self, register: 'Register') -> None:
+        self.register = register
+        self.type = register.type
+
+
+class AssignmentTargetIndex(AssignmentTarget):
+    """base[index] as assignment target"""
+
+    def __init__(self, base: 'Value', index: 'Value') -> None:
+        self.base = base
+        self.index = index
+        # TODO: This won't be right for user-defined classes. Store the
+        #       lvalue type in mypy and remove this special case.
+        self.type = object_rprimitive
+
+
+class AssignmentTargetAttr(AssignmentTarget):
+    """obj.attr as assignment target"""
+
+    def __init__(self, obj: 'Value', attr: str) -> None:
+        self.obj = obj
+        self.attr = attr
+        if isinstance(obj.type, RInstance):
+            self.obj_type = obj.type  # type: RType
+            self.type = obj.type.attr_type(attr)
+        else:
+            self.obj_type = object_rprimitive
+            self.type = object_rprimitive
+
+
 class Environment:
     """Maintain the register symbol table and manage temp generation"""
 
     def __init__(self, name: Optional[str] = None) -> None:
         self.name = name
         self.indexes = OrderedDict()  # type: Dict[Value, int]
-        self.symtable = {}  # type: Dict[SymbolNode, Register]
+        self.symtable = {}  # type: Dict[SymbolNode, AssignmentTarget]
         self.temp_index = 0
 
     def regs(self) -> Iterable['Value']:
@@ -338,12 +375,20 @@ class Environment:
     def add_local(self, symbol: SymbolNode, typ: RType, is_arg: bool = False) -> 'Register':
         assert isinstance(symbol, SymbolNode)
         reg = Register(typ, symbol.line, is_arg = is_arg)
-
-        self.symtable[symbol] = reg
+        target = AssignmentTargetRegister(reg)
+        self.symtable[symbol] = target
         self.add(reg, symbol.name())
         return reg
 
-    def lookup(self, symbol: SymbolNode) -> 'Register':
+    def add_target(self, symbol: SymbolNode, typ: RType, is_arg: bool = False) -> AssignmentTarget:
+        assert isinstance(symbol, SymbolNode)
+        reg = Register(typ, symbol.line, is_arg = is_arg)
+        target = AssignmentTargetRegister(reg)
+        self.symtable[symbol] = target
+        self.add(reg, symbol.name())
+        return target
+
+    def lookup(self, symbol: SymbolNode) -> AssignmentTarget:
         return self.symtable[symbol]
 
     def add_temp(self, typ: RType, is_arg: bool = False) -> 'Register':

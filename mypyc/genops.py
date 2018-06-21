@@ -48,7 +48,8 @@ from mypyc.ops import (
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp,
     ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap, FuncSignature,
-    VTableAttr, VTableMethod,
+    VTableAttr, VTableMethod, AssignmentTarget, AssignmentTargetRegister, AssignmentTargetIndex,
+    AssignmentTargetAttr
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import list_len_op, list_get_item_op, list_set_item_op, new_list_op
@@ -233,43 +234,6 @@ def prepare_class_def(cdef: ClassDef, mapper: Mapper) -> None:
     ir.mro = mro
 
 
-class AssignmentTarget(object):
-    type = None  # type: RType
-
-
-class AssignmentTargetRegister(AssignmentTarget):
-    """Register as assignment target"""
-
-    def __init__(self, register: Register) -> None:
-        self.register = register
-        self.type = register.type
-
-
-class AssignmentTargetIndex(AssignmentTarget):
-    """base[index] as assignment target"""
-
-    def __init__(self, base: Value, index: Value) -> None:
-        self.base = base
-        self.index = index
-        # TODO: This won't be right for user-defined classes. Store the
-        #       lvalue type in mypy and remove this special case.
-        self.type = object_rprimitive
-
-
-class AssignmentTargetAttr(AssignmentTarget):
-    """obj.attr as assignment target"""
-
-    def __init__(self, obj: Value, attr: str) -> None:
-        self.obj = obj
-        self.attr = attr
-        if isinstance(obj.type, RInstance):
-            self.obj_type = obj.type  # type: RType
-            self.type = obj.type.attr_type(attr)
-        else:
-            self.obj_type = object_rprimitive
-            self.type = object_rprimitive
-
-
 class IRBuilder(NodeVisitor[Value]):
     def __init__(self,
                  types: Dict[Expression, Type],
@@ -409,7 +373,7 @@ class IRBuilder(NodeVisitor[Value]):
 
         # The environment operates on Vars, so we make some up
         fake_vars = [(Var(arg.name), arg.type) for arg in rt_args]
-        args = [self.environment.add_local(var, type, is_arg=True)
+        args = [self.read_from_target(self.environment.add_target(var, type, is_arg=True), -1)
                 for var, type in fake_vars]  # type: List[Value]
         self.ret_types[-1] = sig.ret_type
 
@@ -440,10 +404,10 @@ class IRBuilder(NodeVisitor[Value]):
             # If this is a nested function, then add a 'self' field to the environment, since we
             # will be instantiating the function as a method of a new class representing that
             # original function.
-            self.environment.add_local(Var('self'), object_rprimitive, is_arg=True)
+            self.environment.add_target(Var('self'), object_rprimitive, is_arg=True)
         for arg in fdef.arguments:
             assert arg.variable.type, "Function argument missing type"
-            self.environment.add_local(arg.variable, self.type_to_rtype(arg.variable.type),
+            self.environment.add_target(arg.variable, self.type_to_rtype(arg.variable.type),
                                        is_arg=True)
         self.ret_types[-1] = sig.ret_type
 
@@ -534,12 +498,10 @@ class IRBuilder(NodeVisitor[Value]):
             assert isinstance(lvalue.node, Var)  # TODO: Can this fail?
             if lvalue.node not in self.environment.symtable:
                 # Define a new variable.
-                lvalue_reg = self.environment.add_local(lvalue.node, self.node_type(lvalue))
+                return self.environment.add_target(lvalue.node, self.node_type(lvalue))
             else:
                 # Assign to a previously defined variable.
-                lvalue_reg = self.environment.lookup(lvalue.node)
-
-            return AssignmentTargetRegister(lvalue_reg)
+                return self.environment.lookup(lvalue.node)
         elif isinstance(lvalue, IndexExpr):
             # Indexed assignment x[y] = e
             base = self.accept(lvalue.base)
@@ -733,7 +695,7 @@ class IRBuilder(NodeVisitor[Value]):
 
             assert isinstance(s.index, NameExpr)
             assert isinstance(s.index.node, Var)
-            lvalue_reg = self.environment.add_local(s.index.node, self.node_type(s.index))
+            lvalue = self.environment.add_target(s.index.node, self.node_type(s.index))
 
             condition_block = self.goto_new_block()
 
@@ -754,7 +716,8 @@ class IRBuilder(NodeVisitor[Value]):
             target_type = self.type_to_rtype(target_list_type.args[0])
             value_box = self.add(PrimitiveOp([expr_reg, index_reg], list_get_item_op, s.line))
 
-            self.add(Assign(lvalue_reg, self.unbox_or_cast(value_box, target_type, s.line)))
+            self.assign_to_target(lvalue,
+                                  self.unbox_or_cast(value_box, target_type, s.line), s.line)
 
             s.body.accept(self)
 
@@ -774,7 +737,7 @@ class IRBuilder(NodeVisitor[Value]):
 
             assert isinstance(s.index, NameExpr)
             assert isinstance(s.index.node, Var)
-            lvalue_reg = self.environment.add_local(s.index.node, object_rprimitive)
+            lvalue = self.environment.add_target(s.index.node, object_rprimitive)
 
             # Define registers to contain the expression, along with the iterator that will be used
             # for the for-loop.
@@ -797,7 +760,7 @@ class IRBuilder(NodeVisitor[Value]):
             # the body, goto the label that calls the iterator's __next__ function again.
             body_block = self.new_block()
             self.set_branches(branches, False, body_block)
-            self.add(Assign(lvalue_reg, next_reg))
+            self.assign_to_target(lvalue, next_reg, s.line)
             s.body.accept(self)
             self.add(Goto(next_block.label))
 
@@ -933,7 +896,9 @@ class IRBuilder(NodeVisitor[Value]):
         # TODO: Behavior currently only defined for Var and FuncDef node types.
         if expr.kind == LDEF:
             try:
-                return self.environment.lookup(expr.node)
+                target = self.environment.lookup(expr.node)
+                assert isinstance(target, AssignmentTargetRegister)
+                return target.register
             except KeyError:
                 assert False, 'expression %s not defined in current scope'.format(expr.name)
         else:
@@ -1493,12 +1458,12 @@ class IRBuilder(NodeVisitor[Value]):
 
     def instantiate_function_class(self, fdef: FuncDef, namespace: str) -> Value:
         """Assigns a callable class to a register named after the given function definition."""
-        temp_reg = self.add(Call(self.mapper.fdef_to_sig(fdef).ret_type,
+        func_reg = self.add(Call(self.mapper.fdef_to_sig(fdef).ret_type,
                                  '{}.{}_{}_obj'.format(self.module_name, fdef.name(), namespace),
                                  [],
                                  fdef.line))
-        func_reg = self.environment.add_local(fdef, object_rprimitive)
-        return self.add(Assign(func_reg, temp_reg))
+        func_target = self.environment.add_target(fdef, object_rprimitive)
+        return self.assign_to_target(func_target, func_reg, fdef.line)
 
     def load_global(self, expr: NameExpr) -> Value:
         """Loads a Python-level global.
