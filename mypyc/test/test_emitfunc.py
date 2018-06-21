@@ -48,7 +48,8 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
         self.context = EmitterContext(['mod'])
         self.emitter = Emitter(self.context, self.env)
         self.declarations = Emitter(self.context, self.env)
-        self.visitor = FunctionEmitterVisitor(self.emitter, self.declarations, 'func', 'prog.py')
+        self.visitor = FunctionEmitterVisitor(self.emitter, self.declarations, 'func', 'prog.py',
+                                              'prog')
 
     def test_goto(self) -> None:
         self.assert_emit(Goto(Label(2)),
@@ -270,7 +271,7 @@ class TestGenerateFunction(unittest.TestCase):
         self.block.ops.append(Return(self.reg))
         fn = FuncIR('myfunc', None, 'mod', [self.arg], int_rprimitive, [self.block], self.env)
         emitter = Emitter(EmitterContext(['mod']))
-        generate_native_function(fn, emitter, 'prog.py')
+        generate_native_function(fn, emitter, 'prog.py', 'prog')
         result = emitter.fragments
         assert_string_arrays_equal(
             [
@@ -288,7 +289,7 @@ class TestGenerateFunction(unittest.TestCase):
         self.env.add_op(op)
         fn = FuncIR('myfunc', None, 'mod', [self.arg], list_rprimitive, [self.block], self.env)
         emitter = Emitter(EmitterContext(['mod']))
-        generate_native_function(fn, emitter, 'prog.py')
+        generate_native_function(fn, emitter, 'prog.py', 'prog')
         result = emitter.fragments
         assert_string_arrays_equal(
             [
