@@ -14,7 +14,7 @@ from abc import abstractmethod, abstractproperty
 import re
 from typing import (
     List, Sequence, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType, Callable,
-    Union, Iterable,
+    Union, Iterable, Type,
 )
 from collections import OrderedDict
 
@@ -1260,13 +1260,16 @@ class ClassIR:
         return '{}Type'.format(self.name_prefix(names))
 
 
+LiteralsMap = Dict[Tuple[Type[object], Union[int, float, str]], str]
+
+
 class ModuleIR:
     """Intermediate representation of a module."""
 
     def __init__(self,
             imports: List[str],
             from_imports: Dict[str, List[Tuple[str, str]]],
-            literals: Dict[Union[int, float, str], str],
+            literals: LiteralsMap,
             functions: List[FuncIR],
             classes: List[ClassIR]) -> None:
         self.imports = imports[:]
