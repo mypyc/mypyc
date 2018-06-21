@@ -924,3 +924,18 @@ uno!
 eins?
 second: normal function
 third: normal function
+
+[case testFreeVars]
+from typing import Callable
+
+def outer(num: int) -> int:
+    def inner() -> int:
+        return num
+    return inner()
+
+[file driver.py]
+from native import outer
+print(outer(1))
+
+[out]
+1

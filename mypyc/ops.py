@@ -1255,10 +1255,13 @@ class ClassIR:
 
     This also describes the runtime structure of native instances.
     """
-
-    def __init__(self, name: str, module_name: str) -> None:
+    def __init__(self,
+                 name: str,
+                 module_name: str,
+                 environment: Optional[Environment] = None) -> None:
         self.name = name
         self.module_name = module_name
+        self.environment = environment
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
         # We populate method_types with the signatures of every method before
         # we generate methods, and we rely on this information being present.

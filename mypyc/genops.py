@@ -40,16 +40,16 @@ from mypy.checkmember import bind_self
 
 from mypyc.common import MAX_SHORT_INT
 from mypyc.ops import (
-    BasicBlock, Environment, Op, LoadInt, RType, Value, Register, Label, Return, FuncIR, Assign,
-    Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple, Unreachable, TupleGet, TupleSet,
-    ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, PyCall, ROptional,
+    BasicBlock, AssignmentTarget, AssignmentTargetRegister, AssignmentTargetIndex,
+    AssignmentTargetAttr, Environment, Op, LoadInt, RType, Value, Register, Label, Return, FuncIR,
+    Assign, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple, Unreachable, TupleGet,
+    TupleSet, ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, PyCall, ROptional,
     c_module_name, PyMethodCall, MethodCall, INVALID_VALUE, INVALID_LABEL, int_rprimitive,
     is_int_rprimitive, float_rprimitive, is_float_rprimitive, bool_rprimitive, list_rprimitive,
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp,
     ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap, FuncSignature,
-    VTableAttr, VTableMethod, AssignmentTarget, AssignmentTargetRegister, AssignmentTargetIndex,
-    AssignmentTargetAttr
+    VTableAttr, VTableMethod,
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import list_len_op, list_get_item_op, list_set_item_op, new_list_op
@@ -428,6 +428,10 @@ class IRBuilder(NodeVisitor[Value]):
             # Instantiate the callable class and load it into a register in the current environment
             # immediately so that it does not have to be loaded every time the function is called.
             self.instantiate_function_class(fdef, namespace)
+
+            self.classes.append(ClassIR(name='{}_{}_env'.format(fdef.name(), namespace),
+                                        module_name=self.module_name,
+                                        environment=env))
         else:
             func_ir = FuncIR(fdef.name(), class_name, self.module_name, sig, blocks,
                              env)

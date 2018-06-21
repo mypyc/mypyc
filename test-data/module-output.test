@@ -7,6 +7,7 @@ def f(x: int) -> int:
 [out]
 #include <Python.h>
 #include <CPy.h>
+#include "structmember.h"
 
 static PyObject *_globals;
 static CPyModule *module_builtins;
