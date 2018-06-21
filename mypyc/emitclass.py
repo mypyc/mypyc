@@ -51,6 +51,9 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
         init_name = '0'
         init_args = []
 
+    call_fn = cl.get_method('__call__')
+    call_name = '{}{}'.format(PREFIX, call_fn.cname(emitter.names)) if call_fn else '0'
+
     emitter.emit_line('static PyObject *{}(void);'.format(setup_name))
     # TODO: Use RInstance
     ctor = FuncIR(cl.name, None, module, FuncSignature(init_args, object_rprimitive),
@@ -92,7 +95,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
             0,                         /* tp_as_sequence */
             0,                         /* tp_as_mapping */
             0,                         /* tp_hash  */
-            0,                         /* tp_call */
+            {tp_call},                 /* tp_call */
             0,                         /* tp_str */
             0,                         /* tp_getattro */
             0,                         /* tp_setattro */
@@ -123,6 +126,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
                     traverse_name=traverse_name,
                     clear_name=clear_name,
                     dealloc_name=dealloc_name,
+                    tp_call=call_name,
                     new_name=new_name,
                     methods_name=methods_name,
                     getseters_name=getseters_name,

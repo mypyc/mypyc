@@ -18,7 +18,7 @@ from typing import (
 )
 from collections import OrderedDict
 
-from mypy.nodes import Var
+from mypy.nodes import SymbolNode, Var, FuncDef
 
 from mypyc.namegen import NameGenerator
 
@@ -322,9 +322,10 @@ class ROptional(RType):
 class Environment:
     """Maintain the register symbol table and manage temp generation"""
 
-    def __init__(self) -> None:
+    def __init__(self, name: Optional[str] = None) -> None:
+        self.name = name
         self.indexes = OrderedDict()  # type: Dict[Value, int]
-        self.symtable = {}  # type: Dict[Var, Register]
+        self.symtable = {}  # type: Dict[SymbolNode, Register]
         self.temp_index = 0
 
     def regs(self) -> Iterable['Value']:
@@ -334,16 +335,16 @@ class Environment:
         reg.name = name
         self.indexes[reg] = len(self.indexes)
 
-    def add_local(self, var: Var, typ: RType, is_arg: bool = False) -> 'Register':
-        assert isinstance(var, Var)
-        reg = Register(typ, var.line, is_arg = is_arg)
+    def add_local(self, symbol: SymbolNode, typ: RType, is_arg: bool = False) -> 'Register':
+        assert isinstance(symbol, SymbolNode)
+        reg = Register(typ, symbol.line, is_arg = is_arg)
 
-        self.symtable[var] = reg
-        self.add(reg, var.name())
+        self.symtable[symbol] = reg
+        self.add(reg, symbol.name())
         return reg
 
-    def lookup(self, var: Var) -> 'Register':
-        return self.symtable[var]
+    def lookup(self, symbol: SymbolNode) -> 'Register':
+        return self.symtable[symbol]
 
     def add_temp(self, typ: RType, is_arg: bool = False) -> 'Register':
         assert isinstance(typ, RType)
@@ -679,7 +680,7 @@ class Call(RegisterOp):
         return s
 
     def sources(self) -> List[Value]:
-        return self.args[:]
+        return list(self.args[:])
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_call(self)
