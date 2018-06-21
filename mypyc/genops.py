@@ -1493,16 +1493,12 @@ class IRBuilder(NodeVisitor[Value]):
 
     def instantiate_function_class(self, fdef: FuncDef, namespace: str) -> Value:
         """Assigns a callable class to a register named after the given function definition."""
-        temp_reg = self.load_function_class(fdef, namespace)
+        temp_reg = self.add(Call(self.mapper.fdef_to_sig(fdef).ret_type,
+                                 '{}.{}_{}_obj'.format(self.module_name, fdef.name(), namespace),
+                                 [],
+                                 fdef.line))
         func_reg = self.environment.add_local(fdef, object_rprimitive)
         return self.add(Assign(func_reg, temp_reg))
-
-    def load_function_class(self, fdef: FuncDef, namespace: str) -> Value:
-        """Loads a callable class representing a nested function into a register."""
-        return self.add(Call(self.mapper.fdef_to_sig(fdef).ret_type,
-                             '{}.{}_{}_obj'.format(self.module_name, fdef.name(), namespace),
-                             [],
-                             fdef.line))
 
     def load_global(self, expr: NameExpr) -> Value:
         """Loads a Python-level global.
