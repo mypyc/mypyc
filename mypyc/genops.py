@@ -14,11 +14,11 @@ It would be translated to something that conceptually looks like this:
    return r3
 """
 
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Tuple, Optional, Union, Sequence
 
 from mypy.nodes import (
-    Node, MypyFile, FuncDef, ReturnStmt, AssignmentStmt, OpExpr, IntExpr, NameExpr, LDEF, Var,
-    IfStmt, UnaryExpr, ComparisonExpr, WhileStmt, Argument, CallExpr, IndexExpr, Block,
+    Node, MypyFile, SymbolNode, FuncDef, ReturnStmt, AssignmentStmt, OpExpr, IntExpr, NameExpr,
+    LDEF, Var, IfStmt, UnaryExpr, ComparisonExpr, WhileStmt, Argument, CallExpr, IndexExpr, Block,
     Expression, ListExpr, ExpressionStmt, MemberExpr, ForStmt, RefExpr, Lvalue, BreakStmt,
     ContinueStmt, ConditionalExpr, OperatorAssignmentStmt, TupleExpr, ClassDef, TypeInfo,
     Import, ImportFrom, ImportAll, DictExpr, StrExpr, CastExpr, TempNode, ARG_POS, MODULE_REF,
@@ -42,35 +42,110 @@ from mypyc.common import MAX_SHORT_INT
 from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Value, Register, Return, FuncIR, Assign,
     Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple, Unreachable, TupleGet, TupleSet,
-    ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, PyGetAttr, PyCall, ROptional,
+    ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, PyCall, ROptional,
     c_module_name, PyMethodCall, MethodCall, INVALID_VALUE, INVALID_LABEL, int_rprimitive,
     is_int_rprimitive, float_rprimitive, is_float_rprimitive, bool_rprimitive, list_rprimitive,
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp,
-    ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, PySetAttr,
+    ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap, FuncSignature,
+    VTableAttr, VTableMethod,
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
-from mypyc.ops_list import list_len_op, list_get_item_op, new_list_op
-from mypyc.ops_dict import new_dict_op
-from mypyc.ops_misc import none_op, iter_op, next_op, no_err_occurred_op
+from mypyc.ops_list import list_len_op, list_get_item_op, list_set_item_op, new_list_op
+from mypyc.ops_dict import new_dict_op, dict_get_item_op
+from mypyc.ops_misc import (
+    none_op, iter_op, next_op, no_err_occurred_op, py_getattr_op, py_setattr_op,
+)
 from mypyc.subtype import is_subtype
-from mypyc.sametype import is_same_type
+from mypyc.sametype import is_same_type, is_same_method_signature
 
 
-def build_ir(module: MypyFile,
-             types: Dict[Expression, Type]) -> ModuleIR:
+def build_ir(modules: List[MypyFile],
+             types: Dict[Expression, Type]) -> List[Tuple[str, ModuleIR]]:
+    result = []
     mapper = Mapper()
-    builder = IRBuilder(types, mapper)
-    module.accept(builder)
 
-    return ModuleIR(builder.imports, builder.literals, builder.functions, builder.classes)
+    # Collect all classes defined in the compilation unit.
+    classes = []
+    for module in modules:
+        module_classes = [node for node in module.defs if isinstance(node, ClassDef)]
+        classes.extend([(module.fullname(), cdef) for cdef in module_classes])
+
+    # Collect all class mappings so that we can bind arbitrary class name
+    # references even if there are import cycles.
+    for module_name, cdef in classes:
+        class_ir = ClassIR(cdef.name, module_name)
+        mapper.type_to_ir[cdef.info] = class_ir
+
+    # Populate structural information in class IR.
+    for _, cdef in classes:
+        prepare_class_def(cdef, mapper)
+
+    # Generate IR for all modules.
+    module_names = [mod.fullname() for mod in modules]
+    for module in modules:
+        builder = IRBuilder(types, mapper, module_names)
+        module.accept(builder)
+        ir = ModuleIR(
+            builder.imports,
+            builder.from_imports,
+            mapper.literals,
+            builder.functions,
+            builder.classes
+        )
+        result.append((module.fullname(), ir))
+
+    # Compute vtables.
+    for _, cdef in classes:
+        compute_vtable(mapper.type_to_ir[cdef.info])
+
+    return result
+
+
+def compute_vtable(cls: ClassIR) -> None:
+    """Compute the vtable structure for a class."""
+    if cls.vtable is not None: return
+    cls.vtable = {}
+    entries = cls.vtable_entries
+    if cls.base:
+        compute_vtable(cls.base)
+        assert cls.base.vtable is not None
+        cls.vtable.update(cls.base.vtable)
+        prefix = cls.base.vtable_entries
+    else:
+        prefix = []
+
+    # Include the vtable from the parent classes, but handle method overrides.
+    for entry in prefix:
+        if isinstance(entry, VTableMethod):
+            method = entry.method
+            if method.name in cls.methods:
+                if is_same_method_signature(method.sig, cls.methods[method.name].sig):
+                    entry = VTableMethod(cls, cls.methods[method.name])
+                else:
+                    entry = VTableMethod(cls, cls.glue_methods[(entry.cls, method.name)])
+        entries.append(entry)
+
+    for attr in cls.attributes:
+        cls.vtable[attr] = len(entries)
+        entries.append(VTableAttr(cls, attr, is_getter=True))
+        entries.append(VTableAttr(cls, attr, is_getter=False))
+    for fn in cls.methods.values():
+        cls.vtable[fn.name] = len(entries)
+        entries.append(VTableMethod(cls, fn))
 
 
 class Mapper:
-    """Keep track of mappings from mypy AST to the IR."""
+    """Keep track of mappings from mypy concepts to IR concepts.
+
+    This state is shared across all modules in a compilation unit.
+    """
 
     def __init__(self) -> None:
         self.type_to_ir = {}  # type: Dict[TypeInfo, ClassIR]
+        # Maps integer, float, and unicode literals to the static c name for that literal
+        # TODO: Maybe C names should generated only when emitting C?
+        self.literals = {}  # type: LiteralsMap
 
     def type_to_rtype(self, typ: Type) -> RType:
         if isinstance(typ, Instance):
@@ -114,6 +189,49 @@ class Mapper:
             return self.type_to_rtype(typ.upper_bound)
         assert False, '%s unsupported' % type(typ)
 
+    def fdef_to_sig(self, fdef: FuncDef) -> FuncSignature:
+        assert isinstance(fdef.type, CallableType)
+        args = [RuntimeArg(arg.variable.name(), self.type_to_rtype(fdef.type.arg_types[i]))
+                for i, arg in enumerate(fdef.arguments)]
+        ret = self.type_to_rtype(fdef.type.ret_type)
+        return FuncSignature(args, ret)
+
+    def c_name_for_literal(self, value: Union[int, float, str]) -> str:
+        # Include type to distinguish between 1 and 1.0, and so on.
+        key = (type(value), value)
+        if key not in self.literals:
+            if isinstance(value, str):
+                prefix = '__unicode_'
+            elif isinstance(value, float):
+                prefix = '__float_'
+            else:
+                assert isinstance(value, int)
+                prefix = '__int_'
+            self.literals[key] = prefix + str(len(self.literals))
+        return self.literals[key]
+
+
+def prepare_class_def(cdef: ClassDef, mapper: Mapper) -> None:
+    ir = mapper.type_to_ir[cdef.info]
+    info = cdef.info
+    for name, node in info.names.items():
+        if isinstance(node.node, Var):
+            assert node.node.type, "Class member missing type"
+            ir.attributes[name] = mapper.type_to_rtype(node.node.type)
+        elif isinstance(node.node, FuncDef):
+            ir.method_types[name] = mapper.fdef_to_sig(node.node)
+
+    # Set up the parent class
+    assert len(info.bases) == 1, "Only single inheritance is supported"
+    mro = []
+    for cls in info.mro:
+        if cls.fullname() == 'builtins.object': continue
+        assert cls in mapper.type_to_ir, "Can't subclass cpython types yet"
+        mro.append(mapper.type_to_ir[cls])
+    if len(mro) > 1:
+        ir.base = mro[1]
+    ir.mro = mro
+
 
 class AssignmentTarget(object):
     type = None  # type: RType
@@ -153,13 +271,18 @@ class AssignmentTargetAttr(AssignmentTarget):
 
 
 class IRBuilder(NodeVisitor[Value]):
-    def __init__(self, types: Dict[Expression, Type], mapper: Mapper) -> None:
+    def __init__(self,
+                 types: Dict[Expression, Type],
+                 mapper: Mapper,
+                 modules: List[str]) -> None:
         self.types = types
         self.environment = Environment()
         self.environments = [self.environment]
+        self.ret_types = []  # type: List[RType]
         self.blocks = []  # type: List[List[BasicBlock]]
         self.functions = []  # type: List[FuncIR]
         self.classes = []  # type: List[ClassIR]
+        self.modules = set(modules)
 
         # These lists operate as stack frames for loops. Each loop adds a new
         # frame (i.e. adds a new empty list [] to the outermost list). Each
@@ -171,9 +294,8 @@ class IRBuilder(NodeVisitor[Value]):
 
         self.mapper = mapper
         self.imports = []  # type: List[str]
-
-        # Maps integer, float, and unicode literals to the static c name for that literal
-        self.literals = {}  # type: Dict[Union[int, float, str], str]
+        self.from_imports = {}  # type: Dict[str, List[Tuple[str, str]]]
+        self.imports = []  # type: List[str]
 
         self.current_module_name = None  # type: Optional[str]
 
@@ -183,60 +305,41 @@ class IRBuilder(NodeVisitor[Value]):
             # built-in primitives.
             return INVALID_VALUE
 
+        self.module_name = mypyfile.fullname()
+
         classes = [node for node in mypyfile.defs if isinstance(node, ClassDef)]
 
-        # Build ClassIRs and TypeInfo-to-ClassIR mapping.
+        # Collect all classes.
         for cls in classes:
-            self.create_class_def(cls)
-
-        # Do class def setup
-        for cls in classes:
-            self.prepare_class_def(cls)
+            ir = self.mapper.type_to_ir[cls.info]
+            self.classes.append(ir)
 
         # Generate ops.
         self.current_module_name = mypyfile.fullname()
         for node in mypyfile.defs:
             node.accept(self)
 
-        # Compute vtables.
-        for cls in classes:
-            self.mapper.type_to_ir[cls.info].compute_vtable()
-
         return INVALID_VALUE
-
-    def create_class_def(self, cdef: ClassDef) -> None:
-        # We want to collect the attributes first so they are available
-        # while generating the methods
-        ir = ClassIR(cdef.name)
-        self.classes.append(ir)
-        self.mapper.type_to_ir[cdef.info] = ir
-
-    def prepare_class_def(self, cdef: ClassDef) -> None:
-        ir = self.mapper.type_to_ir[cdef.info]
-        info = cdef.info
-        for name, node in info.names.items():
-            if isinstance(node.node, Var):
-                assert node.node.type, "Class member missing type"
-                ir.attributes[name] = self.type_to_rtype(node.node.type)
-
-        # Set up the parent class
-        assert len(info.bases) == 1, "Only single inheritance is supported"
-        mro = []
-        for cls in info.mro:
-            if cls.fullname() == 'builtins.object': continue
-            assert cls in self.mapper.type_to_ir, "Can't subclass cpython types yet"
-            mro.append(self.mapper.type_to_ir[cls])
-        if len(mro) > 1:
-            ir.base = mro[1]
-        ir.mro = mro
 
     def visit_class_def(self, cdef: ClassDef) -> Value:
         ir = self.mapper.type_to_ir[cdef.info]
         for name, node in sorted(cdef.info.names.items(), key=lambda x: x[0]):
             if isinstance(node.node, FuncDef):
-                func = self.gen_func_def(node.node, cdef.name)
+                func = self.gen_func_def(node.node, ir.method_sig(node.node.name()), cdef.name)
                 self.functions.append(func)
-                ir.methods.append(func)
+                ir.methods[func.name] = func
+
+                # If this overrides a parent class method with a different type, we need
+                # to generate a glue method to mediate between them.
+                for cls in ir.mro[1:]:
+                    if (name in cls.method_types
+                            and not is_same_method_signature(ir.method_types[name],
+                                                             cls.method_types[name])):
+                        f = self.gen_glue_method(cls.method_types[name], func, ir, cls,
+                                                 node.node.line)
+                        ir.glue_methods[(cls, name)] = f
+                        self.functions.append(f)
+
         return INVALID_VALUE
 
     def visit_import(self, node: Import) -> Value:
@@ -253,10 +356,16 @@ class IRBuilder(NodeVisitor[Value]):
     def visit_import_from(self, node: ImportFrom) -> Value:
         if node.is_unreachable or node.is_mypy_only:
             pass
-        if not node.is_top_level:
-            assert False, "non-toplevel imports not supported"
 
-        self.imports.append(node.id)
+        # TODO support these?
+        assert not node.relative
+
+        if node.id not in self.from_imports:
+            self.from_imports[node.id] = []
+
+        for name, maybe_as_name in node.names:
+            as_name = maybe_as_name or name
+            self.from_imports[node.id].append((name, as_name))
 
         return INVALID_VALUE
 
@@ -270,38 +379,99 @@ class IRBuilder(NodeVisitor[Value]):
 
         return INVALID_VALUE
 
-    def gen_func_def(self, fdef: FuncDef, class_name: Optional[str] = None) -> FuncIR:
+    def gen_glue_method(self, sig: FuncSignature, target: FuncIR,
+                        cls: ClassIR, base: ClassIR, line: int) -> FuncIR:
+        """Generate glue methods that mediate between different method types in subclasses.
+
+        For example, if we have:
+
+        class A:
+            def f(self, x: int) -> object: ...
+
+        then it is totally permissable to have a subclass
+
+        class B(A):
+            def f(self, x: object) -> int: ...
+
+        since '(object) -> int' is a subtype of '(int) -> object' by the usual
+        contra/co-variant function subtyping rules.
+
+        The trickiness here is that int and object have different
+        runtime representations in mypyc, so A.f and B.f have
+        different signatures at the native C level. To deal with this,
+        we need to generate glue methods that mediate between the
+        different versions by coercing the arguments and return
+        values.
+        """
         self.enter()
 
+        rt_args = (RuntimeArg(sig.args[0].name, RInstance(cls)),) + sig.args[1:]
+
+        # The environment operates on Vars, so we make some up
+        fake_vars = [(Var(arg.name), arg.type) for arg in rt_args]
+        args = [self.environment.add_local(var, type, is_arg=True)
+                for var, type in fake_vars]  # type: List[Value]
+        self.ret_types[-1] = sig.ret_type
+
+        arg_types = [arg.type for arg in target.sig.args]
+        args = self.coerce_native_call_args(args, arg_types, line)
+        retval = self.add(MethodCall(target.ret_type,
+                                     args[0],
+                                     target.name,
+                                     args[1:],
+                                     line))
+        retval = self.coerce(retval, sig.ret_type, line)
+        self.add(Return(retval))
+
+        blocks, env, ret_type = self.leave()
+        return FuncIR(target.name + '__' + base.name + '_glue',
+                      cls.name, self.module_name,
+                      FuncSignature(rt_args, ret_type), blocks, env)
+
+    def gen_func_def(self, fdef: FuncDef, sig: FuncSignature,
+                     class_name: Optional[str] = None) -> FuncIR:
+        # If there is more than one environment in the environment stack, then we are visiting a
+        # non-global function.
+        is_nested = len(self.environments) > 1
+
+        self.enter(fdef.name())
+
+        if is_nested:
+            # If this is a nested function, then add a 'self' field to the environment, since we
+            # will be instantiating the function as a method of a new class representing that
+            # original function.
+            self.environment.add_local(Var('self'), object_rprimitive, is_arg=True)
         for arg in fdef.arguments:
             assert arg.variable.type, "Function argument missing type"
             self.environment.add_local(arg.variable, self.type_to_rtype(arg.variable.type),
                                        is_arg=True)
-        self.ret_type = self.convert_return_type(fdef)
+        self.ret_types[-1] = sig.ret_type
+
         fdef.body.accept(self)
 
-        if is_none_rprimitive(self.ret_type) or is_object_rprimitive(self.ret_type):
+        if (is_none_rprimitive(self.ret_types[-1]) or
+                is_object_rprimitive(self.ret_types[-1])):
             self.add_implicit_return()
         else:
             self.add_implicit_unreachable()
 
-        blocks, env = self.leave()
-        args = self.convert_args(fdef)
-        return FuncIR(fdef.name(), class_name, args, self.ret_type, blocks, env)
+        blocks, env, ret_type = self.leave()
+
+        if is_nested:
+            namespace = self.generate_function_namespace()
+            func_ir = self.generate_function_class(fdef, namespace, blocks, sig, env)
+
+            # Instantiate the callable class and load it into a register in the current environment
+            # immediately so that it does not have to be loaded every time the function is called.
+            self.instantiate_function_class(fdef, namespace)
+        else:
+            func_ir = FuncIR(fdef.name(), class_name, self.module_name, sig, blocks,
+                             env)
+        return func_ir
 
     def visit_func_def(self, fdef: FuncDef) -> Value:
-        self.functions.append(self.gen_func_def(fdef))
+        self.functions.append(self.gen_func_def(fdef, self.mapper.fdef_to_sig(fdef)))
         return INVALID_VALUE
-
-    def convert_args(self, fdef: FuncDef) -> List[RuntimeArg]:
-        assert isinstance(fdef.type, CallableType)
-        ann = fdef.type
-        return [RuntimeArg(arg.variable.name(), self.type_to_rtype(ann.arg_types[i]))
-                for i, arg in enumerate(fdef.arguments)]
-
-    def convert_return_type(self, fdef: FuncDef) -> RType:
-        assert isinstance(fdef.type, CallableType)
-        return self.type_to_rtype(fdef.type.ret_type)
 
     def add_implicit_return(self) -> None:
         block = self.blocks[-1][-1]
@@ -326,7 +496,7 @@ class IRBuilder(NodeVisitor[Value]):
     def visit_return_stmt(self, stmt: ReturnStmt) -> Value:
         if stmt.expr:
             retval = self.accept(stmt.expr)
-            retval = self.coerce(retval, self.ret_type, stmt.line)
+            retval = self.coerce(retval, self.ret_types[-1], stmt.line)
         else:
             retval = self.add(PrimitiveOp([], none_op, line=-1))
         self.add(Return(retval))
@@ -351,16 +521,11 @@ class IRBuilder(NodeVisitor[Value]):
 
     def visit_operator_assignment_stmt(self, stmt: OperatorAssignmentStmt) -> Value:
         target = self.get_assignment_target(stmt.lvalue)
-
-        if isinstance(target, AssignmentTargetRegister):
-            rreg = self.accept(stmt.rvalue)
-            res = self.binary_op(target.register, rreg, stmt.op, stmt.line)
-            res = self.coerce(res, target.type, stmt.line)
-            self.add(Assign(target.register, res))
-            return INVALID_VALUE
-
-        # NOTE: List index not supported yet for compound assignments.
-        assert False, 'Unsupported lvalue: %r' % target
+        rreg = self.accept(stmt.rvalue)
+        res = self.read_from_target(target, stmt.line)
+        res = self.binary_op(res, rreg, stmt.op, stmt.line)
+        self.assign_to_target(target, res, res.line)
+        return INVALID_VALUE
 
     def get_assignment_target(self, lvalue: Lvalue) -> AssignmentTarget:
         if isinstance(lvalue, NameExpr):
@@ -387,26 +552,47 @@ class IRBuilder(NodeVisitor[Value]):
 
         assert False, 'Unsupported lvalue: %r' % lvalue
 
+    def read_from_target(self, target: AssignmentTarget, line: int) -> Value:
+        if isinstance(target, AssignmentTargetRegister):
+            return target.register
+        if isinstance(target, AssignmentTargetIndex):
+            reg = self.translate_special_method_call(target.base,
+                                                     '__getitem__',
+                                                     [target.index],
+                                                     None,
+                                                     line)
+            if reg is not None:
+                return reg
+            assert False, target.base.type
+        if isinstance(target, AssignmentTargetAttr):
+            if isinstance(target.obj.type, RInstance):
+                return self.add(GetAttr(target.obj, target.attr, line))
+            else:
+                return self.py_get_attr(target.obj, target.attr, line)
+
+        assert False, 'Unsupported lvalue: %r' % target
+
     def assign_to_target(self,
                          target: AssignmentTarget,
-                         rvalue: Expression) -> Value:
-        rvalue_reg = self.accept(rvalue)
+                         rvalue_reg: Value,
+                         line: int) -> Value:
         if isinstance(target, AssignmentTargetRegister):
-            rvalue_reg = self.coerce(rvalue_reg, target.type, rvalue.line)
+            rvalue_reg = self.coerce(rvalue_reg, target.type, line)
             return self.add(Assign(target.register, rvalue_reg))
         elif isinstance(target, AssignmentTargetAttr):
             if isinstance(target.obj_type, RInstance):
-                rvalue_reg = self.coerce(rvalue_reg, target.type, rvalue.line)
-                return self.add(SetAttr(target.obj, target.attr, rvalue_reg, rvalue.line))
+                rvalue_reg = self.coerce(rvalue_reg, target.type, line)
+                return self.add(SetAttr(target.obj, target.attr, rvalue_reg, line))
             else:
-                return self.add(PySetAttr(target.obj, target.attr, rvalue_reg, rvalue.line))
+                key = self.load_static_unicode(target.attr)
+                return self.add(PrimitiveOp([target.obj, key, rvalue_reg], py_setattr_op, line))
         elif isinstance(target, AssignmentTargetIndex):
             target_reg2 = self.translate_special_method_call(
                 target.base,
                 '__setitem__',
                 [target.index, rvalue_reg],
                 None,
-                rvalue.line)
+                line)
             if target_reg2 is not None:
                 return target_reg2
 
@@ -418,7 +604,8 @@ class IRBuilder(NodeVisitor[Value]):
                lvalue: Lvalue,
                rvalue: Expression) -> AssignmentTarget:
         target = self.get_assignment_target(lvalue)
-        self.assign_to_target(target, rvalue)
+        rvalue_reg = self.accept(rvalue)
+        self.assign_to_target(target, rvalue_reg, rvalue.line)
         return target
 
     def visit_if_stmt(self, stmt: IfStmt) -> Value:
@@ -721,7 +908,7 @@ class IRBuilder(NodeVisitor[Value]):
         assert expr.node, "RefExpr not resolved"
         if '.' in expr.node.fullname():
             module_name = '.'.join(expr.node.fullname().split('.')[:-1])
-            return module_name == self.current_module_name
+            return module_name in self.modules
 
         return True
 
@@ -737,13 +924,28 @@ class IRBuilder(NodeVisitor[Value]):
             assert desc.result_type is not None
             return self.add(PrimitiveOp([], desc, expr.line))
 
+        if self.is_global_name(expr.name):
+            return self.load_global(expr)
+
         if not self.is_native_name_expr(expr):
             return self.load_static_module_attr(expr)
 
-        # TODO: We assume that this is a Var node, which is very limited
-        assert isinstance(expr.node, Var)
+        # TODO: Behavior currently only defined for Var and FuncDef node types.
+        if expr.kind == LDEF:
+            try:
+                return self.environment.lookup(expr.node)
+            except KeyError:
+                assert False, 'expression %s not defined in current scope'.format(expr.name)
+        else:
+            return self.load_global(expr)
 
-        return self.environment.lookup(expr.node)
+    def is_global_name(self, name: str) -> bool:
+        # TODO: this is pretty hokey
+        for _, names in self.from_imports.items():
+            for _, as_name in names:
+                if name == as_name:
+                    return True
+        return False
 
     def is_module_member_expr(self, expr: MemberExpr) -> bool:
         return isinstance(expr.expr, RefExpr) and expr.expr.kind == MODULE_REF
@@ -756,14 +958,11 @@ class IRBuilder(NodeVisitor[Value]):
             if isinstance(obj.type, RInstance):
                 return self.add(GetAttr(obj, expr.name, expr.line))
             else:
-                return self.add(PyGetAttr(obj, expr.name, expr.line))
+                return self.py_get_attr(obj, expr.name, expr.line)
 
-    def load_static_module_attr(self, expr: RefExpr) -> Value:
-        assert expr.node, "RefExpr not resolved"
-        module = '.'.join(expr.node.fullname().split('.')[:-1])
-        name = expr.node.fullname().split('.')[-1]
-        left = self.add(LoadStatic(object_rprimitive, c_module_name(module)))
-        return self.add(PyGetAttr(left, name, expr.line))
+    def py_get_attr(self, obj: Value, attr: str, line: int) -> Value:
+        key = self.load_static_unicode(attr)
+        return self.add(PrimitiveOp([obj, key], py_getattr_op, line))
 
     def py_call(self, function: Value, args: List[Value],
                 target_type: RType, line: int) -> Value:
@@ -780,8 +979,8 @@ class IRBuilder(NodeVisitor[Value]):
         return self.add(PyMethodCall(obj, method, arg_boxes))
 
     def coerce_native_call_args(self,
-                                args: List[Value],
-                                arg_types: List[RType],
+                                args: Sequence[Value],
+                                arg_types: Sequence[RType],
                                 line: int) -> List[Value]:
         coerced_arg_regs = []
         for reg, arg_type in zip(args, arg_types):
@@ -824,13 +1023,13 @@ class IRBuilder(NodeVisitor[Value]):
             if target:
                 return target
 
-        fn = callee.name  # TODO: fullname
+        fn = callee.fullname
         # Try to generate a native call. Don't rely on the inferred callee
         # type, since it may have type variable substitutions that aren't
         # valid at runtime (due to type erasure). Instead pick the declared
         # signature of the native function as the true signature.
         signature = self.get_native_signature(callee)
-        if signature:
+        if signature and fn:
             # Native call
             arg_types = [self.type_to_rtype(arg_type) for arg_type in signature.arg_types]
             args = self.coerce_native_call_args(args, arg_types, expr.line)
@@ -1182,9 +1381,10 @@ class IRBuilder(NodeVisitor[Value]):
 
     # Helpers
 
-    def enter(self) -> None:
-        self.environment = Environment()
+    def enter(self, name: Optional[str] = None) -> None:
+        self.environment = Environment(name)
         self.environments.append(self.environment)
+        self.ret_types.append(none_rprimitive)
         self.blocks.append([])
         self.new_block()
 
@@ -1198,17 +1398,21 @@ class IRBuilder(NodeVisitor[Value]):
         goto.label = block
         return block
 
-    def leave(self) -> Tuple[List[BasicBlock], Environment]:
+    def leave(self) -> Tuple[List[BasicBlock], Environment, RType]:
         blocks = self.blocks.pop()
         env = self.environments.pop()
+        ret_type = self.ret_types.pop()
         self.environment = self.environments[-1]
-        return blocks, env
+        return blocks, env, ret_type
 
     def add(self, op: Op) -> Value:
         self.blocks[-1][-1].ops.append(op)
         if isinstance(op, RegisterOp):
             self.environment.add_op(op)
         return op
+
+    def generate_function_namespace(self) -> str:
+        return '_'.join(env.name for env in self.environments if env.name)
 
     def primitive_op(self, desc: OpDescription, args: List[Value], line: int) -> Value:
         assert desc.result_type is not None
@@ -1261,19 +1465,58 @@ class IRBuilder(NodeVisitor[Value]):
     def box_expr(self, expr: Expression) -> Value:
         return self.box(self.accept(expr))
 
+    def generate_function_class(self,
+                                fdef: FuncDef,
+                                namespace: str,
+                                blocks: List[BasicBlock],
+                                sig: FuncSignature,
+                                env: Environment) -> FuncIR:
+        """Generates a callable class representing a nested function.
+
+        This takes a FuncDef and its associated namespace, blocks, environment, and return type and
+        builds a ClassIR with its '__call__' method implemented to represent the function. Note
+        that the name of the function is changed to be '__call__', and a 'self' parameter is added
+        to its list of arguments, as it becomes a class method. The name of the newly constructed
+        class is generated using the names of the functions that enclose the given nested function.
+
+        Returns a newly constructed FuncIR associated with the given FuncDef.
+        """
+        class_name = '{}_{}_obj'.format(fdef.name(), namespace)
+        sig = FuncSignature((RuntimeArg('self', object_rprimitive),) + sig.args, sig.ret_type)
+        func_ir = FuncIR('__call__', class_name, self.module_name, sig, blocks, env)
+        class_ir = ClassIR(class_name, self.module_name)
+        class_ir.methods['__call__'] = func_ir
+        self.classes.append(class_ir)
+        return func_ir
+
+    def instantiate_function_class(self, fdef: FuncDef, namespace: str) -> Value:
+        """Assigns a callable class to a register named after the given function definition."""
+        temp_reg = self.add(Call(self.mapper.fdef_to_sig(fdef).ret_type,
+                                 '{}.{}_{}_obj'.format(self.module_name, fdef.name(), namespace),
+                                 [],
+                                 fdef.line))
+        func_reg = self.environment.add_local(fdef, object_rprimitive)
+        return self.add(Assign(func_reg, temp_reg))
+
+    def load_global(self, expr: NameExpr) -> Value:
+        """Loads a Python-level global.
+
+        This takes a NameExpr and uses its name as a key to retrieve the corresponding PyObject *
+        from the _globals dictionary in the C-generated code.
+        """
+        _globals = self.add(LoadStatic(object_rprimitive, '_globals'))
+        reg = self.load_static_unicode(expr.name)
+        return self.add(PrimitiveOp([_globals, reg], dict_get_item_op, expr.line))
+
     def load_static_int(self, value: int) -> Value:
-        """Loads a static integer value into a register."""
-        if value not in self.literals:
-            self.literals[value] = '__integer_' + str(len(self.literals))
-        static_symbol = self.literals[value]
-        return self.add(LoadStatic(int_rprimitive, static_symbol))
+        """Loads a static integer Python 'int' object into a register."""
+        static_symbol = self.mapper.c_name_for_literal(value)
+        return self.add(LoadStatic(int_rprimitive, static_symbol, ann=value))
 
     def load_static_float(self, value: float) -> Value:
         """Loads a static float value into a register."""
-        if value not in self.literals:
-            self.literals[value] = '__float_' + str(len(self.literals))
-        static_symbol = self.literals[value]
-        return self.add(LoadStatic(float_rprimitive, static_symbol))
+        static_symbol = self.mapper.c_name_for_literal(value)
+        return self.add(LoadStatic(float_rprimitive, static_symbol, ann=value))
 
     def load_static_unicode(self, value: str) -> Value:
         """Loads a static unicode value into a register.
@@ -1281,10 +1524,15 @@ class IRBuilder(NodeVisitor[Value]):
         This is useful for more than just unicode literals; for example, method calls
         also require a PyObject * form for the name of the method.
         """
-        if value not in self.literals:
-            self.literals[value] = '__unicode_' + str(len(self.literals))
-        static_symbol = self.literals[value]
-        return self.add(LoadStatic(str_rprimitive, static_symbol))
+        static_symbol = self.mapper.c_name_for_literal(value)
+        return self.add(LoadStatic(str_rprimitive, static_symbol, ann=value))
+
+    def load_static_module_attr(self, expr: RefExpr) -> Value:
+        assert expr.node, "RefExpr not resolved"
+        module = '.'.join(expr.node.fullname().split('.')[:-1])
+        name = expr.node.fullname().split('.')[-1]
+        left = self.add(LoadStatic(object_rprimitive, c_module_name(module)))
+        return self.py_get_attr(left, name, expr.line)
 
     def coerce(self, src: Value, target_type: RType, line: int) -> Value:
         """Generate a coercion/cast from one type to other (only if needed).

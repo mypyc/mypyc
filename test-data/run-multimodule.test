@@ -1,0 +1,174 @@
+-- These test cases compile two modules at a time (native and other.py)
+
+[case testMultiModuleBasic]
+from other import g
+def f(x: int) -> int:
+    return g(x + 1)
+[file other.py]
+def g(x: int) -> int:
+    return x + 2
+[file driver.py]
+from native import f
+from other import g
+assert f(3) == 6
+assert g(2) == 4
+try:
+    f(1.1)
+except TypeError:
+    pass
+else:
+    assert False
+try:
+    g(1.1)
+except TypeError:
+    pass
+else:
+    assert False
+
+[case testMultiModuleSameNames]
+# Use same names in both modules
+def f() -> int:
+    return 0
+class C:
+    x: int
+    def __init__(self) -> None:
+        self.x = 1
+    def f(self, x: int) -> int:
+        return self.x + x
+class D(C): pass
+[file other.py]
+def f(x: int) -> int:
+    return x + 1
+class C:
+    x: int
+    def __init__(self) -> None:
+        self.x = 2
+    def f(self, x: int) -> int:
+        return self.x + x + 1
+class D(C): pass
+[file driver.py]
+import native, other
+assert native.f() == 0
+assert other.f(3) == 4
+c1 = native.C()
+c1.x += 3
+c2 = other.C()
+c2.x += 6
+assert c1.f(9) == 1 + 3 + 9
+assert c2.f(7) == 2 + 6 + 7 + 1
+assert isinstance(native.D(), native.C)
+assert isinstance(other.D(), other.C)
+assert not isinstance(native.D(), other.C)
+assert not isinstance(other.D(), native.C)
+
+[case testMultiModuleInitializeImportedModules]
+from other import f
+
+def g() -> int:
+    return f(1)
+[file other.py]
+def f(x: int) -> int:
+    return x + 4
+[file driver.py]
+import sys
+assert 'other' not in sys.modules
+from native import g
+assert 'other' in sys.modules
+assert g() == 5
+f = sys.modules['other'].f
+assert f(1) == 5
+try:
+    f(1.1)
+except TypeError:
+    pass
+else:
+    assert False
+
+[case testMultiModuleImportClass]
+from typing import cast
+from other import C
+
+class D(C):
+    def __init__(self, x: int) -> None:
+        self.x = x
+
+def f(c: C) -> int:
+    d = D(3)
+    o: object = c
+    c = cast(C, o)
+    return c.x + c.f() + d.x + d.f() + 1
+[file other.py]
+class C:
+    x: int
+
+    def __init__(self, x: int) -> None:
+        self.x = x
+
+    def f(self) -> int:
+        return 2
+[file driver.py]
+from native import f
+from other import C
+c = C(4)
+assert f(c) == 4 + 2 + 3 + 2 + 1
+try:
+    f(1)
+except TypeError:
+    pass
+else:
+    assert False
+
+[case testMultiModuleSpecialize]
+from other import A
+
+class B(A):
+    def foo(self, x: object) -> int:
+        print(2)
+        return id(x)
+[file other.py]
+class A:
+    def foo(self, x: int) -> object:
+        print(1)
+        return str(x)
+
+def use_a(x: A, y: int) -> object:
+    return x.foo(y)
+
+[file driver.py]
+from native import B
+from other import A, use_a
+a = A()
+b = B()
+o = object()
+i = 10
+assert a.foo(10) == '10'
+assert b.foo(o) == id(o)
+assert use_a(a, 10) == '10'
+assert use_a(b, i) == id(i)
+[out]
+1
+2
+1
+2
+
+[case testMultiModuleLiterals]
+from other import gs, gi, gf
+
+def fs() -> str:
+    return 'f' + gs()
+def fi() -> int:
+    return 10001000100010001000 + gi()
+def ff() -> float:
+    return 2.0 + gf()
+[file other.py]
+def gi() -> int:
+    return 20001000100010001000
+def gs() -> str:
+    return 'g'
+def gf() -> float:
+    return 3.0
+[file driver.py]
+from native import fs, fi, ff
+assert fs() == 'fg'
+assert fi() == 30002000200020002000
+assert ff() == 5.0

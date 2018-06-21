@@ -13,12 +13,14 @@ can hold various things:
 from abc import abstractmethod, abstractproperty
 import re
 from typing import (
-    List, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType, Callable, Union,
-    Iterable,
+    List, Sequence, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType, Callable,
+    Union, Iterable, Type,
 )
 from collections import OrderedDict
 
-from mypy.nodes import Var
+from mypy.nodes import SymbolNode, Var, FuncDef
+
+from mypyc.namegen import NameGenerator
 
 
 T = TypeVar('T')
@@ -262,8 +264,8 @@ class RInstance(RType):
     def c_undefined_value(self) -> str:
         return 'NULL'
 
-    def struct_name(self) -> str:
-        return self.class_ir.struct_name()
+    def struct_name(self, names: NameGenerator) -> str:
+        return self.class_ir.struct_name(names)
 
     def getter_index(self, name: str) -> int:
         return self.class_ir.vtable_entry(name)
@@ -313,9 +315,10 @@ class ROptional(RType):
 class Environment:
     """Maintain the register symbol table and manage temp generation"""
 
-    def __init__(self) -> None:
+    def __init__(self, name: Optional[str] = None) -> None:
+        self.name = name
         self.indexes = OrderedDict()  # type: Dict[Value, int]
-        self.symtable = {}  # type: Dict[Var, Register]
+        self.symtable = {}  # type: Dict[SymbolNode, Register]
         self.temp_index = 0
 
     def regs(self) -> Iterable['Value']:
@@ -325,20 +328,20 @@ class Environment:
         reg.name = name
         self.indexes[reg] = len(self.indexes)
 
-    def add_local(self, var: Var, typ: RType, is_arg: bool = False) -> 'Register':
-        assert isinstance(var, Var)
-        reg = Register(typ, var.line, is_arg = is_arg)
+    def add_local(self, symbol: SymbolNode, typ: RType, is_arg: bool = False) -> 'Register':
+        assert isinstance(symbol, SymbolNode)
+        reg = Register(typ, symbol.line, is_arg = is_arg)
 
-        self.symtable[var] = reg
-        self.add(reg, var.name())
+        self.symtable[symbol] = reg
+        self.add(reg, symbol.name())
         return reg
 
-    def lookup(self, var: Var) -> 'Register':
-        return self.symtable[var]
+    def lookup(self, symbol: SymbolNode) -> 'Register':
+        return self.symtable[symbol]
 
-    def add_temp(self, typ: RType) -> 'Register':
+    def add_temp(self, typ: RType, is_arg: bool = False) -> 'Register':
         assert isinstance(typ, RType)
-        reg = Register(typ)
+        reg = Register(typ, is_arg=is_arg)
         self.add(reg, 'r%d' % self.temp_index)
         self.temp_index += 1
         return reg
@@ -692,21 +695,23 @@ class Call(RegisterOp):
     error_kind = ERR_MAGIC
 
     # TODO: take a FuncIR and extract the ret type
-    def __init__(self, ret_type: RType, fn: str, args: List[Value], line: int) -> None:
+    def __init__(self, ret_type: RType, fn: str, args: Sequence[Value], line: int) -> None:
         super().__init__(line)
         self.fn = fn
-        self.args = args
+        self.args = list(args)
         self.type = ret_type
 
     def to_str(self, env: Environment) -> str:
         args = ', '.join(env.format('%r', arg) for arg in self.args)
-        s = '%s(%s)' % (self.fn, args)
+        # TODO: Display long name?
+        short_name = self.fn.rpartition('.')[2]
+        s = '%s(%s)' % (short_name, args)
         if not self.is_void:
             s = env.format('%r = ', self) + s
         return s
 
     def sources(self) -> List[Value]:
-        return self.args[:]
+        return list(self.args[:])
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_call(self)
@@ -811,56 +816,6 @@ class PyMethodCall(RegisterOp):
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_py_method_call(self)
-
-
-class PyGetAttr(RegisterOp):
-    """dest = obj.attr :: object (using C API)"""
-
-    error_kind = ERR_MAGIC
-
-    def __init__(self, obj: Value, attr: str, line: int) -> None:
-        super().__init__(line)
-        self.obj = obj
-        self.attr = attr
-        self.type = object_rprimitive
-
-    def sources(self) -> List[Value]:
-        return [self.obj]
-
-    def to_str(self, env: Environment) -> str:
-        return env.format('%r = %r.%s :: object', self, self.obj, self.attr)
-
-    def can_raise(self) -> bool:
-        return True
-
-    def accept(self, visitor: 'OpVisitor[T]') -> T:
-        return visitor.visit_py_get_attr(self)
-
-
-class PySetAttr(RegisterOp):
-    """dest = setattr(obj, 'attr', value) (using C API)"""
-
-    error_kind = ERR_FALSE
-
-    def __init__(self, obj: Value, attr: str, value: Value, line: int) -> None:
-        super().__init__(line)
-        self.obj = obj
-        self.attr = attr
-        self.value = value
-        self.type = bool_rprimitive
-
-    def sources(self) -> List[Value]:
-        return [self.obj, self.value]
-
-    def to_str(self, env: Environment) -> str:
-        return env.format('%r = setattr(%r, %s, %r)',
-                          self, self.obj, repr(self.attr), self.value)
-
-    def can_raise(self) -> bool:
-        return True
-
-    def accept(self, visitor: 'OpVisitor[T]') -> T:
-        return visitor.visit_py_set_attr(self)
 
 
 class EmitterInterface:
@@ -1058,16 +1013,18 @@ class LoadStatic(RegisterOp):
     error_kind = ERR_NEVER
     is_borrowed = True
 
-    def __init__(self, type: RType, identifier: str, line: int = -1) -> None:
+    def __init__(self, type: RType, identifier: str, line: int = -1, ann: object = None) -> None:
         super().__init__(line)
         self.identifier = identifier
         self.type = type
+        self.ann = ann  # An object to pretty print with the load
 
     def sources(self) -> List[Value]:
         return []
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = %s :: static', self, self.identifier)
+        ann = '  ({})'.format(repr(self.ann)) if self.ann else ''
+        return env.format('%r = %s :: static%s', self, self.identifier, ann)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_load_static(self)
@@ -1199,27 +1156,63 @@ class RuntimeArg:
         return 'RuntimeArg(name=%s, type=%s)' % (self.name, self.type)
 
 
+class FuncSignature:
+    # TODO: track if method?
+    def __init__(self, args: Sequence[RuntimeArg], ret_type: RType) -> None:
+        self.args = tuple(args)
+        self.ret_type = ret_type
+
+    def __repr__(self) -> str:
+        return 'FuncSignature(args=%r, ret=%r)' % (self.args, self.ret_type)
+
+
 class FuncIR:
     """Intermediate representation of a function with contextual information."""
 
     def __init__(self,
                  name: str,
                  class_name: Optional[str],
-                 args: List[RuntimeArg],
-                 ret_type: RType,
+                 module_name: str,
+                 sig: FuncSignature,
                  blocks: List[BasicBlock],
                  env: Environment) -> None:
         self.name = name
         self.class_name = class_name
-        # TODO: escape ___ in names
-        self.cname = name if not class_name else class_name + '___' + name
-        self.args = args
-        self.ret_type = ret_type
+        self.module_name = module_name
         self.blocks = blocks
         self.env = env
+        self.sig = sig
+
+    @property
+    def args(self) -> Sequence[RuntimeArg]:
+        return self.sig.args
+
+    @property
+    def ret_type(self) -> RType:
+        return self.sig.ret_type
+
+    def cname(self, names: NameGenerator) -> str:
+        name = self.name
+        if self.class_name:
+            name += '_' + self.class_name
+        return names.private_name(self.module_name, name)
 
     def __str__(self) -> str:
         return '\n'.join(format_func(self))
+
+
+# Descriptions of method and attribute entries in class vtables.
+# The 'cls' field is the class that the method/attr was defined in,
+# which might be a parent class.
+VTableMethod = NamedTuple(
+    'VTableMethod', [('cls', 'ClassIR'),
+                     ('method', FuncIR)])
+
+
+VTableAttr = NamedTuple(
+    'VTableAttr', [('cls', 'ClassIR'),
+                   ('name', str),
+                   ('is_getter', bool)])
 
 
 class ClassIR:
@@ -1228,33 +1221,22 @@ class ClassIR:
     This also describes the runtime structure of native instances.
     """
 
-    # TODO: Use dictionary for attributes in addition to (or instead of) list.
-
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, module_name: str) -> None:
         self.name = name
+        self.module_name = module_name
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
-        self.methods = []  # type: List[FuncIR]
+        # We populate method_types with the signatures of every method before
+        # we generate methods, and we rely on this information being present.
+        self.method_types = OrderedDict()  # type: OrderedDict[str, FuncSignature]
+        self.methods = OrderedDict()  # type: OrderedDict[str, FuncIR]
+        # Glue methods for boxing/unboxing when a class changes the type
+        # while overriding a method. Maps from (parent class overrided, method)
+        # to IR of glue method.
+        self.glue_methods = {}  # type: Dict[Tuple[ClassIR, str], FuncIR]
         self.vtable = None  # type: Optional[Dict[str, int]]
-        self.vtable_size = 0
+        self.vtable_entries = []  # type: List[Union[VTableMethod, VTableAttr]]
         self.base = None  # type: Optional[ClassIR]
         self.mro = []  # type: List[ClassIR]
-
-    def compute_vtable(self) -> None:
-        if self.vtable is not None: return
-        self.vtable = {}
-        base = 0
-        if self.base:
-            self.base.compute_vtable()
-            assert self.base.vtable is not None
-            self.vtable.update(self.base.vtable)
-            base = self.base.vtable_size
-
-        for i, attr in enumerate(self.attributes):
-            self.vtable[attr] = base + i * 2
-        base += len(self.attributes) * 2
-        for i, fn in enumerate(self.methods):
-            self.vtable[fn.name] = base + i
-        self.vtable_size = base + len(self.methods)
 
     def vtable_entry(self, name: str) -> int:
         assert self.vtable is not None, "vtable not computed yet"
@@ -1263,19 +1245,33 @@ class ClassIR:
 
     def attr_type(self, name: str) -> RType:
         for ir in self.mro:
-            if name in ir.attributes: return ir.attributes[name]
+            if name in ir.attributes:
+                return ir.attributes[name]
         assert False, '%r has no attribute %r' % (self.name, name)
 
-    def struct_name(self) -> str:
-        return '{}Object'.format(self.name)
+    def method_sig(self, name: str) -> FuncSignature:
+        for ir in self.mro:
+            if name in ir.method_types:
+                return ir.method_types[name]
+        assert False, '%r has no method %r' % (self.name, name)
+
+    def name_prefix(self, names: NameGenerator) -> str:
+        return names.private_name(self.module_name, self.name)
+
+    def struct_name(self, names: NameGenerator) -> str:
+        return '{}Object'.format(self.name_prefix(names))
 
     def get_method(self, name: str) -> Optional[FuncIR]:
-        matches = [func for func in self.methods if func.name == name]
-        return matches[0] if matches else None
+        match = self.methods.get(name)
+        if not match and self.base:
+            match = self.base.get_method(name)
+        return match
 
-    @property
-    def type_struct(self) -> str:
-        return '{}Type'.format(self.name)
+    def type_struct_name(self, names: NameGenerator) -> str:
+        return '{}Type'.format(self.name_prefix(names))
+
+
+LiteralsMap = Dict[Tuple[Type[object], Union[int, float, str]], str]
 
 
 class ModuleIR:
@@ -1283,20 +1279,18 @@ class ModuleIR:
 
     def __init__(self,
             imports: List[str],
-            literals: Dict[Union[int, float, str], str],
+            from_imports: Dict[str, List[Tuple[str, str]]],
+            literals: LiteralsMap,
             functions: List[FuncIR],
             classes: List[ClassIR]) -> None:
         self.imports = imports[:]
+        self.from_imports = from_imports
         self.literals = literals
         self.functions = functions
         self.classes = classes
 
         if 'builtins' not in self.imports:
             self.imports.insert(0, 'builtins')
-
-
-def type_struct_name(class_name: str) -> str:
-    return '{}Type'.format(class_name)
 
 
 class OpVisitor(Generic[T]):
@@ -1342,14 +1336,6 @@ class OpVisitor(Generic[T]):
 
     @abstractmethod
     def visit_load_static(self, op: LoadStatic) -> T:
-        raise NotImplementedError
-
-    @abstractmethod
-    def visit_py_get_attr(self, op: PyGetAttr) -> T:
-        raise NotImplementedError
-
-    @abstractmethod
-    def visit_py_set_attr(self, op: PySetAttr) -> T:
         raise NotImplementedError
 
     @abstractmethod
@@ -1418,8 +1404,9 @@ def format_blocks(blocks: List[BasicBlock], env: Environment) -> List[str]:
 
 def format_func(fn: FuncIR) -> List[str]:
     lines = []
-    lines.append('def {}({}):'.format(fn.name, ', '.join(arg.name
-                                                         for arg in fn.args)))
+    cls_prefix = fn.class_name + '.' if fn.class_name else ''
+    lines.append('def {}{}({}):'.format(cls_prefix, fn.name,
+                                        ', '.join(arg.name for arg in fn.args)))
     for line in fn.env.to_lines():
         lines.append('    ' + line)
     code = format_blocks(fn.blocks, fn.env)

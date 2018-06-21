@@ -6,11 +6,11 @@ from mypyc.common import REG_PREFIX, NATIVE_PREFIX
 from mypyc.emit import Emitter
 from mypyc.ops import (
     FuncIR, OpVisitor, Goto, Branch, Return, Assign, LoadInt, LoadErrorValue, GetAttr, SetAttr,
-    LoadStatic, TupleGet, TupleSet, Call, PyCall, PyGetAttr, IncRef, DecRef, Box, Cast, Unbox,
+    LoadStatic, TupleGet, TupleSet, Call, PyCall, IncRef, DecRef, Box, Cast, Unbox,
     BasicBlock, Value, Register, RType, RTuple, MethodCall, PyMethodCall, PrimitiveOp,
-    EmitterInterface,
-    PySetAttr, Unreachable, is_int_rprimitive
+    EmitterInterface, Unreachable, is_int_rprimitive
 )
+from mypyc.namegen import NameGenerator
 
 
 def native_function_type(fn: FuncIR) -> str:
@@ -19,7 +19,7 @@ def native_function_type(fn: FuncIR) -> str:
     return '{} (*)({})'.format(ret, args)
 
 
-def native_function_header(fn: FuncIR) -> str:
+def native_function_header(fn: FuncIR, names: NameGenerator) -> str:
     args = []
     for arg in fn.args:
         args.append('{}{}{}'.format(arg.type.ctype_spaced(), REG_PREFIX, arg.name))
@@ -27,7 +27,7 @@ def native_function_header(fn: FuncIR) -> str:
     return 'static {ret_type}{prefix}{name}({args})'.format(
         ret_type=fn.ret_type.ctype_spaced(),
         prefix=NATIVE_PREFIX,
-        name=fn.cname,
+        name=fn.cname(names),
         args=', '.join(args) or 'void')
 
 
@@ -36,16 +36,16 @@ def generate_native_function(fn: FuncIR, emitter: Emitter, source_path: str) -> 
     body = Emitter(emitter.context, fn.env)
     visitor = FunctionEmitterVisitor(body, declarations, fn.name, source_path)
 
-    declarations.emit_line('{} {{'.format(native_function_header(fn)))
+    declarations.emit_line('{} {{'.format(native_function_header(fn, emitter.names)))
     body.indent()
 
     for r, i in fn.env.indexes.items():
         if i < len(fn.args):
             continue  # skip the arguments
-        ctype = r.type.ctype
-        declarations.emit_line('{ctype} {prefix}{name};'.format(ctype=ctype,
-                                                                prefix=REG_PREFIX,
-                                                                name=r.name))
+        ctype = r.type.ctype_spaced()
+        declarations.emit_line('{ctype}{prefix}{name};'.format(ctype=ctype,
+                                                               prefix=REG_PREFIX,
+                                                               name=r.name))
 
     for block in fn.blocks:
         body.emit_label(block)
@@ -65,6 +65,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
                  func_name: str,
                  source_path: str) -> None:
         self.emitter = emitter
+        self.names = emitter.names
         self.declarations = declarations
         self.env = self.emitter.env
         self.func_name = func_name
@@ -167,7 +168,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         self.emit_line('%s = CPY_GET_ATTR(%s, %d, %s, %s);' % (
             dest, obj,
             rtype.getter_index(op.attr),
-            rtype.struct_name(),
+            rtype.struct_name(self.names),
             rtype.attr_type(op.attr).ctype))
 
     def visit_set_attr(self, op: SetAttr) -> None:
@@ -181,7 +182,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
             obj,
             rtype.setter_index(op.attr),
             src,
-            rtype.struct_name(),
+            rtype.struct_name(self.names),
             rtype.attr_type(op.attr).ctype))
 
     def visit_load_static(self, op: LoadStatic) -> None:
@@ -190,18 +191,6 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
             self.emit_line('%s = CPyTagged_FromObject(%s);' % (dest, op.identifier))
         else:
             self.emit_line('%s = %s;' % (dest, op.identifier))
-
-    def visit_py_get_attr(self, op: PyGetAttr) -> None:
-        dest = self.reg(op)
-        obj = self.reg(op.obj)
-        self.emit_line('{} = PyObject_GetAttrString({}, "{}");'.format(dest, obj, op.attr))
-
-    def visit_py_set_attr(self, op: PySetAttr) -> None:
-        dest = self.reg(op)
-        obj = self.reg(op.obj)
-        value = self.reg(op.value)
-        self.emit_line('{} = PyObject_SetAttrString({}, "{}", {}) >= 0;'.format(
-            dest, obj, op.attr, value))
 
     def visit_tuple_get(self, op: TupleGet) -> None:
         dest = self.reg(op)
@@ -218,7 +207,9 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
     def visit_call(self, op: Call) -> None:
         dest = self.get_dest_assign(op)
         args = ', '.join(self.reg(arg) for arg in op.args)
-        self.emit_line('%s%s%s(%s);' % (dest, NATIVE_PREFIX, op.fn, args))
+        module_name, name = op.fn.rsplit('.', 1)
+        cname = self.names.private_name(module_name, name)
+        self.emit_line('%s%s%s(%s);' % (dest, NATIVE_PREFIX, cname, args))
 
     def visit_method_call(self, op: MethodCall) -> None:
         dest = self.get_dest_assign(op)
@@ -231,7 +222,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         assert method is not None
         mtype = native_function_type(method)
         self.emit_line('{}CPY_GET_METHOD({}, {}, {}, {})({});'.format(
-            dest, obj, method_idx, rtype.struct_name(), mtype, args))
+            dest, obj, method_idx, rtype.struct_name(self.names), mtype, args))
 
     def visit_py_call(self, op: PyCall) -> None:
         dest = self.get_dest_assign(op)
