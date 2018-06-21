@@ -26,6 +26,7 @@ files = [
     'run-traits.test',
     'run-multimodule.test',
     'run-bench.test',
+    'run-mypy-sim.test',
 ]
 
 
@@ -61,9 +62,10 @@ class TestRun(MypycDataSuite):
             # Hard code another module name to compile in the same compilation unit.
             to_delete = []
             for fn, text in testcase.files:
-                if os.path.basename(fn) == 'other.py':
-                    module_names.append('other')
-                    sources.append(build.BuildSource(fn, 'other', text))
+                if os.path.basename(fn).startswith('other'):
+                    name = os.path.basename(fn).split('.')[0]
+                    module_names.append(name)
+                    sources.append(build.BuildSource(fn, name, text))
                     to_delete.append(fn)
 
             try:
