@@ -1101,3 +1101,11 @@ def third():
 L0:
     r0 = __unicode_8 :: static  ('third: normal function')
     return r0
+
+[case testFreeVars]
+from typing import Callable
+
+def outer(num: int) -> int:
+    def inner() -> int:
+        return num
+    return inner()

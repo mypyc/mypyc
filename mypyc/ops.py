@@ -375,17 +375,20 @@ class Environment:
     def add_local(self, symbol: SymbolNode, typ: RType, is_arg: bool = False) -> 'Register':
         assert isinstance(symbol, SymbolNode)
         reg = Register(typ, symbol.line, is_arg = is_arg)
-        target = AssignmentTargetRegister(reg)
         self.symtable[symbol] = target
         self.add(reg, symbol.name())
         return reg
 
-    def add_target(self, symbol: SymbolNode, typ: RType, is_arg: bool = False) -> AssignmentTarget:
+    def add_local_reg(self, symbol: SymbolNode, typ: RType, is_arg: bool = False) -> AssignmentTargetRegister:
         assert isinstance(symbol, SymbolNode)
         reg = Register(typ, symbol.line, is_arg = is_arg)
         target = AssignmentTargetRegister(reg)
         self.symtable[symbol] = target
         self.add(reg, symbol.name())
+        return target
+
+    def add_target(self, symbol, target) -> AssignmentTarget:
+        self.symtable[symbol] = target
         return target
 
     def lookup(self, symbol: SymbolNode) -> AssignmentTarget:
