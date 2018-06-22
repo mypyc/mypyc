@@ -322,6 +322,10 @@ class ROptional(RType):
 class AssignmentTarget(object):
     type = None  # type: RType
 
+    @abstractmethod
+    def to_str(self) -> str:
+        raise NotImplementedError
+
 
 class AssignmentTargetRegister(AssignmentTarget):
     """Register as assignment target"""
@@ -329,6 +333,9 @@ class AssignmentTargetRegister(AssignmentTarget):
     def __init__(self, register: 'Register') -> None:
         self.register = register
         self.type = register.type
+
+    def to_str(self) -> str:
+        return self.register.name
 
 
 class AssignmentTargetIndex(AssignmentTarget):
@@ -340,6 +347,9 @@ class AssignmentTargetIndex(AssignmentTarget):
         # TODO: This won't be right for user-defined classes. Store the
         #       lvalue type in mypy and remove this special case.
         self.type = object_rprimitive
+
+    def to_str(self) -> str:
+        return '{}[{}]'.format(self.base.name, self.index.name)
 
 
 class AssignmentTargetAttr(AssignmentTarget):
@@ -354,6 +364,9 @@ class AssignmentTargetAttr(AssignmentTarget):
         else:
             self.obj_type = object_rprimitive
             self.type = object_rprimitive
+
+    def to_str(self) -> str:
+        return '{}.{}'.format(self.obj.name, self.attr)
 
 
 class Environment:
@@ -387,7 +400,7 @@ class Environment:
         self.add(reg, symbol.name())
         return target
 
-    def add_target(self, symbol, target) -> AssignmentTarget:
+    def add_target(self, symbol: SymbolNode, target: AssignmentTarget) -> AssignmentTarget:
         self.symtable[symbol] = target
         return target
 
@@ -420,7 +433,7 @@ class Environment:
                 typespec = fmt[n + 1]
                 arg = arglist.pop(0)
                 if typespec == 'r':
-                    result.append(arg.name)
+                    result.append(self.read(arg))
                 elif typespec == 'd':
                     result.append('%d' % arg)
                 elif typespec == 'f':
@@ -451,6 +464,10 @@ class Environment:
             result.append('%s :: %s' % (', '.join(group), regs[i0].type))
         return result
 
+    def read(self, arg: Any) -> str:
+        if isinstance(arg, AssignmentTarget):
+            return arg.to_str()
+        return arg.name
 
 ERR_NEVER = 0  # Never generates an exception
 ERR_MAGIC = 1  # Generates magic value (c_error_value) based on target RType on exception

@@ -27,8 +27,7 @@ from mypyc.analysis import (
 )
 from mypyc.ops import (
     FuncIR, BasicBlock, Assign, RegisterOp, DecRef, IncRef, Branch, Goto, Environment,
-    Return, Op, Label, Cast, Box, RType,
-    Value, Register,
+    Return, Op, Label, Cast, Box, RType, Value, Register, AssignmentTargetRegister,
 )
 
 
@@ -181,6 +180,19 @@ def after_branch_decrefs(label: Label,
     target_pre_live = pre_live[label, 0]
     decref = source_live_regs - target_pre_live - source_borrowed
     if decref:
+        decref = [d.register if isinstance(d, AssignmentTargetRegister) else d for d in decref]
+        print('Printing DecRef')
+        for k in decref:
+            if isinstance(k, Register):
+                print(k.name)
+            else:
+                print('{}'.format(k))
+        print('Printing env.indexes')
+        for k, v in env.indexes.items():
+            if isinstance(k, Register):
+                print('{}: {}'.format(k.name, v))
+            else:
+                print('{}: {}'.format(k, v))
         return [DecRef(reg)
                 for reg in sorted(decref, key=lambda r: env.indexes[r])
                 if reg.type.is_refcounted and reg not in omitted]

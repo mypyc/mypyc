@@ -1017,7 +1017,7 @@ L0:
     r0 = __unicode_0 :: static  ('inner: nested function')
     return r0
 def outer():
-    r0 :: str
+    r0 :: inner_outer_obj
     inner :: object
 L0:
     r0 = inner_outer_obj()
@@ -1031,14 +1031,15 @@ L0:
     return r0
 def second_first_obj.__call__(self):
     self :: object
-    r0 :: str
+    r0 :: third_first_second_obj
     third :: object
 L0:
     r0 = third_first_second_obj()
     third = r0
     return third
 def first():
-    r0, second :: object
+    r0 :: second_first_obj
+    second :: object
 L0:
     r0 = second_first_obj()
     second = r0
@@ -1052,7 +1053,7 @@ L0:
     return r1
 def uno(num):
     num :: float
-    r0 :: str
+    r0 :: dos_uno_obj
     dos :: object
 L0:
     r0 = dos_uno_obj()
@@ -1067,7 +1068,7 @@ L0:
     return r1
 def eins(num):
     num :: float
-    r0 :: str
+    r0 :: zwei_eins_obj
     zwei :: object
     a, r1 :: str
     r2 :: object
@@ -1109,3 +1110,32 @@ def outer(num: int) -> int:
     def inner() -> int:
         return num
     return inner()
+[out]
+def inner_outer_obj.__call__(self):
+    r0 :: inner_outer_env
+    inner_env, self :: object
+    r1 :: str
+    r2 :: object
+    r3 :: int
+L0:
+    r0 = inner_outer_env()
+    inner_env = r0
+    r1 = __unicode_0 :: static  ('num')
+    r2 = getattr outer_env, r1
+    r3 = unbox(int, r2)
+    return r3
+def outer(num):
+    r0 :: outer__env
+    outer_env :: object
+    num :: int
+    r1 :: inner_outer_obj
+    inner, r2 :: object
+    r3 :: int
+L0:
+    r0 = outer__env()
+    outer_env = r0
+    r1 = inner_outer_obj()
+    inner = r1
+    r2 = inner() :: object
+    r3 = unbox(int, r2)
+    return r3
