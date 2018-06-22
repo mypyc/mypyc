@@ -13,12 +13,12 @@ can hold various things:
 from abc import abstractmethod, abstractproperty
 import re
 from typing import (
-    List, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType, Callable, Union,
-    Iterable, Type,
+    List, Sequence, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType, Callable,
+    Union, Iterable, Type,
 )
 from collections import OrderedDict
 
-from mypy.nodes import Var
+from mypy.nodes import SymbolNode, Var, FuncDef
 
 from mypyc.namegen import NameGenerator
 
@@ -318,9 +318,10 @@ class ROptional(RType):
 class Environment:
     """Maintain the register symbol table and manage temp generation"""
 
-    def __init__(self) -> None:
+    def __init__(self, name: Optional[str] = None) -> None:
+        self.name = name
         self.indexes = OrderedDict()  # type: Dict[Value, int]
-        self.symtable = {}  # type: Dict[Var, Register]
+        self.symtable = {}  # type: Dict[SymbolNode, Register]
         self.temp_index = 0
 
     def regs(self) -> Iterable['Value']:
@@ -330,20 +331,20 @@ class Environment:
         reg.name = name
         self.indexes[reg] = len(self.indexes)
 
-    def add_local(self, var: Var, typ: RType, is_arg: bool = False) -> 'Register':
-        assert isinstance(var, Var)
-        reg = Register(typ, var.line, is_arg = is_arg)
+    def add_local(self, symbol: SymbolNode, typ: RType, is_arg: bool = False) -> 'Register':
+        assert isinstance(symbol, SymbolNode)
+        reg = Register(typ, symbol.line, is_arg = is_arg)
 
-        self.symtable[var] = reg
-        self.add(reg, var.name())
+        self.symtable[symbol] = reg
+        self.add(reg, symbol.name())
         return reg
 
-    def lookup(self, var: Var) -> 'Register':
-        return self.symtable[var]
+    def lookup(self, symbol: SymbolNode) -> 'Register':
+        return self.symtable[symbol]
 
-    def add_temp(self, typ: RType) -> 'Register':
+    def add_temp(self, typ: RType, is_arg: bool = False) -> 'Register':
         assert isinstance(typ, RType)
-        reg = Register(typ)
+        reg = Register(typ, is_arg=is_arg)
         self.add(reg, 'r%d' % self.temp_index)
         self.temp_index += 1
         return reg
@@ -659,10 +660,10 @@ class Call(RegisterOp):
     error_kind = ERR_MAGIC
 
     # TODO: take a FuncIR and extract the ret type
-    def __init__(self, ret_type: RType, fn: str, args: List[Value], line: int) -> None:
+    def __init__(self, ret_type: RType, fn: str, args: Sequence[Value], line: int) -> None:
         super().__init__(line)
         self.fn = fn
-        self.args = args
+        self.args = list(args)
         self.type = ret_type
 
     def to_str(self, env: Environment) -> str:
@@ -675,7 +676,7 @@ class Call(RegisterOp):
         return s
 
     def sources(self) -> List[Value]:
-        return self.args[:]
+        return list(self.args[:])
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_call(self)
@@ -1157,6 +1158,16 @@ class RuntimeArg:
         return 'RuntimeArg(name=%s, type=%s)' % (self.name, self.type)
 
 
+class FuncSignature:
+    # TODO: track if method?
+    def __init__(self, args: Sequence[RuntimeArg], ret_type: RType) -> None:
+        self.args = tuple(args)
+        self.ret_type = ret_type
+
+    def __repr__(self) -> str:
+        return 'FuncSignature(args=%r, ret=%r)' % (self.args, self.ret_type)
+
+
 class FuncIR:
     """Intermediate representation of a function with contextual information."""
 
@@ -1164,17 +1175,23 @@ class FuncIR:
                  name: str,
                  class_name: Optional[str],
                  module_name: str,
-                 args: List[RuntimeArg],
-                 ret_type: RType,
+                 sig: FuncSignature,
                  blocks: List[BasicBlock],
                  env: Environment) -> None:
         self.name = name
         self.class_name = class_name
         self.module_name = module_name
-        self.args = args
-        self.ret_type = ret_type
         self.blocks = blocks
         self.env = env
+        self.sig = sig
+
+    @property
+    def args(self) -> Sequence[RuntimeArg]:
+        return self.sig.args
+
+    @property
+    def ret_type(self) -> RType:
+        return self.sig.ret_type
 
     def cname(self, names: NameGenerator) -> str:
         name = self.name
@@ -1186,40 +1203,42 @@ class FuncIR:
         return '\n'.join(format_func(self))
 
 
+# Descriptions of method and attribute entries in class vtables.
+# The 'cls' field is the class that the method/attr was defined in,
+# which might be a parent class.
+VTableMethod = NamedTuple(
+    'VTableMethod', [('cls', 'ClassIR'),
+                     ('method', FuncIR)])
+
+
+VTableAttr = NamedTuple(
+    'VTableAttr', [('cls', 'ClassIR'),
+                   ('name', str),
+                   ('is_getter', bool)])
+
+
 class ClassIR:
     """Intermediate representation of a class.
 
     This also describes the runtime structure of native instances.
     """
 
-    # TODO: Use dictionary for attributes in addition to (or instead of) list.
-
     def __init__(self, name: str, module_name: str) -> None:
         self.name = name
         self.module_name = module_name
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
-        self.methods = []  # type: List[FuncIR]
+        # We populate method_types with the signatures of every method before
+        # we generate methods, and we rely on this information being present.
+        self.method_types = OrderedDict()  # type: OrderedDict[str, FuncSignature]
+        self.methods = OrderedDict()  # type: OrderedDict[str, FuncIR]
+        # Glue methods for boxing/unboxing when a class changes the type
+        # while overriding a method. Maps from (parent class overrided, method)
+        # to IR of glue method.
+        self.glue_methods = {}  # type: Dict[Tuple[ClassIR, str], FuncIR]
         self.vtable = None  # type: Optional[Dict[str, int]]
-        self.vtable_size = 0
+        self.vtable_entries = []  # type: List[Union[VTableMethod, VTableAttr]]
         self.base = None  # type: Optional[ClassIR]
         self.mro = []  # type: List[ClassIR]
-
-    def compute_vtable(self) -> None:
-        if self.vtable is not None: return
-        self.vtable = {}
-        base = 0
-        if self.base:
-            self.base.compute_vtable()
-            assert self.base.vtable is not None
-            self.vtable.update(self.base.vtable)
-            base = self.base.vtable_size
-
-        for i, attr in enumerate(self.attributes):
-            self.vtable[attr] = base + i * 2
-        base += len(self.attributes) * 2
-        for i, fn in enumerate(self.methods):
-            self.vtable[fn.name] = base + i
-        self.vtable_size = base + len(self.methods)
 
     def vtable_entry(self, name: str) -> int:
         assert self.vtable is not None, "vtable not computed yet"
@@ -1228,8 +1247,15 @@ class ClassIR:
 
     def attr_type(self, name: str) -> RType:
         for ir in self.mro:
-            if name in ir.attributes: return ir.attributes[name]
+            if name in ir.attributes:
+                return ir.attributes[name]
         assert False, '%r has no attribute %r' % (self.name, name)
+
+    def method_sig(self, name: str) -> FuncSignature:
+        for ir in self.mro:
+            if name in ir.method_types:
+                return ir.method_types[name]
+        assert False, '%r has no method %r' % (self.name, name)
 
     def name_prefix(self, names: NameGenerator) -> str:
         return names.private_name(self.module_name, self.name)
@@ -1238,10 +1264,10 @@ class ClassIR:
         return '{}Object'.format(self.name_prefix(names))
 
     def get_method(self, name: str) -> Optional[FuncIR]:
-        matches = [func for func in self.methods if func.name == name]
-        if not matches and self.base:
-            return self.base.get_method(name)
-        return matches[0] if matches else None
+        match = self.methods.get(name)
+        if not match and self.base:
+            match = self.base.get_method(name)
+        return match
 
     def type_struct_name(self, names: NameGenerator) -> str:
         return '{}Type'.format(self.name_prefix(names))

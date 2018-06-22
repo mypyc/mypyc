@@ -14,11 +14,11 @@ It would be translated to something that conceptually looks like this:
    return r3
 """
 
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Tuple, Optional, Union, Sequence
 
 from mypy.nodes import (
-    Node, MypyFile, FuncDef, ReturnStmt, AssignmentStmt, OpExpr, IntExpr, NameExpr, LDEF, Var,
-    IfStmt, UnaryExpr, ComparisonExpr, WhileStmt, Argument, CallExpr, IndexExpr, Block,
+    Node, MypyFile, SymbolNode, FuncDef, ReturnStmt, AssignmentStmt, OpExpr, IntExpr, NameExpr,
+    LDEF, Var, IfStmt, UnaryExpr, ComparisonExpr, WhileStmt, Argument, CallExpr, IndexExpr, Block,
     Expression, ListExpr, ExpressionStmt, MemberExpr, ForStmt, RefExpr, Lvalue, BreakStmt,
     ContinueStmt, ConditionalExpr, OperatorAssignmentStmt, TupleExpr, ClassDef, TypeInfo,
     Import, ImportFrom, ImportAll, DictExpr, StrExpr, CastExpr, TempNode, ARG_POS, MODULE_REF,
@@ -47,7 +47,8 @@ from mypyc.ops import (
     is_int_rprimitive, float_rprimitive, is_float_rprimitive, bool_rprimitive, list_rprimitive,
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp,
-    ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap
+    ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap, FuncSignature,
+    VTableAttr, VTableMethod,
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import list_len_op, list_get_item_op, list_set_item_op, new_list_op
@@ -56,7 +57,7 @@ from mypyc.ops_misc import (
     none_op, iter_op, next_op, no_err_occurred_op, py_getattr_op, py_setattr_op,
 )
 from mypyc.subtype import is_subtype
-from mypyc.sametype import is_same_type
+from mypyc.sametype import is_same_type, is_same_method_signature
 
 
 def build_ir(modules: List[MypyFile],
@@ -81,8 +82,8 @@ def build_ir(modules: List[MypyFile],
         prepare_class_def(cdef, mapper)
 
     # Generate IR for all modules.
+    module_names = [mod.fullname() for mod in modules]
     for module in modules:
-        module_names = [mod.fullname() for mod in modules]
         builder = IRBuilder(types, mapper, module_names)
         module.accept(builder)
         ir = ModuleIR(
@@ -96,9 +97,42 @@ def build_ir(modules: List[MypyFile],
 
     # Compute vtables.
     for _, cdef in classes:
-        mapper.type_to_ir[cdef.info].compute_vtable()
+        compute_vtable(mapper.type_to_ir[cdef.info])
 
     return result
+
+
+def compute_vtable(cls: ClassIR) -> None:
+    """Compute the vtable structure for a class."""
+    if cls.vtable is not None: return
+    cls.vtable = {}
+    entries = cls.vtable_entries
+    if cls.base:
+        compute_vtable(cls.base)
+        assert cls.base.vtable is not None
+        cls.vtable.update(cls.base.vtable)
+        prefix = cls.base.vtable_entries
+    else:
+        prefix = []
+
+    # Include the vtable from the parent classes, but handle method overrides.
+    for entry in prefix:
+        if isinstance(entry, VTableMethod):
+            method = entry.method
+            if method.name in cls.methods:
+                if is_same_method_signature(method.sig, cls.methods[method.name].sig):
+                    entry = VTableMethod(cls, cls.methods[method.name])
+                else:
+                    entry = VTableMethod(cls, cls.glue_methods[(entry.cls, method.name)])
+        entries.append(entry)
+
+    for attr in cls.attributes:
+        cls.vtable[attr] = len(entries)
+        entries.append(VTableAttr(cls, attr, is_getter=True))
+        entries.append(VTableAttr(cls, attr, is_getter=False))
+    for fn in cls.methods.values():
+        cls.vtable[fn.name] = len(entries)
+        entries.append(VTableMethod(cls, fn))
 
 
 class Mapper:
@@ -154,6 +188,13 @@ class Mapper:
             return self.type_to_rtype(typ.upper_bound)
         assert False, '%s unsupported' % type(typ)
 
+    def fdef_to_sig(self, fdef: FuncDef) -> FuncSignature:
+        assert isinstance(fdef.type, CallableType)
+        args = [RuntimeArg(arg.variable.name(), self.type_to_rtype(fdef.type.arg_types[i]))
+                for i, arg in enumerate(fdef.arguments)]
+        ret = self.type_to_rtype(fdef.type.ret_type)
+        return FuncSignature(args, ret)
+
     def literal_static_name(self, value: Union[int, float, str]) -> str:
         # Include type to distinguish between 1 and 1.0, and so on.
         key = (type(value), value)
@@ -176,6 +217,8 @@ def prepare_class_def(cdef: ClassDef, mapper: Mapper) -> None:
         if isinstance(node.node, Var):
             assert node.node.type, "Class member missing type"
             ir.attributes[name] = mapper.type_to_rtype(node.node.type)
+        elif isinstance(node.node, FuncDef):
+            ir.method_types[name] = mapper.fdef_to_sig(node.node)
 
     # Set up the parent class
     assert len(info.bases) == 1, "Only single inheritance is supported"
@@ -234,6 +277,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.types = types
         self.environment = Environment()
         self.environments = [self.environment]
+        self.ret_types = []  # type: List[RType]
         self.blocks = []  # type: List[List[BasicBlock]]
         self.functions = []  # type: List[FuncIR]
         self.classes = []  # type: List[ClassIR]
@@ -280,9 +324,21 @@ class IRBuilder(NodeVisitor[Value]):
         ir = self.mapper.type_to_ir[cdef.info]
         for name, node in sorted(cdef.info.names.items(), key=lambda x: x[0]):
             if isinstance(node.node, FuncDef):
-                func = self.gen_func_def(node.node, cdef.name)
+                func = self.gen_func_def(node.node, ir.method_sig(node.node.name()), cdef.name)
                 self.functions.append(func)
-                ir.methods.append(func)
+                ir.methods[func.name] = func
+
+                # If this overrides a parent class method with a different type, we need
+                # to generate a glue method to mediate between them.
+                for cls in ir.mro[1:]:
+                    if (name in cls.method_types
+                            and not is_same_method_signature(ir.method_types[name],
+                                                             cls.method_types[name])):
+                        f = self.gen_glue_method(cls.method_types[name], func, ir, cls,
+                                                 node.node.line)
+                        ir.glue_methods[(cls, name)] = f
+                        self.functions.append(f)
+
         return INVALID_VALUE
 
     def visit_import(self, node: Import) -> Value:
@@ -322,38 +378,99 @@ class IRBuilder(NodeVisitor[Value]):
 
         return INVALID_VALUE
 
-    def gen_func_def(self, fdef: FuncDef, class_name: Optional[str] = None) -> FuncIR:
+    def gen_glue_method(self, sig: FuncSignature, target: FuncIR,
+                        cls: ClassIR, base: ClassIR, line: int) -> FuncIR:
+        """Generate glue methods that mediate between different method types in subclasses.
+
+        For example, if we have:
+
+        class A:
+            def f(self, x: int) -> object: ...
+
+        then it is totally permissable to have a subclass
+
+        class B(A):
+            def f(self, x: object) -> int: ...
+
+        since '(object) -> int' is a subtype of '(int) -> object' by the usual
+        contra/co-variant function subtyping rules.
+
+        The trickiness here is that int and object have different
+        runtime representations in mypyc, so A.f and B.f have
+        different signatures at the native C level. To deal with this,
+        we need to generate glue methods that mediate between the
+        different versions by coercing the arguments and return
+        values.
+        """
         self.enter()
 
+        rt_args = (RuntimeArg(sig.args[0].name, RInstance(cls)),) + sig.args[1:]
+
+        # The environment operates on Vars, so we make some up
+        fake_vars = [(Var(arg.name), arg.type) for arg in rt_args]
+        args = [self.environment.add_local(var, type, is_arg=True)
+                for var, type in fake_vars]  # type: List[Value]
+        self.ret_types[-1] = sig.ret_type
+
+        arg_types = [arg.type for arg in target.sig.args]
+        args = self.coerce_native_call_args(args, arg_types, line)
+        retval = self.add(MethodCall(target.ret_type,
+                                     args[0],
+                                     target.name,
+                                     args[1:],
+                                     line))
+        retval = self.coerce(retval, sig.ret_type, line)
+        self.add(Return(retval))
+
+        blocks, env, ret_type = self.leave()
+        return FuncIR(target.name + '__' + base.name + '_glue',
+                      cls.name, self.module_name,
+                      FuncSignature(rt_args, ret_type), blocks, env)
+
+    def gen_func_def(self, fdef: FuncDef, sig: FuncSignature,
+                     class_name: Optional[str] = None) -> FuncIR:
+        # If there is more than one environment in the environment stack, then we are visiting a
+        # non-global function.
+        is_nested = len(self.environments) > 1
+
+        self.enter(fdef.name())
+
+        if is_nested:
+            # If this is a nested function, then add a 'self' field to the environment, since we
+            # will be instantiating the function as a method of a new class representing that
+            # original function.
+            self.environment.add_local(Var('self'), object_rprimitive, is_arg=True)
         for arg in fdef.arguments:
             assert arg.variable.type, "Function argument missing type"
             self.environment.add_local(arg.variable, self.type_to_rtype(arg.variable.type),
                                        is_arg=True)
-        self.ret_type = self.convert_return_type(fdef)
+        self.ret_types[-1] = sig.ret_type
+
         fdef.body.accept(self)
 
-        if is_none_rprimitive(self.ret_type) or is_object_rprimitive(self.ret_type):
+        if (is_none_rprimitive(self.ret_types[-1]) or
+                is_object_rprimitive(self.ret_types[-1])):
             self.add_implicit_return()
         else:
             self.add_implicit_unreachable()
 
-        blocks, env = self.leave()
-        args = self.convert_args(fdef)
-        return FuncIR(fdef.name(), class_name, self.module_name, args, self.ret_type, blocks, env)
+        blocks, env, ret_type = self.leave()
+
+        if is_nested:
+            namespace = self.generate_function_namespace()
+            func_ir = self.generate_function_class(fdef, namespace, blocks, sig, env)
+
+            # Instantiate the callable class and load it into a register in the current environment
+            # immediately so that it does not have to be loaded every time the function is called.
+            self.instantiate_function_class(fdef, namespace)
+        else:
+            func_ir = FuncIR(fdef.name(), class_name, self.module_name, sig, blocks,
+                             env)
+        return func_ir
 
     def visit_func_def(self, fdef: FuncDef) -> Value:
-        self.functions.append(self.gen_func_def(fdef))
+        self.functions.append(self.gen_func_def(fdef, self.mapper.fdef_to_sig(fdef)))
         return INVALID_VALUE
-
-    def convert_args(self, fdef: FuncDef) -> List[RuntimeArg]:
-        assert isinstance(fdef.type, CallableType)
-        ann = fdef.type
-        return [RuntimeArg(arg.variable.name(), self.type_to_rtype(ann.arg_types[i]))
-                for i, arg in enumerate(fdef.arguments)]
-
-    def convert_return_type(self, fdef: FuncDef) -> RType:
-        assert isinstance(fdef.type, CallableType)
-        return self.type_to_rtype(fdef.type.ret_type)
 
     def add_implicit_return(self) -> None:
         block = self.blocks[-1][-1]
@@ -378,7 +495,7 @@ class IRBuilder(NodeVisitor[Value]):
     def visit_return_stmt(self, stmt: ReturnStmt) -> Value:
         if stmt.expr:
             retval = self.accept(stmt.expr)
-            retval = self.coerce(retval, self.ret_type, stmt.line)
+            retval = self.coerce(retval, self.ret_types[-1], stmt.line)
         else:
             retval = self.add(PrimitiveOp([], none_op, line=-1))
         self.add(Return(retval))
@@ -786,7 +903,6 @@ class IRBuilder(NodeVisitor[Value]):
         return self.load_static_float(expr.value)
 
     def is_native_name_expr(self, expr: NameExpr) -> bool:
-        # TODO later we want to support cross-module native calls too
         assert expr.node, "RefExpr not resolved"
         if '.' in expr.node.fullname():
             module_name = '.'.join(expr.node.fullname().split('.')[:-1])
@@ -806,28 +922,14 @@ class IRBuilder(NodeVisitor[Value]):
             assert desc.result_type is not None
             return self.add(PrimitiveOp([], desc, expr.line))
 
-        if self.is_global_name(expr.name):
+        # TODO: Behavior currently only defined for Var and FuncDef node types.
+        if expr.kind == LDEF:
+            try:
+                return self.environment.lookup(expr.node)
+            except KeyError:
+                assert False, 'expression %s not defined in current scope'.format(expr.name)
+        else:
             return self.load_global(expr)
-
-        if not self.is_native_name_expr(expr):
-            return self.load_static_module_attr(expr)
-
-        # TODO: We assume that this is a Var or FuncDef node, which is very limited
-        if isinstance(expr.node, Var):
-            return self.environment.lookup(expr.node)
-        if isinstance(expr.node, FuncDef):
-            # If we have a function, then we can look it up in the global variables dictionary.
-            return self.load_global(expr)
-
-        assert False, 'node must be of either Var or FuncDef type'
-
-    def is_global_name(self, name: str) -> bool:
-        # TODO: this is pretty hokey
-        for _, names in self.from_imports.items():
-            for _, as_name in names:
-                if name == as_name:
-                    return True
-        return False
 
     def is_module_member_expr(self, expr: MemberExpr) -> bool:
         return isinstance(expr.expr, RefExpr) and expr.expr.kind == MODULE_REF
@@ -861,8 +963,8 @@ class IRBuilder(NodeVisitor[Value]):
         return self.add(PyMethodCall(obj, method, arg_boxes))
 
     def coerce_native_call_args(self,
-                                args: List[Value],
-                                arg_types: List[RType],
+                                args: Sequence[Value],
+                                arg_types: Sequence[RType],
                                 line: int) -> List[Value]:
         coerced_arg_regs = []
         for reg, arg_type in zip(args, arg_types):
@@ -1263,9 +1365,10 @@ class IRBuilder(NodeVisitor[Value]):
 
     # Helpers
 
-    def enter(self) -> None:
-        self.environment = Environment()
+    def enter(self, name: Optional[str] = None) -> None:
+        self.environment = Environment(name)
         self.environments.append(self.environment)
+        self.ret_types.append(none_rprimitive)
         self.blocks.append([])
         self.new_block()
 
@@ -1281,17 +1384,21 @@ class IRBuilder(NodeVisitor[Value]):
         goto.label = block.label
         return block
 
-    def leave(self) -> Tuple[List[BasicBlock], Environment]:
+    def leave(self) -> Tuple[List[BasicBlock], Environment, RType]:
         blocks = self.blocks.pop()
         env = self.environments.pop()
+        ret_type = self.ret_types.pop()
         self.environment = self.environments[-1]
-        return blocks, env
+        return blocks, env, ret_type
 
     def add(self, op: Op) -> Value:
         self.blocks[-1][-1].ops.append(op)
         if isinstance(op, RegisterOp):
             self.environment.add_op(op)
         return op
+
+    def generate_function_namespace(self) -> str:
+        return '_'.join(env.name for env in self.environments if env.name)
 
     def primitive_op(self, desc: OpDescription, args: List[Value], line: int) -> Value:
         assert desc.result_type is not None
@@ -1344,12 +1451,52 @@ class IRBuilder(NodeVisitor[Value]):
     def box_expr(self, expr: Expression) -> Value:
         return self.box(self.accept(expr))
 
+    def generate_function_class(self,
+                                fdef: FuncDef,
+                                namespace: str,
+                                blocks: List[BasicBlock],
+                                sig: FuncSignature,
+                                env: Environment) -> FuncIR:
+        """Generates a callable class representing a nested function.
+
+        This takes a FuncDef and its associated namespace, blocks, environment, and return type and
+        builds a ClassIR with its '__call__' method implemented to represent the function. Note
+        that the name of the function is changed to be '__call__', and a 'self' parameter is added
+        to its list of arguments, as it becomes a class method. The name of the newly constructed
+        class is generated using the names of the functions that enclose the given nested function.
+
+        Returns a newly constructed FuncIR associated with the given FuncDef.
+        """
+        class_name = '{}_{}_obj'.format(fdef.name(), namespace)
+        sig = FuncSignature((RuntimeArg('self', object_rprimitive),) + sig.args, sig.ret_type)
+        func_ir = FuncIR('__call__', class_name, self.module_name, sig, blocks, env)
+        class_ir = ClassIR(class_name, self.module_name)
+        class_ir.methods['__call__'] = func_ir
+        self.classes.append(class_ir)
+        return func_ir
+
+    def instantiate_function_class(self, fdef: FuncDef, namespace: str) -> Value:
+        """Assigns a callable class to a register named after the given function definition."""
+        temp_reg = self.add(Call(self.mapper.fdef_to_sig(fdef).ret_type,
+                                 '{}.{}_{}_obj'.format(self.module_name, fdef.name(), namespace),
+                                 [],
+                                 fdef.line))
+        func_reg = self.environment.add_local(fdef, object_rprimitive)
+        return self.add(Assign(func_reg, temp_reg))
+
+    def is_builtin_name_expr(self, expr: NameExpr) -> bool:
+        assert expr.node, "RefExpr not resolved"
+        return '.' in expr.node.fullname() and expr.node.fullname().split('.')[0] == 'builtins'
+
     def load_global(self, expr: NameExpr) -> Value:
         """Loads a Python-level global.
 
         This takes a NameExpr and uses its name as a key to retrieve the corresponding PyObject *
         from the _globals dictionary in the C-generated code.
         """
+        # If the global is from 'builtins', turn it into a module attr load instead
+        if self.is_builtin_name_expr(expr):
+            return self.load_static_module_attr(expr)
         _globals = self.add(LoadStatic(object_rprimitive, 'globals', self.module_name))
         reg = self.load_static_unicode(expr.name)
         return self.add(PrimitiveOp([_globals, reg], dict_get_item_op, expr.line))
