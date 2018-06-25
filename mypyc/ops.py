@@ -366,7 +366,7 @@ class AssignmentTargetAttr(AssignmentTarget):
             self.type = object_rprimitive
 
     def to_str(self) -> str:
-        return '{}.{}'.format(self.obj.name, self.attr)
+        return '{}.{}'.format(self.obj.to_str(), self.attr)
 
 
 class Environment:
@@ -388,7 +388,7 @@ class Environment:
     def add_local(self, symbol: SymbolNode, typ: RType, is_arg: bool = False) -> 'Register':
         assert isinstance(symbol, SymbolNode)
         reg = Register(typ, symbol.line, is_arg = is_arg)
-        self.symtable[symbol] = target
+        self.symtable[symbol] = AssignmentTargetRegister(reg)
         self.add(reg, symbol.name())
         return reg
 
@@ -1275,13 +1275,9 @@ class ClassIR:
 
     This also describes the runtime structure of native instances.
     """
-    def __init__(self,
-                 name: str,
-                 module_name: str,
-                 environment: Optional[Environment] = None) -> None:
+    def __init__(self, name: str, module_name: str) -> None:
         self.name = name
         self.module_name = module_name
-        self.environment = environment
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
         # We populate method_types with the signatures of every method before
         # we generate methods, and we rely on this information being present.
