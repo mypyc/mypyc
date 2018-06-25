@@ -243,7 +243,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.environment = Environment()
         self.environments = [self.environment]
         self.func_env_classes = []  # type: List[ClassIR]
-        self.selfs = [None]
+        self.selfs = [Register(none_rprimitive)]  # type: List[Value]
         self.ret_types = []  # type: List[RType]
         self.blocks = []  # type: List[List[BasicBlock]]
         self.functions = []  # type: List[FuncIR]
@@ -418,13 +418,14 @@ class IRBuilder(NodeVisitor[Value]):
             # Add a 'self' field to the environment, since we instantiate a nested function as a
             # method of a new class representing that original function. Use the callable class as
             # the RInstance type.
-            self.selfs.append(self.environment.add_local_reg(Var('self'),
-                                                             RInstance(func_callable_class),
-                                                             is_arg=True))
+            self_target = self.environment.add_local_reg(Var('self'),
+                                                         RInstance(func_callable_class),
+                                                         is_arg=True)
+            self.selfs.append(self.read_from_target(self_target, fdef.line))
         for arg in fdef.arguments:
             assert arg.variable.type, "Function argument missing type"
             self.environment.add_local_reg(arg.variable, self.type_to_rtype(arg.variable.type),
-                                        is_arg=True)
+                                           is_arg=True)
 
         if contains_nested:
             # Add a class representing the environment of the current function. Instantiate it and
@@ -1491,7 +1492,7 @@ class IRBuilder(NodeVisitor[Value]):
         """Generates a class representing a function environment."""
         ir = ClassIR(name='{}_{}_env'.format(fdef.name(), namespace),
                      module_name=self.module_name)
-        for symbol, target in env.symtable:
+        for symbol, target in env.symtable.items():
             ir.attributes[symbol.name()] = target.type
         ir.mro = [ir]
         self.func_env_classes.append(ir)
@@ -1530,7 +1531,8 @@ class IRBuilder(NodeVisitor[Value]):
         cir.methods['__call__'] = func_ir
         return cir, func_ir
 
-    def instantiate_func_env_class(self, fdef: FuncDef, ret_type: RType, namespace: str) -> Value:
+    def instantiate_func_env_class(self, fdef: FuncDef, ret_type: RType,
+                                   namespace: str) -> AssignmentTargetRegister:
         """Assigns an environment class to a register named after the given function definition."""
         fullname = '{}.{}_{}_env'.format(self.module_name, fdef.name(), namespace)
         env_name = '{}_env'.format(fdef.name())
@@ -1539,7 +1541,8 @@ class IRBuilder(NodeVisitor[Value]):
         self.assign_to_target(env_target, env_reg, fdef.line)
         return env_target
 
-    def instantiate_func_callable_class(self, fdef: FuncDef, ret_type: RType, namespace: str) -> Value:
+    def instantiate_func_callable_class(self, fdef: FuncDef, ret_type: RType,
+                                        namespace: str) -> AssignmentTargetRegister:
         """Assigns a callable class to a register named after the given function definition."""
         fullname = '{}.{}_{}_obj'.format(self.module_name, fdef.name(), namespace)
         func_reg = self.add(Call(ret_type, fullname, [], fdef.line))

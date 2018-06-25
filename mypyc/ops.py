@@ -319,7 +319,7 @@ class AssignmentTarget(object):
     type = None  # type: RType
 
     @abstractmethod
-    def to_str(self, env: Optional['Environment']) -> str:
+    def to_str(self, env: 'Environment') -> str:
         raise NotImplementedError
 
 
@@ -388,7 +388,8 @@ class Environment:
         self.add(reg, symbol.name())
         return reg
 
-    def add_local_reg(self, symbol: SymbolNode, typ: RType, is_arg: bool = False) -> AssignmentTargetRegister:
+    def add_local_reg(self, symbol: SymbolNode,
+                      typ: RType, is_arg: bool = False) -> AssignmentTargetRegister:
         assert isinstance(symbol, SymbolNode)
         reg = Register(typ, symbol.line, is_arg = is_arg)
         target = AssignmentTargetRegister(reg)
@@ -464,6 +465,7 @@ class Environment:
         if isinstance(arg, AssignmentTarget):
             return arg.to_str(self)
         return arg.name
+
 
 ERR_NEVER = 0  # Never generates an exception
 ERR_MAGIC = 1  # Generates magic value (c_error_value) based on target RType on exception
