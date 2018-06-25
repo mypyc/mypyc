@@ -148,3 +148,30 @@ py_setattr_op = func_op(
     error_kind=ERR_FALSE,
     emit=simple_emit('{dest} = PyObject_SetAttr({args[0]}, {args[1]}, {args[2]}) >= 0;')
 )
+
+
+def emit_isinstance(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+    temp = emitter.temp_name()
+    emitter.emit_lines('int %s = PyObject_IsInstance(%s, %s);' % (temp, args[0], args[1]),
+                       'if (%s < 0)' % temp,
+                       '    %s = %s;' % (dest, bool_rprimitive.c_error_value()),
+                       'else',
+                       '    %s = %s;' % (dest, temp))
+
+
+func_op('builtins.isinstance',
+        arg_types=[object_rprimitive, object_rprimitive],
+        result_type=bool_rprimitive,
+        error_kind=ERR_MAGIC,
+        emit=emit_isinstance)
+
+
+# Faster isinstance() that only works with native classes and doesn't perform type checking
+# of the type argument.
+fast_isinstance_op = func_op(
+    'builtins.isinstance',
+    arg_types=[object_rprimitive, object_rprimitive],
+    result_type=bool_rprimitive,
+    error_kind=ERR_NEVER,
+    emit=simple_emit('{dest} = PyObject_TypeCheck({args[0]}, (PyTypeObject *){args[1]});'),
+    priority=0)

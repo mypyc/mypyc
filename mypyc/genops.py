@@ -49,13 +49,14 @@ from mypyc.ops import (
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp,
     ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap, FuncSignature,
-    VTableAttr, VTableMethod,
+    VTableAttr, VTableMethod, NAMESPACE_TYPE,
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import list_len_op, list_get_item_op, list_set_item_op, new_list_op
 from mypyc.ops_dict import new_dict_op, dict_get_item_op
 from mypyc.ops_misc import (
     none_op, iter_op, next_op, no_err_occurred_op, py_getattr_op, py_setattr_op,
+    fast_isinstance_op,
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
@@ -144,8 +145,7 @@ class Mapper:
 
     def __init__(self) -> None:
         self.type_to_ir = {}  # type: Dict[TypeInfo, ClassIR]
-        # Maps integer, float, and unicode literals to the static c name for that literal
-        # TODO: Maybe C names should generated only when emitting C?
+        # Maps integer, float, and unicode literals to a static name
         self.literals = {}  # type: LiteralsMap
 
     def type_to_rtype(self, typ: Type) -> RType:
@@ -197,17 +197,17 @@ class Mapper:
         ret = self.type_to_rtype(fdef.type.ret_type)
         return FuncSignature(args, ret)
 
-    def c_name_for_literal(self, value: Union[int, float, str]) -> str:
+    def literal_static_name(self, value: Union[int, float, str]) -> str:
         # Include type to distinguish between 1 and 1.0, and so on.
         key = (type(value), value)
         if key not in self.literals:
             if isinstance(value, str):
-                prefix = '__unicode_'
+                prefix = 'unicode_'
             elif isinstance(value, float):
-                prefix = '__float_'
+                prefix = 'float_'
             else:
                 assert isinstance(value, int)
-                prefix = '__int_'
+                prefix = 'int_'
             self.literals[key] = prefix + str(len(self.literals))
         return self.literals[key]
 
@@ -891,7 +891,6 @@ class IRBuilder(NodeVisitor[Value]):
         return self.load_static_float(expr.value)
 
     def is_native_name_expr(self, expr: NameExpr) -> bool:
-        # TODO later we want to support cross-module native calls too
         assert expr.node, "RefExpr not resolved"
         if '.' in expr.node.fullname():
             module_name = '.'.join(expr.node.fullname().split('.')[:-1])
@@ -911,12 +910,6 @@ class IRBuilder(NodeVisitor[Value]):
             assert desc.result_type is not None
             return self.add(PrimitiveOp([], desc, expr.line))
 
-        if self.is_global_name(expr.name):
-            return self.load_global(expr)
-
-        if not self.is_native_name_expr(expr):
-            return self.load_static_module_attr(expr)
-
         # TODO: Behavior currently only defined for Var and FuncDef node types.
         if expr.kind == LDEF:
             try:
@@ -927,14 +920,6 @@ class IRBuilder(NodeVisitor[Value]):
                 # assert False, 'expression {} not defined in current scope'.format(expr.name)
         else:
             return self.load_global(expr)
-
-    def is_global_name(self, name: str) -> bool:
-        # TODO: this is pretty hokey
-        for _, names in self.from_imports.items():
-            for _, as_name in names:
-                if name == as_name:
-                    return True
-        return False
 
     def is_module_member_expr(self, expr: MemberExpr) -> bool:
         return isinstance(expr.expr, RefExpr) and expr.expr.kind == MODULE_REF
@@ -1003,6 +988,14 @@ class IRBuilder(NodeVisitor[Value]):
             if isinstance(expr_rtype, RTuple):
                 # len() of fixed-length tuple can be trivially determined statically.
                 return self.add(LoadInt(len(expr_rtype.types)))
+        if (fullname == 'builtins.isinstance'
+                and len(expr.args) == 2
+                and expr.arg_kinds == [ARG_POS, ARG_POS]
+                and isinstance(expr.args[1], NameExpr)
+                and isinstance(expr.args[1].node, TypeInfo)
+                and self.is_native_module_name_expr(expr.args[1])):
+            # Special case native isinstance() checks as this makes them much faster.
+            return self.primitive_op(fast_isinstance_op, args, expr.line)
 
         # Handle data-driven special-cased primitive call ops.
         target_type = self.node_type(expr)
@@ -1522,24 +1515,34 @@ class IRBuilder(NodeVisitor[Value]):
         self.assign_to_target(func_target, func_reg, fdef.line)
         return func_target
 
+    def is_builtin_name_expr(self, expr: NameExpr) -> bool:
+        assert expr.node, "RefExpr not resolved"
+        return '.' in expr.node.fullname() and expr.node.fullname().split('.')[0] == 'builtins'
+
     def load_global(self, expr: NameExpr) -> Value:
         """Loads a Python-level global.
 
         This takes a NameExpr and uses its name as a key to retrieve the corresponding PyObject *
         from the _globals dictionary in the C-generated code.
         """
-        _globals = self.add(LoadStatic(object_rprimitive, '_globals'))
+        # If the global is from 'builtins', turn it into a module attr load instead
+        if self.is_builtin_name_expr(expr):
+            return self.load_static_module_attr(expr)
+        if self.is_native_module_name_expr(expr) and isinstance(expr.node, TypeInfo):
+            assert expr.fullname is not None
+            return self.load_native_type_object(expr.fullname)
+        _globals = self.add(LoadStatic(object_rprimitive, 'globals', self.module_name))
         reg = self.load_static_unicode(expr.name)
         return self.add(PrimitiveOp([_globals, reg], dict_get_item_op, expr.line))
 
     def load_static_int(self, value: int) -> Value:
         """Loads a static integer Python 'int' object into a register."""
-        static_symbol = self.mapper.c_name_for_literal(value)
+        static_symbol = self.mapper.literal_static_name(value)
         return self.add(LoadStatic(int_rprimitive, static_symbol, ann=value))
 
     def load_static_float(self, value: float) -> Value:
         """Loads a static float value into a register."""
-        static_symbol = self.mapper.c_name_for_literal(value)
+        static_symbol = self.mapper.literal_static_name(value)
         return self.add(LoadStatic(float_rprimitive, static_symbol, ann=value))
 
     def load_static_unicode(self, value: str) -> Value:
@@ -1548,15 +1551,19 @@ class IRBuilder(NodeVisitor[Value]):
         This is useful for more than just unicode literals; for example, method calls
         also require a PyObject * form for the name of the method.
         """
-        static_symbol = self.mapper.c_name_for_literal(value)
+        static_symbol = self.mapper.literal_static_name(value)
         return self.add(LoadStatic(str_rprimitive, static_symbol, ann=value))
 
     def load_static_module_attr(self, expr: RefExpr) -> Value:
         assert expr.node, "RefExpr not resolved"
         module = '.'.join(expr.node.fullname().split('.')[:-1])
         name = expr.node.fullname().split('.')[-1]
-        left = self.add(LoadStatic(object_rprimitive, c_module_name(module)))
+        left = self.add(LoadStatic(object_rprimitive, 'module', module))
         return self.py_get_attr(left, name, expr.line)
+
+    def load_native_type_object(self, fullname: str) -> Value:
+        module, name = fullname.rsplit('.', 1)
+        return self.add(LoadStatic(object_rprimitive, name, module, NAMESPACE_TYPE))
 
     def coerce(self, src: Value, target_type: RType, line: int) -> Value:
         """Generate a coercion/cast from one type to other (only if needed).

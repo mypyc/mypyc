@@ -2,13 +2,13 @@
 
 from typing import Optional, List
 
-from mypyc.common import REG_PREFIX, NATIVE_PREFIX
+from mypyc.common import REG_PREFIX, NATIVE_PREFIX, STATIC_PREFIX, TYPE_PREFIX
 from mypyc.emit import Emitter
 from mypyc.ops import (
     FuncIR, OpVisitor, Goto, Branch, Return, Assign, LoadInt, LoadErrorValue, GetAttr, SetAttr,
     LoadStatic, TupleGet, TupleSet, Call, PyCall, IncRef, DecRef, Box, Cast, Unbox,
     Label, Value, Register, RType, RTuple, MethodCall, PyMethodCall, PrimitiveOp, EmitterInterface,
-    Unreachable, is_int_rprimitive
+    Unreachable, is_int_rprimitive, NAMESPACE_STATIC, NAMESPACE_TYPE,
 )
 from mypyc.namegen import NameGenerator
 
@@ -31,10 +31,13 @@ def native_function_header(fn: FuncIR, names: NameGenerator) -> str:
         args=', '.join(args) or 'void')
 
 
-def generate_native_function(fn: FuncIR, emitter: Emitter, source_path: str) -> None:
+def generate_native_function(fn: FuncIR,
+                             emitter: Emitter,
+                             source_path: str,
+                             module_name: str) -> None:
     declarations = Emitter(emitter.context, fn.env)
     body = Emitter(emitter.context, fn.env)
-    visitor = FunctionEmitterVisitor(body, declarations, fn.name, source_path)
+    visitor = FunctionEmitterVisitor(body, declarations, fn.name, source_path, module_name)
 
     declarations.emit_line('{} {{'.format(native_function_header(fn, emitter.names)))
     body.indent()
@@ -63,13 +66,15 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
                  emitter: Emitter,
                  declarations: Emitter,
                  func_name: str,
-                 source_path: str) -> None:
+                 source_path: str,
+                 module_name: str) -> None:
         self.emitter = emitter
         self.names = emitter.names
         self.declarations = declarations
         self.env = self.emitter.env
         self.func_name = func_name
         self.source_path = source_path
+        self.module_name = module_name
 
     def temp_name(self) -> str:
         return self.emitter.temp_name()
@@ -110,9 +115,11 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         self.emit_line('if ({}) {{'.format(cond))
 
         if op.traceback_entry is not None:
-            self.emit_line('CPy_AddTraceback("%s", "%s", %d, _globals);' % (self.source_path,
-                                                                            self.func_name,
-                                                                            op.line))
+            globals_static = self.emitter.static_name('globals', self.module_name)
+            self.emit_line('CPy_AddTraceback("%s", "%s", %d, %s);' % (self.source_path,
+                                                                      self.func_name,
+                                                                      op.line,
+                                                                      globals_static))
         self.emit_lines(
             'goto %s;' % self.label(op.true),
             '} else',
@@ -185,12 +192,21 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
             rtype.struct_name(self.names),
             rtype.attr_type(op.attr).ctype))
 
+    PREFIX_MAP = {
+        NAMESPACE_STATIC: STATIC_PREFIX,
+        NAMESPACE_TYPE: TYPE_PREFIX,
+    }
+
     def visit_load_static(self, op: LoadStatic) -> None:
         dest = self.reg(op)
+        prefix = self.PREFIX_MAP[op.namespace]
+        name = self.emitter.static_name(op.identifier, op.module_name, prefix)
+        if op.namespace == NAMESPACE_TYPE:
+            name = '(PyObject *)&%s' % name
         if is_int_rprimitive(op.type):
-            self.emit_line('%s = CPyTagged_FromObject(%s);' % (dest, op.identifier))
+            self.emit_line('%s = CPyTagged_FromObject(%s);' % (dest, name))
         else:
-            self.emit_line('%s = %s;' % (dest, op.identifier))
+            self.emit_line('%s = %s;' % (dest, name))
 
     def visit_tuple_get(self, op: TupleGet) -> None:
         dest = self.reg(op)
