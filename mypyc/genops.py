@@ -1240,6 +1240,9 @@ class IRBuilder(NodeVisitor[Value]):
                     b.false = target.label
 
     def add_bool_branch(self, value: Value) -> Branch:
+        if is_same_type(value.type, int_rprimitive):
+            zero = self.add(LoadInt(0))
+            value = self.binary_op(value, zero, '!=', value.line)
         if not is_same_type(value.type, bool_rprimitive):
             value = self.primitive_op(bool_op, [value], value.line)
         branch = Branch(value, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)

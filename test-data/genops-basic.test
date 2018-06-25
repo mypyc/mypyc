@@ -1103,13 +1103,19 @@ L0:
     return r0
 
 [case testObjectAsBoolean]
-def f(x: object) -> int:
+def obj(x: object) -> int:
+    if x:
+        return 1
+    else:
+        return 0
+
+def num(x: int) -> int:
     if x:
         return 1
     else:
         return 0
 [out]
-def f(x):
+def obj(x):
     x :: object
     r0 :: bool
     r1, r2 :: int
@@ -1122,5 +1128,21 @@ L1:
 L2:
     r2 = 0
     return r2
+L3:
+    unreachable
+def num(x):
+    x, r0 :: int
+    r1 :: bool
+    r2, r3 :: int
+L0:
+    r0 = 0
+    r1 = x != r0 :: int
+    if r1 goto L1 else goto L2 :: bool
+L1:
+    r2 = 1
+    return r2
+L2:
+    r3 = 0
+    return r3
 L3:
     unreachable
