@@ -42,8 +42,11 @@ def generate_native_function(fn: FuncIR,
     declarations.emit_line('{} {{'.format(native_function_header(fn, emitter.names)))
     body.indent()
 
+    print('generating function for {}'.format(fn.name))
+
     for r, i in fn.env.indexes.items():
         if i < len(fn.args):
+            print('skipping: {} -> {}'.format(r.to_str(fn.env), i))
             continue  # skip the arguments
         ctype = r.type.ctype_spaced()
         declarations.emit_line('{ctype}{prefix}{name};'.format(ctype=ctype,

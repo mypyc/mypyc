@@ -938,4 +938,11 @@ from native import outer
 print(outer(1))
 
 [out]
-1
+Traceback (most recent call last):
+  File "tmp/driver.py", line 2, in <module>
+    print(outer(1))
+  File "tmp/py/native.py", line 6, in outer
+    return inner()
+  File "tmp/py/native.py", line 5, in __call__
+    return num
+AttributeError: attribute 'env' of 'inner_outer_obj' undefined

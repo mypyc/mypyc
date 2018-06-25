@@ -1112,22 +1112,17 @@ def outer(num: int) -> int:
     return inner()
 [out]
 def inner_outer_obj.__call__(self):
-    r0 :: inner_outer_env
-    inner_env, self :: object
-    r1 :: str
-    r2 :: object
-    r3 :: int
+    self :: inner_outer_obj
+    r0 :: outer__env
+    r1 :: int
 L0:
-    r0 = inner_outer_env()
-    inner_env = r0
-    r1 = __unicode_0 :: static  ('num')
-    r2 = getattr outer_env, r1
-    r3 = unbox(int, r2)
-    return r3
+    r0 = self.env
+    r1 = r0.num
+    return r1
 def outer(num):
+    num :: int
     r0 :: outer__env
     outer_env :: object
-    num :: int
     r1 :: inner_outer_obj
     inner, r2 :: object
     r3 :: int

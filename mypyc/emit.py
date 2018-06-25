@@ -5,8 +5,8 @@ from typing import List, Set, Dict, Optional
 
 from mypyc.common import REG_PREFIX, STATIC_PREFIX, TYPE_PREFIX
 from mypyc.ops import (
-    Environment, Label, Value, Register, RType, RTuple, RInstance, ROptional,
-    RPrimitive, is_int_rprimitive, is_float_rprimitive, is_bool_rprimitive,
+    Any, AssignmentTarget, Environment, Label, Value, Register, RType, RTuple, RInstance, 
+    ROptional, RPrimitive, is_int_rprimitive, is_float_rprimitive, is_bool_rprimitive,
     short_name, is_list_rprimitive, is_dict_rprimitive, is_tuple_rprimitive, is_none_rprimitive,
     object_rprimitive, is_str_rprimitive, ClassIR
 )
@@ -55,7 +55,7 @@ class Emitter:
         return 'CPyL%d' % label
 
     def reg(self, reg: Value) -> str:
-        return REG_PREFIX + reg.name
+        return REG_PREFIX + self.read(reg)
 
     def emit_line(self, line: str = '') -> None:
         if line.startswith('}'):
@@ -99,6 +99,11 @@ class Emitter:
 
     def type_struct_name(self, cl: ClassIR) -> str:
         return self.static_name(cl.name, cl.module_name, prefix=TYPE_PREFIX)
+
+    def read(self, value: Any) -> str:
+        if isinstance(value, AssignmentTarget):
+            return value.to_str(self.env)
+        return value.name
 
     # Higher-level operations
 

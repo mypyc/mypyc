@@ -319,7 +319,7 @@ class AssignmentTarget(object):
     type = None  # type: RType
 
     @abstractmethod
-    def to_str(self) -> str:
+    def to_str(self, env: Optional['Environment']) -> str:
         raise NotImplementedError
 
 
@@ -330,7 +330,7 @@ class AssignmentTargetRegister(AssignmentTarget):
         self.register = register
         self.type = register.type
 
-    def to_str(self) -> str:
+    def to_str(self, env: 'Environment') -> str:
         return self.register.name
 
 
@@ -344,7 +344,7 @@ class AssignmentTargetIndex(AssignmentTarget):
         #       lvalue type in mypy and remove this special case.
         self.type = object_rprimitive
 
-    def to_str(self) -> str:
+    def to_str(self, env: 'Environment') -> str:
         return '{}[{}]'.format(self.base.name, self.index.name)
 
 
@@ -361,8 +361,8 @@ class AssignmentTargetAttr(AssignmentTarget):
             self.obj_type = object_rprimitive
             self.type = object_rprimitive
 
-    def to_str(self) -> str:
-        return '{}.{}'.format(self.obj.to_str(), self.attr)
+    def to_str(self, env: 'Environment') -> str:
+        return '{}.{}'.format(self.obj.to_str(env), self.attr)
 
 
 class Environment:
@@ -462,7 +462,7 @@ class Environment:
 
     def read(self, arg: Any) -> str:
         if isinstance(arg, AssignmentTarget):
-            return arg.to_str()
+            return arg.to_str(self)
         return arg.name
 
 ERR_NEVER = 0  # Never generates an exception

@@ -180,18 +180,7 @@ def after_branch_decrefs(label: Label,
     target_pre_live = pre_live[label, 0]
     decref = source_live_regs - target_pre_live - source_borrowed
     if decref:
-        print('Printing DecRef')
-        for k in decref:
-            if isinstance(k, AssignmentTargetRegister):
-                print(k.register.name)
-            else:
-                print('{}'.format(k))
-        print('Printing env.indexes')
-        for k, v in env.indexes.items():
-            if isinstance(k, Register):
-                print('{}: {}'.format(k.name, v))
-            else:
-                print('{}: {}'.format(k, v))
+        decref = [d.register for d in decref if isinstance(d, AssignmentTargetRegister)]
         return [DecRef(reg)
                 for reg in sorted(decref, key=lambda r: env.indexes[r])
                 if reg.type.is_refcounted and reg not in omitted]

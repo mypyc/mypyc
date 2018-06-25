@@ -21,10 +21,6 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     This is the main entry point to the module.
     """
     name = cl.name
-    if cl.environment:
-        symtable = cl.environment.symtable
-    else:
-        symtable = None
     name_prefix = cl.name_prefix(emitter.names)
     fullname = '{}.{}'.format(module, name)
     setup_name = '{}_setup'.format(name_prefix)
@@ -84,17 +80,17 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     emit_line()
 
     tp_members = '0'
-    if symtable:
-        tp_members = name + '_members'
-        emitter.emit_line('static PyMemberDef {}[] = {{'.format(tp_members))
-        for var, register in symtable.items():
-            emitter.emit_line('{{ "{var}", {typ}, offsetof({obj}, {var}), 0, "{var}" }},'.format(
-                var=var.name(),
-                typ=get_c_type_macro(str(register.type)),
-                obj=name + 'Object'))
-        emitter.emit_line('{ NULL }  /* Sentinel */')
-        emitter.emit_line('};')
-        emitter.emit_line()
+    # if symtable:
+    #     tp_members = name + '_members'
+    #     emitter.emit_line('static PyMemberDef {}[] = {{'.format(tp_members))
+    #     for var, register in symtable.items():
+    #         emitter.emit_line('{{ "{var}", {typ}, offsetof({obj}, {var}), 0, "{var}" }},'.format(
+    #             var=var.name(),
+    #             typ=get_c_type_macro(str(register.type)),
+    #             obj=name + 'Object'))
+    #     emitter.emit_line('{ NULL }  /* Sentinel */')
+    #     emitter.emit_line('};')
+    #     emitter.emit_line()
 
     emitter.emit_line(textwrap.dedent("""\
         static PyTypeObject {type_struct} = {{
@@ -182,11 +178,6 @@ def generate_object_struct(cl: ClassIR, emitter: Emitter) -> None:
     for base in reversed(cl.mro):
         for attr, rtype in base.attributes.items():
             emitter.emit_line('{}{};'.format(rtype.ctype_spaced(), attr))
-
-    if cl.environment:
-        for var, reg in cl.environment.symtable.items():
-            emitter.emit_line('{}{};'.format(reg.type.ctype_spaced(), var.name()))
-
     emitter.emit_line('}} {};'.format(cl.struct_name(emitter.names)))
 
 
