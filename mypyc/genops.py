@@ -1243,7 +1243,11 @@ class IRBuilder(NodeVisitor[Value]):
         if is_same_type(value.type, int_rprimitive):
             zero = self.add(LoadInt(0))
             value = self.binary_op(value, zero, '!=', value.line)
-        if not is_same_type(value.type, bool_rprimitive):
+        elif is_same_type(value.type, list_rprimitive):
+            length = self.primitive_op(list_len_op, [value], value.line)
+            zero = self.add(LoadInt(0))
+            value = self.binary_op(length, zero, '!=', value.line)
+        elif not is_same_type(value.type, bool_rprimitive):
             value = self.primitive_op(bool_op, [value], value.line)
         branch = Branch(value, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
         self.add(branch)

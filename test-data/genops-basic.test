@@ -1103,6 +1103,8 @@ L0:
     return r0
 
 [case testObjectAsBoolean]
+from typing import List
+
 def obj(x: object) -> int:
     if x:
         return 1
@@ -1110,6 +1112,12 @@ def obj(x: object) -> int:
         return 0
 
 def num(x: int) -> int:
+    if x:
+        return 1
+    else:
+        return 0
+
+def lst(x: List[int]) -> int:
     if x:
         return 1
     else:
@@ -1144,5 +1152,23 @@ L1:
 L2:
     r3 = 0
     return r3
+L3:
+    unreachable
+def lst(x):
+    x :: list
+    r0, r1 :: int
+    r2 :: bool
+    r3, r4 :: int
+L0:
+    r0 = len x :: list
+    r1 = 0
+    r2 = r0 != r1 :: int
+    if r2 goto L1 else goto L2 :: bool
+L1:
+    r3 = 1
+    return r3
+L2:
+    r4 = 0
+    return r4
 L3:
     unreachable
