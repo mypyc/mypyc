@@ -55,7 +55,7 @@ from mypyc.ops_list import list_len_op, list_get_item_op, list_set_item_op, new_
 from mypyc.ops_dict import new_dict_op, dict_get_item_op
 from mypyc.ops_misc import (
     none_op, iter_op, next_op, no_err_occurred_op, py_getattr_op, py_setattr_op,
-    fast_isinstance_op,
+    fast_isinstance_op, bool_op,
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
@@ -696,8 +696,7 @@ class IRBuilder(NodeVisitor[Value]):
             top = self.new_block()
             goto.label = top.label
             comparison = self.binary_op(index_reg, end_reg, '<', s.line)
-            branch = Branch(comparison, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
-            self.add(branch)
+            branch = self.add_bool_branch(comparison)
             branches = [branch]
 
             body = self.new_block()
@@ -742,8 +741,7 @@ class IRBuilder(NodeVisitor[Value]):
             len_reg = self.add(PrimitiveOp([expr_reg], list_len_op, s.line))
 
             comparison = self.binary_op(index_reg, len_reg, '<', s.line)
-            branch = Branch(comparison, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
-            self.add(branch)
+            branch = self.add_bool_branch(comparison)
             branches = [branch]
 
             body_block = self.new_block()
@@ -1196,9 +1194,7 @@ class IRBuilder(NodeVisitor[Value]):
         # Catch-all for arbitrary expressions.
         else:
             reg = self.accept(e)
-            branch = Branch(reg, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
-            self.add(branch)
-            return [branch]
+            return [self.add_bool_branch(reg)]
 
     def process_comparison(self, e: ComparisonExpr) -> List[Branch]:
         # TODO: Verify operand types.
@@ -1242,6 +1238,13 @@ class IRBuilder(NodeVisitor[Value]):
             else:
                 if b.false < 0:
                     b.false = target.label
+
+    def add_bool_branch(self, value: Value) -> Branch:
+        if not is_same_type(value.type, bool_rprimitive):
+            value = self.primitive_op(bool_op, [value], value.line)
+        branch = Branch(value, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
+        self.add(branch)
+        return branch
 
     def visit_pass_stmt(self, o: PassStmt) -> Value:
         return INVALID_VALUE
