@@ -80,13 +80,13 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     emit_line()
 
     tp_members = '0'
-    # if symtable:
+    # if name.endswith('_env'):
     #     tp_members = name + '_members'
     #     emitter.emit_line('static PyMemberDef {}[] = {{'.format(tp_members))
-    #     for var, register in symtable.items():
+    #     for symbol_name, rtype in cl.attributes.items():
     #         emitter.emit_line('{{ "{var}", {typ}, offsetof({obj}, {var}), 0, "{var}" }},'.format(
-    #             var=var.name(),
-    #             typ=get_c_type_macro(str(register.type)),
+    #             var=symbol_name,
+    #             typ=get_c_type_macro(str(rtype)),
     #             obj=name + 'Object'))
     #     emitter.emit_line('{ NULL }  /* Sentinel */')
     #     emitter.emit_line('};')

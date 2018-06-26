@@ -757,3 +757,24 @@ L8:
 L9:
     dec_ref r7 :: int
     goto L5
+
+[case testFreeVars]
+from typing import Callable
+
+def outer(num: int) -> int:
+    def inner() -> int:
+        return num
+    return inner()
+[out]
+L0:
+    r0 = outer__env()
+    r1 = inner_outer_obj()
+    inner = r1
+    inner.env = r0; r2 = is_error
+    dec_ref inner
+    dec_ref r0
+    r3 = inner() :: object
+    dec_ref inner
+    r4 = unbox(int, r3)
+    dec_ref r3
+    return r4

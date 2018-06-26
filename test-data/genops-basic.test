@@ -1111,6 +1111,16 @@ def outer(num: int) -> int:
         return num
     return inner()
 [out]
+def inner_outer_obj.__init__(self):
+    self :: inner_outer_obj
+    r0 :: outer__env
+    r1 :: bool
+    r2 :: None
+L0:
+    r0 = inner_foo_env()
+    self.env = r0; r1 = is_error
+    r2 = None
+    return r2
 def inner_outer_obj.__call__(self):
     self :: inner_outer_obj
     r0 :: outer__env
@@ -1122,15 +1132,15 @@ L0:
 def outer(num):
     num :: int
     r0 :: outer__env
-    outer_env :: object
-    r1 :: inner_outer_obj
-    inner, r2 :: object
-    r3 :: int
+    r1, inner :: inner_outer_obj
+    r2 :: bool
+    r3 :: object
+    r4 :: int
 L0:
     r0 = outer__env()
-    outer_env = r0
     r1 = inner_outer_obj()
     inner = r1
-    r2 = inner() :: object
-    r3 = unbox(int, r2)
-    return r3
+    inner.env = r0; r2 = is_error
+    r3 = inner() :: object
+    r4 = unbox(int, r3)
+    return r4
