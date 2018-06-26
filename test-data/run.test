@@ -558,12 +558,10 @@ def get_a(x: Any) -> Any:
     return x.a
 def set_a(x: Any, y: Any) -> None:
     x.a = y
-def set_a_unboxed(x: Any, y: int) -> None:
-    x.a = y
 def call_m(x: Any) -> Any:
     return x.m(1, [3])
 [file driver.py]
-from native import C, get_a, set_a, set_a_unboxed, call_m
+from native import C, get_a, set_a, call_m
 class D:
     def m(self, x, a):
         return self.a + x + a[0]
@@ -580,8 +578,6 @@ set_a(c, 5)
 assert c.a == 5
 set_a(d, 4)
 assert d.a == 4
-set_a_unboxed(d, 12)
-assert d.a == 12
 try:
     get_a(object())
 except AttributeError:
@@ -942,11 +938,3 @@ from native import outer
 print(outer(1))
 
 [out]
-Traceback (most recent call last):
-  File "tmp/driver.py", line 2, in <module>
-    print(outer(1))
-  File "tmp/py/native.py", line 6, in outer
-    return inner()
-  File "tmp/py/native.py", line 5, in __call__
-    return num
-AttributeError: attribute 'env' of 'inner_outer_obj' undefined
