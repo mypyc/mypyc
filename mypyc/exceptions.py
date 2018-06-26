@@ -33,7 +33,8 @@ def insert_exception_handling(ir: FuncIR) -> None:
 
 
 def add_handler_block(ir: FuncIR) -> BasicBlock:
-    block = BasicBlock.new(ir.blocks)
+    block = BasicBlock()
+    ir.blocks.append(block)
     op = LoadErrorValue(ir.ret_type)
     block.ops.append(op)
     ir.env.add_op(op)
@@ -57,7 +58,7 @@ def split_blocks_at_errors(blocks: List[BasicBlock],
             op = ops[i]
             if isinstance(op, RegisterOp) and op.error_kind != ERR_NEVER:
                 # Split
-                next_block.activate(new_blocks)
+                new_blocks.append(next_block)
                 new_block = next_block
                 next_block = BasicBlock()
                 new_block.ops.extend(ops[i0:i + 1])
@@ -92,7 +93,7 @@ def split_blocks_at_errors(blocks: List[BasicBlock],
                 i0 = i
             else:
                 i += 1
-        next_block.activate(new_blocks)
+        new_blocks.append(next_block)
         next_block.ops.extend(ops[i0:i + 1])
         if i0 == 0:
             mapping[block] = next_block

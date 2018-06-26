@@ -1440,7 +1440,9 @@ class IRBuilder(NodeVisitor[Value]):
         self.new_block()
 
     def new_block(self) -> BasicBlock:
-        return BasicBlock.new(self.blocks[-1])
+        block = BasicBlock()
+        self.blocks[-1].append(block)
+        return block
 
     def goto_new_block(self) -> BasicBlock:
         goto = Goto(INVALID_LABEL)

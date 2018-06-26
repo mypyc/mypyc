@@ -50,6 +50,10 @@ def generate_native_function(fn: FuncIR,
                                                                prefix=REG_PREFIX,
                                                                name=r.name))
 
+    # Before we emit the blocks, give them all labels
+    for i, block in enumerate(fn.blocks):
+        block.label = i
+
     for block in fn.blocks:
         body.emit_label(block)
         for op in block.ops:

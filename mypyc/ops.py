@@ -408,22 +408,15 @@ class BasicBlock:
     as the final op in a block. Manually inserting error checking ops
     would be boring and error-prone.
 
+    Block labels are used for pretty printing and emitting C code, and get
+    filled in by those passes.
+
     Ops that may terminate the program aren't treated as exits.
     """
 
     def __init__(self, label: int = -1) -> None:
         self.label = label
         self.ops = []  # type: List[Op]
-
-    def activate(self, blocks: List['BasicBlock']) -> None:
-        self.label = len(blocks)
-        blocks.append(self)
-
-    @staticmethod
-    def new(blocks: List['BasicBlock']) -> 'BasicBlock':
-        block = BasicBlock()
-        block.activate(blocks)
-        return block
 
 
 # This is used for placeholder labels which aren't assigned yet (but will
@@ -1406,6 +1399,10 @@ class OpVisitor(Generic[T]):
 
 
 def format_blocks(blocks: List[BasicBlock], env: Environment) -> List[str]:
+    # First label all of the blocks
+    for i, block in enumerate(blocks):
+        block.label = i
+
     lines = []
     for i, block in enumerate(blocks):
         i == len(blocks) - 1

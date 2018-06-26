@@ -201,7 +201,8 @@ def after_branch_increfs(label: BasicBlock,
 
 
 def add_block(ops: Iterable[Op], blocks: List[BasicBlock], label: BasicBlock) -> BasicBlock:
-    block = BasicBlock.new(blocks)
+    block = BasicBlock()
+    blocks.append(block)
     block.ops.extend(ops)
     block.ops.append(Goto(label))
     return block
