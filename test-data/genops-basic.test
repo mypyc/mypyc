@@ -1172,3 +1172,54 @@ L2:
     return r4
 L3:
     unreachable
+
+[case testOptionalAsBoolean]
+from typing import Optional
+
+class A: pass
+
+def opt_int(x: Optional[int]) -> int:
+    if x:
+        return 1
+    else:
+        return 0
+
+def opt_a(x: Optional[A]) -> int:
+    if x:
+        return 1
+    else:
+        return 0
+[out]
+def opt_int(x):
+    x :: optional[int]
+    r0, r1 :: int
+    r2 :: bool
+    r3, r4 :: int
+L0:
+    if not x is None goto L1 else goto L3 :: object
+L1:
+    r0 = unbox(int, x)
+    r1 = 0
+    r2 = r0 != r1 :: int
+    if r2 goto L2 else goto L3 :: bool
+L2:
+    r3 = 1
+    return r3
+L3:
+    r4 = 0
+    return r4
+L4:
+    unreachable
+def opt_a(x):
+    x :: optional[A]
+    r0, r1 :: int
+L0:
+    if not x is None goto L1 else goto L2 :: object
+L1:
+    r0 = 1
+    return r0
+L2:
+    r1 = 0
+    return r1
+L3:
+    unreachable
