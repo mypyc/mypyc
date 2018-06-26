@@ -301,8 +301,7 @@ def sum_over_even_values(d):
     key, r1, r2 :: object
     r3 :: int
     r4, r5 :: object
-    r6, r7, r8 :: int
-    r9 :: object
+    r6, r7, r8, r9 :: int
     r10 :: bool
     r11 :: int
     r12, r13 :: object
@@ -323,8 +322,8 @@ L2:
     r6 = unbox(int, r5)
     r7 = 2
     r8 = r6 % r7 :: int
-    r9 = box(int, r8)
-    r10 = bool r9 :: object
+    r9 = 0
+    r10 = r8 != r9 :: int
     if r10 goto L3 else goto L5 :: bool
 L3:
     goto L1
