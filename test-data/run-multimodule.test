@@ -229,3 +229,47 @@ def f2() -> int:
 [file driver.py]
 from native import f1
 assert f1() == 5
+
+[case testMultiModuleCycle2]
+import other
+
+class D: pass
+
+def f() -> other.C:
+    return other.C()
+
+def g(c: other.C) -> D:
+    return c.d
+
+[file other.py]
+import native
+
+class C:
+    def __init__(self) -> None:
+        self.d = native.D()
+
+def h(d: native.D) -> None:
+    pass
+
+[file driver.py]
+from native import f, g
+from other import C, h
+
+c = f()
+assert isinstance(c, C)
+assert g(c) is c.d
+h(c.d)
+
+try:
+    g(1)
+except TypeError:
+    pass
+else:
+    assert False
+
+try:
+    h(1)
+except TypeError:
+    pass
+else:
+    assert False

@@ -82,6 +82,7 @@ class ModuleGenerator:
         module_irs = [module_ir for _, module_ir in self.modules]
 
         for module_name, module in self.modules:
+            self.declare_module(module_name, emitter)
             self.declare_internal_globals(module_name, emitter)
             self.declare_imports(module.imports, emitter)
 
@@ -186,6 +187,7 @@ class ModuleGenerator:
                            '    return NULL;')
         self.generate_imports_init_section(module.imports, emitter)
         self.generate_from_imports_init_section(
+            module_static,
             module.imports,
             module.from_imports,
             emitter,
@@ -218,7 +220,8 @@ class ModuleGenerator:
             type_struct = emitter.type_struct_name(cl)
             emitter.emit_lines(
                 'Py_INCREF(&{});'.format(type_struct),
-                'PyModule_AddObject(m, "{}", (PyObject *)&{});'.format(name, type_struct))
+                'PyModule_AddObject({}, "{}", (PyObject *)&{});'.format(module_static, name,
+                                                                        type_struct))
         emitter.emit_line('return {};'.format(module_static))
         emitter.emit_line('}')
 
@@ -267,13 +270,13 @@ class ModuleGenerator:
     def module_static_name(self, module_name: str, emitter: Emitter) -> str:
         return emitter.static_name('module', module_name)
 
-    def declare_import(self, imp: str, emitter: Emitter):
-        static_name = self.module_static_name(imp, emitter)
+    def declare_module(self, module_name: str, emitter: Emitter) -> None:
+        static_name = self.module_static_name(module_name, emitter)
         self.declare_global('CPyModule *', static_name)
 
     def declare_imports(self, imps: Iterable[str], emitter: Emitter) -> None:
         for imp in imps:
-            self.declare_import(imp, emitter)
+            self.declare_module(imp, emitter)
 
     def declare_static_pyobject(self, identifier: str, emitter: Emitter) -> None:
         symbol = emitter.static_name(identifier, None)
@@ -285,7 +288,7 @@ class ModuleGenerator:
             self.generate_import(imp, emitter, check_for_null=True)
 
     def generate_import(self, imp: str, emitter: Emitter, check_for_null: bool) -> None:
-        c_name = emitter.static_name('module', imp)
+        c_name = self.module_static_name(imp, emitter)
         if check_for_null:
             emitter.emit_line('if ({} == NULL) {{'.format(c_name))
         emitter.emit_line('{} = PyImport_ImportModule("{}");'.format(c_name, imp))
@@ -295,6 +298,7 @@ class ModuleGenerator:
             emitter.emit_line('}')
 
     def generate_from_imports_init_section(self,
+            module_static: str,
             imps: List[str],
             from_imps: Dict[str, List[Tuple[str, str]]],
             emitter: Emitter) -> None:
@@ -302,14 +306,14 @@ class ModuleGenerator:
             # Only import it again if we haven't imported it from the main
             # imports section
             if imp not in imps:
-                c_name = emitter.static_name('module', imp)
+                c_name = self.module_static_name(imp, emitter)
                 emitter.emit_line('CPyModule *{};'.format(c_name))
                 self.generate_import(imp, emitter, check_for_null=False)
 
             for original_name, as_name in import_names:
                 # Obtain a reference to the original object
                 object_temp_name = emitter.temp_name()
-                c_name = emitter.static_name('module', imp)
+                c_name = self.module_static_name(imp, emitter)
                 emitter.emit_line('PyObject *{} = PyObject_GetAttrString({}, "{}");'.format(
                     object_temp_name,
                     c_name,
@@ -320,7 +324,8 @@ class ModuleGenerator:
                     '    return NULL;',
                 )
                 # and add it to the namespace of the current module, which eats the ref
-                emitter.emit_line('if (PyModule_AddObject(m, "{}", {}) < 0)'.format(
+                emitter.emit_line('if (PyModule_AddObject({}, "{}", {}) < 0)'.format(
+                    module_static,
                     as_name,
                     object_temp_name,
                 ))
@@ -329,7 +334,7 @@ class ModuleGenerator:
             # This particular import isn't saved as a global so we should decref it
             # and not keep it around
             if imp not in imps:
-                c_name = emitter.static_name('module', imp)
+                c_name = self.module_static_name(imp, emitter)
                 emitter.emit_line('Py_DECREF({});'.format(c_name))
 
 
