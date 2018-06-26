@@ -243,6 +243,8 @@ class IRBuilder(NodeVisitor[Value]):
         self.environment = Environment()
         self.environments = [self.environment]
         self.env_classes = []  # type: List[ClassIR]
+        self.env_class_targets = []  # type: List[Value]
+        self.env_members = []  # type: List[Dict[SymbolNode, AssignmentTarget]]
         self.selfs = [Register(none_rprimitive)]  # type: List[Value]
         self.ret_types = []  # type: List[RType]
         self.blocks = []  # type: List[List[BasicBlock]]
@@ -396,6 +398,9 @@ class IRBuilder(NodeVisitor[Value]):
 
     def gen_func_def(self, fdef: FuncDef, sig: FuncSignature,
                      class_name: Optional[str] = None) -> FuncIR:
+
+        print('visiting function: {}'.format(fdef.name()))
+
         # If there is more than one environment in the environment stack, then we are visiting a
         # non-global function.
         is_nested = len(self.environments) > 1
@@ -403,17 +408,20 @@ class IRBuilder(NodeVisitor[Value]):
         contains_nested = any(isinstance(block, FuncDef) for block in fdef.body.body)
         namespace = self.gen_func_ns()
 
+        # print('{} is nested function: {}'.format(fdef.name(), is_nested))
+        # print('{} contains nested function: {}'.format(fdef.name(), contains_nested))
+
         self.enter(fdef.name())
 
         if is_nested:
             # Obtain the environment class of the encapsulating function.
             prev_env_class = self.env_classes[-1]
+            prev_env_class_target = self.env_class_targets[-1]
 
             # Generate a callable class representing the function. Here, the entirety of the class
             # is not yet generated, but a placeholder reference is needed so that 'self' can have
             # an RInstance type.
-            callable_class = self.gen_callable_class(fdef, namespace,
-                                                               prev_env_class)
+            callable_class = self.gen_callable_class(fdef, namespace, prev_env_class)
 
             # Add a 'self' field to the environment, since we instantiate a nested function as a
             # method of a new class representing that original function. Use the callable class as
@@ -438,6 +446,9 @@ class IRBuilder(NodeVisitor[Value]):
                 env_class = self.gen_env_class(fdef, namespace, Environment(), prev_env_class)
             else:
                 env_class = self.gen_env_class(fdef, namespace, Environment())
+            env_members = self.env_members[-1]
+
+            self.instantiate_env_class(env_class, sig, fdef.line)
 
         self.ret_types[-1] = sig.ret_type
 
@@ -452,6 +463,7 @@ class IRBuilder(NodeVisitor[Value]):
         blocks, env, ret_type = self.leave()
 
         if contains_nested:
+            self.add_init_to_env_class(env_class, env_members, sig, fdef.line)
             compute_vtable(env_class)
 
         if is_nested:
@@ -460,15 +472,26 @@ class IRBuilder(NodeVisitor[Value]):
             # Populate the callable class representing the function. Instantiate it and load it
             # into a register in the current environment immediately so that it does not have to be
             # loaded every time the function is called.
-            callable_class, init_fn = self.add_init_to_callable_class(callable_class,
-                                                                      prev_env_class,
-                                                                      fdef.line)
+            # callable_class, init_fn = self.add_init_to_callable_class(callable_class,
+            #                                                           prev_env_class,
+            #                                                           sig,
+            #                                                           fdef.line)
             callable_class, func = self.add_call_to_callable_class(callable_class, blocks, sig,
                                                                    env, fdef.line)
-            self.instantiate_callable_class(fdef, callable_class)
+            callable_class_target = self.instantiate_callable_class(fdef, callable_class)
+            self.add(SetAttr(self.read_from_target(callable_class_target, fdef.line),
+                             'env',
+                             prev_env_class_target,
+                             fdef.line))
             compute_vtable(callable_class)
         else:
             func = FuncIR(fdef.name(), class_name, self.module_name, sig, blocks, env)
+
+        if contains_nested:
+            self.env_classes.pop()
+            self.env_members.pop()
+            self.env_class_targets.pop()
+
         return func
 
     def visit_func_def(self, fdef: FuncDef) -> Value:
@@ -934,27 +957,32 @@ class IRBuilder(NodeVisitor[Value]):
                 # If there is a KeyError, then that means the target could not be found in the
                 # current scope. We need to search the hierarchy of environments to check if the
                 # target was defined in an outer scope.
+
+                print('visiting variable: {}'.format(expr.node.name()))
+
                 symbol_found = False
                 index = len(self.environments) - 2
                 while not symbol_found and index >= 1:
-                    # At each level, first check the function environment class. If it cannot be
-                    # found there, check the symbol table in the environment stack.
-                    if expr.node.name() in self.env_classes[index - 1].attributes:
-                        rtype = self.env_classes[index - 1].attributes[expr.node.name()]
+                    # # At each level, first check the function environment class. If it cannot be
+                    # # found there, check the symbol table in the environment stack.
+                    # if expr.node.name() in self.env_classes[index - 1].attributes:
+                    #     rtype = self.env_classes[index - 1].attributes[expr.node.name()]
+                    #     symbol_found = True
+                    # else:
+                    symtable = self.environments[index].symtable
+                    if expr.node in symtable:
+                        rtype = symtable[expr.node].type
                         symbol_found = True
-                    else:
-                        symtable = self.environments[index].symtable
-                        if expr.node in symtable:
-                            rtype = symtable[expr.node].type
-                            symbol_found = True
                     index -= 1
 
                 # Now, add the symbol to the function environment class corresponding to where it
                 # was defined. Then use GetAttr to retrieve the Value associated with the symbol.
                 if symbol_found:
                     self.env_classes[index].attributes[expr.node.name()] = rtype
+                    self.env_members[index][expr.node] = symtable[expr.node]
                     env = self.selfs[-1]
                     for i in range(index, len(self.env_classes)):
+                        print('self: {}'.format(env.to_str(self.environment)))
                         env = self.add(GetAttr(env, 'env', expr.line))
                     val = self.add(GetAttr(env, expr.node.name(), expr.line))
                     # TODO: Figure out how to cache the value into a register so that it doesn't
@@ -1496,10 +1524,10 @@ class IRBuilder(NodeVisitor[Value]):
         return '_'.join(env.name for env in self.environments if env.name)
 
     def gen_env_class(self,
-                           fdef: FuncDef,
-                           namespace: str,
-                           env: Environment,
-                           prev_env_class: Optional[ClassIR] = None) -> ClassIR:
+                      fdef: FuncDef,
+                      namespace: str,
+                      env: Environment,
+                      prev_env_class: Optional[ClassIR] = None) -> ClassIR:
         """Generates a class representing a function environment."""
         ir = ClassIR(name='{}_{}_env'.format(fdef.name(), namespace),
                      module_name=self.module_name)
@@ -1509,8 +1537,46 @@ class IRBuilder(NodeVisitor[Value]):
             ir.attributes['prev_env'] = RInstance(prev_env_class)
         ir.mro = [ir]
         self.env_classes.append(ir)
+        self.env_members.append({})
         self.classes.append(ir)
         return ir
+
+    def add_init_to_env_class(self,
+                              env_class: ClassIR,
+                              env_members: Dict[SymbolNode, AssignmentTarget],
+                              sig: FuncSignature,
+                              line: int) -> Tuple[ClassIR, FuncIR]:
+        """Adds the '__init__' function to an environment class.
+
+        This takes an environment class and sets its '__init__' method to instantiate its
+        attributes to refer to the actual targets.
+
+        Returns the environment class ClassIR and the newly constructed '__init__' FuncIR.
+        """
+        self.enter()
+
+        # First, add the 'self' field, because '__init__' is a class method.
+        self_target = self.environment.add_local_reg(Var('self'),
+                                                     RInstance(env_class),
+                                                     is_arg=True)
+        self_reg = self.read_from_target(self_target, line)
+
+        # Iterate through the variables that are defined in the corresponding environment, and add
+        # their initializing statements to the constructor.
+        for symbol, target in env_members.items():
+            print('{} -> {}'.format(symbol, target))
+            self.environment.add_local_reg(Var(symbol.name()), target.type, is_arg=True)
+            self.add(SetAttr(self_reg, symbol.name(), self.read_from_target(target, line), line))
+        self.add_implicit_return()
+
+        blocks, env, ret_type = self.leave()
+
+        sig = FuncSignature((RuntimeArg('self', object_rprimitive),) + sig.args, none_rprimitive)
+        init_fn = FuncIR('__init__', env_class.name, self.module_name, sig, blocks, env)
+        env_class.methods['__init__'] = init_fn
+
+        self.functions.append(init_fn)
+        return env_class, init_fn
 
     def gen_callable_class(self,
                            fdef: FuncDef,
@@ -1533,9 +1599,10 @@ class IRBuilder(NodeVisitor[Value]):
         self.classes.append(ir)
         return ir
 
-    def add_init_to_callable_class(self, 
+    def add_init_to_callable_class(self,
                                    callable_class: ClassIR,
                                    env_class: ClassIR,
+                                   sig: FuncSignature,
                                    line: int) -> Tuple[ClassIR, FuncIR]:
         """Adds the '__init__' function to a callable class representing a nested function.
 
@@ -1546,9 +1613,14 @@ class IRBuilder(NodeVisitor[Value]):
         """
         self.enter()
         self_target = self.environment.add_local_reg(Var('self'),
-                                                         RInstance(callable_class),
-                                                         is_arg=True)
-        self.add(SetAttr(self_target, 'env', self.instantiate_env_class(env_class, line), line))
+                                                     RInstance(callable_class),
+                                                     is_arg=True)
+
+        env_class_target = self.instantiate_env_class(env_class, sig, line)
+        self.add(SetAttr(self.read_from_target(self_target, line),
+                         'env',
+                         env_class_target,
+                         line))
         self.add_implicit_return()
         blocks, env, ret_type = self.leave()
         sig = FuncSignature((RuntimeArg('self', object_rprimitive),), none_rprimitive)
@@ -1578,10 +1650,12 @@ class IRBuilder(NodeVisitor[Value]):
         callable_class.methods['__call__'] = call_fn
         return callable_class, call_fn
 
-    def instantiate_env_class(self, cir: ClassIR, line: int) -> AssignmentTargetRegister:
+    def instantiate_env_class(self, cir: ClassIR, sig: FuncSignature, line: int) -> Value:
         """Assigns an environment class to a register named after the given function definition."""
         fullname = '{}.{}'.format(self.module_name, cir.name)
-        return self.add(Call(RInstance(cir), fullname, [], line))
+        value = self.add(Call(RInstance(cir), fullname, sig.args, line))
+        self.env_class_targets.append(value)
+        return value
 
     def instantiate_callable_class(self, fdef: FuncDef, cir: ClassIR) -> AssignmentTargetRegister:
         """Assigns a callable class to a register named after the given function definition."""

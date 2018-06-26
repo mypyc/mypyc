@@ -928,13 +928,29 @@ third: normal function
 [case testFreeVars]
 from typing import Callable
 
-def outer(num: int) -> int:
+def a(num: int) -> int:
+    def inner() -> int:
+        return num
+    return inner()
+
+def b() -> int:
+    num = 3
     def inner() -> int:
         return num
     return inner()
 
 [file driver.py]
-from native import outer
-print(outer(1))
+from native import a, b
+print(a(3))
+print(b())
 
 [out]
+3
+Traceback (most recent call last):
+  File "tmp/driver.py", line 3, in <module>
+    print(b())
+  File "tmp/py/native.py", line 12, in b
+    return inner()
+  File "tmp/py/native.py", line 11, in __call__
+    return num
+AttributeError: attribute 'num' of 'b__env' undefined
