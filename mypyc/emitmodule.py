@@ -162,8 +162,10 @@ class ModuleGenerator:
         else:
             declaration = 'PyObject *CPyInit_{}(void)'
         emitter.emit_lines(declaration.format(module_name),
-                           '{',
-                           'PyObject *m;')
+                           '{')
+        module_static = self.module_static_name(module_name, emitter)
+        emitter.emit_lines('if ({} != NULL)'.format(module_static),
+                           '    return {};'.format(module_static))
         for cl in module.classes:
             type_struct = emitter.type_struct_name(cl)
             if cl.traits:
@@ -175,11 +177,11 @@ class ModuleGenerator:
 
             emitter.emit_lines('if (PyType_Ready(&{}) < 0)'.format(type_struct),
                                '    return NULL;')
-        emitter.emit_lines('m = PyModule_Create(&{}module);'.format(module_prefix),
-                           'if (m == NULL)',
+        emitter.emit_lines('{} = PyModule_Create(&{}module);'.format(module_static, module_prefix),
+                           'if ({} == NULL)'.format(module_static),
                            '    return NULL;')
         module_globals = emitter.static_name('globals', module_name)
-        emitter.emit_lines('{} = PyModule_GetDict(m);'.format(module_globals),
+        emitter.emit_lines('{} = PyModule_GetDict({});'.format(module_globals, module_static),
                            'if ({} == NULL)'.format(module_globals),
                            '    return NULL;')
         self.generate_imports_init_section(module.imports, emitter)
@@ -217,7 +219,7 @@ class ModuleGenerator:
             emitter.emit_lines(
                 'Py_INCREF(&{});'.format(type_struct),
                 'PyModule_AddObject(m, "{}", (PyObject *)&{});'.format(name, type_struct))
-        emitter.emit_line('return m;')
+        emitter.emit_line('return {};'.format(module_static))
         emitter.emit_line('}')
 
     def toposort_declarations(self) -> List[HeaderDeclaration]:
@@ -262,8 +264,11 @@ class ModuleGenerator:
         static_name = emitter.static_name('globals', module_name)
         self.declare_global('PyObject *', static_name)
 
-    def declare_import(self, imp: str, emitter: Emitter) -> None:
-        static_name = emitter.static_name('module', imp)
+    def module_static_name(self, module_name: str, emitter: Emitter) -> str:
+        return emitter.static_name('module', module_name)
+
+    def declare_import(self, imp: str, emitter: Emitter):
+        static_name = self.module_static_name(imp, emitter)
         self.declare_global('CPyModule *', static_name)
 
     def declare_imports(self, imps: Iterable[str], emitter: Emitter) -> None:

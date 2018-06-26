@@ -212,3 +212,20 @@ Traceback (most recent call last):
     fail2()
   File "tmp/other.py", line 3, in fail2
 IndexError: list assignment index out of range
+
+[case testMultiModuleCycle]
+import other
+
+def f1() -> int:
+    return other.f2()
+
+def f3() -> int:
+    return 5
+[file other.py]
+import native
+
+def f2() -> int:
+    return native.f3()
+[file driver.py]
+from native import f1
+assert f1() == 5
