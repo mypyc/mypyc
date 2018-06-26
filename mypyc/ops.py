@@ -13,28 +13,17 @@ can hold various things:
 from abc import abstractmethod, abstractproperty
 import re
 from typing import (
-    List, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType, Callable, Union,
-    Iterable,
+    List, Sequence, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType, Callable,
+    Union, Iterable, Type,
 )
 from collections import OrderedDict
 
-from mypy.nodes import Var
+from mypy.nodes import SymbolNode, Var, FuncDef
 
 from mypyc.namegen import NameGenerator
 
 
 T = TypeVar('T')
-
-# TODO: Use pointers to BasicBlocks instead?
-Label = NewType('Label', int)
-
-# This is used for placeholder labels which aren't assigned yet (but will
-# be eventually. It's kind of a hack.
-INVALID_LABEL = Label(-88888)
-
-
-def c_module_name(module_name: str) -> str:
-    return 'module_{}'.format(module_name.replace('.', '__dot__'))
 
 
 def short_name(name: str) -> str:
@@ -322,9 +311,10 @@ class ROptional(RType):
 class Environment:
     """Maintain the register symbol table and manage temp generation"""
 
-    def __init__(self) -> None:
+    def __init__(self, name: Optional[str] = None) -> None:
+        self.name = name
         self.indexes = OrderedDict()  # type: Dict[Value, int]
-        self.symtable = {}  # type: Dict[Var, Register]
+        self.symtable = {}  # type: Dict[SymbolNode, Register]
         self.temp_index = 0
 
     def regs(self) -> Iterable['Value']:
@@ -334,20 +324,20 @@ class Environment:
         reg.name = name
         self.indexes[reg] = len(self.indexes)
 
-    def add_local(self, var: Var, typ: RType, is_arg: bool = False) -> 'Register':
-        assert isinstance(var, Var)
-        reg = Register(typ, var.line, is_arg = is_arg)
+    def add_local(self, symbol: SymbolNode, typ: RType, is_arg: bool = False) -> 'Register':
+        assert isinstance(symbol, SymbolNode)
+        reg = Register(typ, symbol.line, is_arg = is_arg)
 
-        self.symtable[var] = reg
-        self.add(reg, var.name())
+        self.symtable[symbol] = reg
+        self.add(reg, symbol.name())
         return reg
 
-    def lookup(self, var: Var) -> 'Register':
-        return self.symtable[var]
+    def lookup(self, symbol: SymbolNode) -> 'Register':
+        return self.symtable[symbol]
 
-    def add_temp(self, typ: RType) -> 'Register':
+    def add_temp(self, typ: RType, is_arg: bool = False) -> 'Register':
         assert isinstance(typ, RType)
-        reg = Register(typ)
+        reg = Register(typ, is_arg=is_arg)
         self.add(reg, 'r%d' % self.temp_index)
         self.temp_index += 1
         return reg
@@ -377,7 +367,9 @@ class Environment:
                 elif typespec == 'f':
                     result.append('%f' % arg)
                 elif typespec == 'l':
-                    result.append('L%d' % arg)
+                    if isinstance(arg, BasicBlock):
+                        arg = arg.label
+                    result.append('L%s' % arg)
                 elif typespec == 's':
                     result.append(str(arg))
                 else:
@@ -401,6 +393,35 @@ class Environment:
             i += 1
             result.append('%s :: %s' % (', '.join(group), regs[i0].type))
         return result
+
+
+class BasicBlock:
+    """Basic IR block.
+
+    Ends with a jump, branch, or return.
+
+    When building the IR, ops that raise exceptions can be included in
+    the middle of a basic block, but the exceptions aren't checked.
+    Afterwards we perform a transform that inserts explicit checks for
+    all error conditions and splits basic blocks accordingly to preserve
+    the invariant that a jump, branch or return can only ever appear
+    as the final op in a block. Manually inserting error checking ops
+    would be boring and error-prone.
+
+    Block labels are used for pretty printing and emitting C code, and get
+    filled in by those passes.
+
+    Ops that may terminate the program aren't treated as exits.
+    """
+
+    def __init__(self, label: int = -1) -> None:
+        self.label = label
+        self.ops = []  # type: List[Op]
+
+
+# This is used for placeholder labels which aren't assigned yet (but will
+# be eventually. It's kind of a hack.
+INVALID_LABEL = BasicBlock(-88888)
 
 
 ERR_NEVER = 0  # Never generates an exception
@@ -472,12 +493,12 @@ class Goto(Op):
 
     error_kind = ERR_NEVER
 
-    def __init__(self, label: Label, line: int = -1) -> None:
+    def __init__(self, label: BasicBlock, line: int = -1) -> None:
         super().__init__(line)
         self.label = label
 
     def __repr__(self) -> str:
-        return '<Goto %d>' % self.label
+        return '<Goto %s>' % self.label.label
 
     def to_str(self, env: Environment) -> str:
         return env.format('goto %l', self.label)
@@ -503,8 +524,8 @@ class Branch(Op):
         IS_ERROR: ('is_error(%r)', ''),
     }
 
-    def __init__(self, left: Value, true_label: Label,
-                 false_label: Label, op: int, line: int = -1) -> None:
+    def __init__(self, left: Value, true_label: BasicBlock,
+                 false_label: BasicBlock, op: int, line: int = -1) -> None:
         super().__init__(line)
         self.left = left
         self.true = true_label
@@ -663,10 +684,10 @@ class Call(RegisterOp):
     error_kind = ERR_MAGIC
 
     # TODO: take a FuncIR and extract the ret type
-    def __init__(self, ret_type: RType, fn: str, args: List[Value], line: int) -> None:
+    def __init__(self, ret_type: RType, fn: str, args: Sequence[Value], line: int) -> None:
         super().__init__(line)
         self.fn = fn
-        self.args = args
+        self.args = list(args)
         self.type = ret_type
 
     def to_str(self, env: Environment) -> str:
@@ -679,7 +700,7 @@ class Call(RegisterOp):
         return s
 
     def sources(self) -> List[Value]:
-        return self.args[:]
+        return list(self.args[:])
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_call(self)
@@ -908,22 +929,49 @@ class SetAttr(RegisterOp):
         return visitor.visit_set_attr(self)
 
 
+# Default name space for statics, variables
+NAMESPACE_STATIC = 'static'
+# Static namespace for pointers to native type objects
+NAMESPACE_TYPE = 'type'
+
+
 class LoadStatic(RegisterOp):
-    """dest = name :: static"""
+    """dest = name :: static
+
+    Load a C static variable/pointer. The namespace for statics is shared
+    for the entire compilation unit. You can optionally provide a module
+    name and a sub-namespace identifier for additional namespacing to avoid
+    name conflicts. The static namespace does not overlap with other C names,
+    since the final C name will get a prefix, so conflicts only must be
+    avoided with other statics.
+    """
 
     error_kind = ERR_NEVER
     is_borrowed = True
 
-    def __init__(self, type: RType, identifier: str, line: int = -1) -> None:
+    def __init__(self,
+                 type: RType,
+                 identifier: str,
+                 module_name: Optional[str] = None,
+                 namespace: str = NAMESPACE_STATIC,
+                 line: int = -1,
+                 ann: object = None) -> None:
         super().__init__(line)
         self.identifier = identifier
+        self.module_name = module_name
+        self.namespace = namespace
         self.type = type
+        self.ann = ann  # An object to pretty print with the load
 
     def sources(self) -> List[Value]:
         return []
 
     def to_str(self, env: Environment) -> str:
-        return env.format('%r = %s :: static', self, self.identifier)
+        ann = '  ({})'.format(repr(self.ann)) if self.ann else ''
+        name = self.identifier
+        if self.module_name is not None:
+            name = '{}.{}'.format(self.module_name, name)
+        return env.format('%r = %s :: %s%s', self, name, self.namespace, ann)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_load_static(self)
@@ -1046,27 +1094,6 @@ class Unbox(RegisterOp):
         return visitor.visit_unbox(self)
 
 
-class BasicBlock:
-    """Basic IR block.
-
-    Ends with a jump, branch, or return.
-
-    When building the IR, ops that raise exceptions can be included in
-    the middle of a basic block, but the exceptions aren't checked.
-    Afterwards we perform a transform that inserts explicit checks for
-    all error conditions and splits basic blocks accordingly to preserve
-    the invariant that a jump, branch or return can only ever appear
-    as the final op in a block. Manually inserting error checking ops
-    would be boring and error-prone.
-
-    Ops that may terminate the program aren't treated as exits.
-    """
-
-    def __init__(self, label: Label) -> None:
-        self.label = label
-        self.ops = []  # type: List[Op]
-
-
 class RuntimeArg:
     def __init__(self, name: str, typ: RType) -> None:
         self.name = name
@@ -1076,6 +1103,16 @@ class RuntimeArg:
         return 'RuntimeArg(name=%s, type=%s)' % (self.name, self.type)
 
 
+class FuncSignature:
+    # TODO: track if method?
+    def __init__(self, args: Sequence[RuntimeArg], ret_type: RType) -> None:
+        self.args = tuple(args)
+        self.ret_type = ret_type
+
+    def __repr__(self) -> str:
+        return 'FuncSignature(args=%r, ret=%r)' % (self.args, self.ret_type)
+
+
 class FuncIR:
     """Intermediate representation of a function with contextual information."""
 
@@ -1083,17 +1120,23 @@ class FuncIR:
                  name: str,
                  class_name: Optional[str],
                  module_name: str,
-                 args: List[RuntimeArg],
-                 ret_type: RType,
+                 sig: FuncSignature,
                  blocks: List[BasicBlock],
                  env: Environment) -> None:
         self.name = name
         self.class_name = class_name
         self.module_name = module_name
-        self.args = args
-        self.ret_type = ret_type
         self.blocks = blocks
         self.env = env
+        self.sig = sig
+
+    @property
+    def args(self) -> Sequence[RuntimeArg]:
+        return self.sig.args
+
+    @property
+    def ret_type(self) -> RType:
+        return self.sig.ret_type
 
     def cname(self, names: NameGenerator) -> str:
         name = self.name
@@ -1105,40 +1148,48 @@ class FuncIR:
         return '\n'.join(format_func(self))
 
 
+# Descriptions of method and attribute entries in class vtables.
+# The 'cls' field is the class that the method/attr was defined in,
+# which might be a parent class.
+VTableMethod = NamedTuple(
+    'VTableMethod', [('cls', 'ClassIR'),
+                     ('method', FuncIR)])
+
+
+VTableAttr = NamedTuple(
+    'VTableAttr', [('cls', 'ClassIR'),
+                   ('name', str),
+                   ('is_getter', bool)])
+
+
 class ClassIR:
     """Intermediate representation of a class.
 
     This also describes the runtime structure of native instances.
     """
 
-    # TODO: Use dictionary for attributes in addition to (or instead of) list.
-
-    def __init__(self, name: str, module_name: str) -> None:
+    def __init__(self, name: str, module_name: str, is_trait: bool = False) -> None:
         self.name = name
         self.module_name = module_name
+        self.is_trait = is_trait
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
-        self.methods = []  # type: List[FuncIR]
+        # We populate method_types with the signatures of every method before
+        # we generate methods, and we rely on this information being present.
+        self.method_types = OrderedDict()  # type: OrderedDict[str, FuncSignature]
+        self.methods = OrderedDict()  # type: OrderedDict[str, FuncIR]
+        # Glue methods for boxing/unboxing when a class changes the type
+        # while overriding a method. Maps from (parent class overrided, method)
+        # to IR of glue method.
+        self.glue_methods = {}  # type: Dict[Tuple[ClassIR, str], FuncIR]
         self.vtable = None  # type: Optional[Dict[str, int]]
-        self.vtable_size = 0
+        self.vtable_entries = []  # type: List[Union[VTableMethod, VTableAttr]]
         self.base = None  # type: Optional[ClassIR]
-        self.mro = []  # type: List[ClassIR]
-
-    def compute_vtable(self) -> None:
-        if self.vtable is not None: return
-        self.vtable = {}
-        base = 0
-        if self.base:
-            self.base.compute_vtable()
-            assert self.base.vtable is not None
-            self.vtable.update(self.base.vtable)
-            base = self.base.vtable_size
-
-        for i, attr in enumerate(self.attributes):
-            self.vtable[attr] = base + i * 2
-        base += len(self.attributes) * 2
-        for i, fn in enumerate(self.methods):
-            self.vtable[fn.name] = base + i
-        self.vtable_size = base + len(self.methods)
+        self.traits = []  # type: List[ClassIR]
+        # Supply a working mro for most generated classes. Real classes will need to
+        # fix it up.
+        self.mro = [self]  # type: List[ClassIR]
+        # base_mro is the chain of concrete (non-trait) ancestors
+        self.base_mro = [self]  # type: List[ClassIR]
 
     def vtable_entry(self, name: str) -> int:
         assert self.vtable is not None, "vtable not computed yet"
@@ -1147,8 +1198,15 @@ class ClassIR:
 
     def attr_type(self, name: str) -> RType:
         for ir in self.mro:
-            if name in ir.attributes: return ir.attributes[name]
+            if name in ir.attributes:
+                return ir.attributes[name]
         assert False, '%r has no attribute %r' % (self.name, name)
+
+    def method_sig(self, name: str) -> FuncSignature:
+        for ir in self.mro:
+            if name in ir.method_types:
+                return ir.method_types[name]
+        assert False, '%r has no method %r' % (self.name, name)
 
     def name_prefix(self, names: NameGenerator) -> str:
         return names.private_name(self.module_name, self.name)
@@ -1157,13 +1215,13 @@ class ClassIR:
         return '{}Object'.format(self.name_prefix(names))
 
     def get_method(self, name: str) -> Optional[FuncIR]:
-        matches = [func for func in self.methods if func.name == name]
-        if not matches and self.base:
-            return self.base.get_method(name)
-        return matches[0] if matches else None
+        for ir in self.mro:
+            if name in ir.methods:
+                return ir.methods[name]
+        return None
 
-    def type_struct_name(self, names: NameGenerator) -> str:
-        return '{}Type'.format(self.name_prefix(names))
+
+LiteralsMap = Dict[Tuple[Type[object], Union[int, float, str]], str]
 
 
 class ModuleIR:
@@ -1172,7 +1230,7 @@ class ModuleIR:
     def __init__(self,
             imports: List[str],
             from_imports: Dict[str, List[Tuple[str, str]]],
-            literals: Dict[Union[int, float, str], str],
+            literals: LiteralsMap,
             functions: List[FuncIR],
             classes: List[ClassIR]) -> None:
         self.imports = imports[:]
@@ -1266,6 +1324,10 @@ class OpVisitor(Generic[T]):
 
 
 def format_blocks(blocks: List[BasicBlock], env: Environment) -> List[str]:
+    # First label all of the blocks
+    for i, block in enumerate(blocks):
+        block.label = i
+
     lines = []
     for i, block in enumerate(blocks):
         i == len(blocks) - 1
@@ -1273,7 +1335,7 @@ def format_blocks(blocks: List[BasicBlock], env: Environment) -> List[str]:
         lines.append(env.format('%l:', block.label))
         ops = block.ops
         if (isinstance(ops[-1], Goto) and i + 1 < len(blocks) and
-                ops[-1].label == blocks[i + 1].label):
+                ops[-1].label == blocks[i + 1]):
             # Hide the last goto if it just goes to the next basic block.
             ops = ops[:-1]
         for op in ops:
@@ -1288,8 +1350,9 @@ def format_blocks(blocks: List[BasicBlock], env: Environment) -> List[str]:
 
 def format_func(fn: FuncIR) -> List[str]:
     lines = []
-    lines.append('def {}({}):'.format(fn.name, ', '.join(arg.name
-                                                         for arg in fn.args)))
+    cls_prefix = fn.class_name + '.' if fn.class_name else ''
+    lines.append('def {}{}({}):'.format(cls_prefix, fn.name,
+                                        ', '.join(arg.name for arg in fn.args)))
     for line in fn.env.to_lines():
         lines.append('    ' + line)
     code = format_blocks(fn.blocks, fn.env)

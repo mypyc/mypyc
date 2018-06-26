@@ -117,3 +117,98 @@ except TypeError:
     pass
 else:
     assert False
+
+[case testMultiModuleSpecialize]
+from other import A
+
+class B(A):
+    def foo(self, x: object) -> int:
+        print(2)
+        return id(x)
+[file other.py]
+class A:
+    def foo(self, x: int) -> object:
+        print(1)
+        return str(x)
+
+def use_a(x: A, y: int) -> object:
+    return x.foo(y)
+
+[file driver.py]
+from native import B
+from other import A, use_a
+a = A()
+b = B()
+o = object()
+i = 10
+assert a.foo(10) == '10'
+assert b.foo(o) == id(o)
+assert use_a(a, 10) == '10'
+assert use_a(b, i) == id(i)
+[out]
+1
+2
+1
+2
+
+[case testMultiModuleLiterals]
+from other import gs, gi, gf
+
+def fs() -> str:
+    return 'f' + gs()
+def fi() -> int:
+    return 10001000100010001000 + gi()
+def ff() -> float:
+    return 2.0 + gf()
+[file other.py]
+def gi() -> int:
+    return 20001000100010001000
+def gs() -> str:
+    return 'g'
+def gf() -> float:
+    return 3.0
+[file driver.py]
+from native import fs, fi, ff
+assert fs() == 'fg'
+assert fi() == 30002000200020002000
+assert ff() == 5.0
+
+[case testMultiModuleTraceback]
+from other import fail2
+
+def fail() -> None:
+    fail2()
+[file other.py]
+def fail2() -> None:
+    x = [1]
+    x[2] = 2
+[file driver.py]
+import traceback
+import sys
+import native
+import other
+try:
+    other.fail2()
+except IndexError:
+    tb = sys.exc_info()[2]
+    assert tb.tb_next.tb_frame.f_globals is other.__dict__
+    traceback.print_exc()
+try:
+    native.fail()
+except IndexError:
+    tb = sys.exc_info()[2]
+    assert tb.tb_next.tb_frame.f_globals is native.__dict__
+    traceback.print_exc()
+[out]
+Traceback (most recent call last):
+  File "tmp/driver.py", line 6, in <module>
+    other.fail2()
+  File "tmp/other.py", line 3, in fail2
+IndexError: list assignment index out of range
+Traceback (most recent call last):
+  File "tmp/driver.py", line 12, in <module>
+    native.fail()
+  File "tmp/py/native.py", line 4, in fail
+    fail2()
+  File "tmp/other.py", line 3, in fail2
+IndexError: list assignment index out of range

@@ -7,7 +7,10 @@ from typing import Optional
 from mypyc.common import PREFIX, NATIVE_PREFIX, REG_PREFIX
 from mypyc.emit import Emitter
 from mypyc.emitfunc import native_function_header
-from mypyc.ops import ClassIR, FuncIR, RType, Environment, object_rprimitive
+from mypyc.ops import (
+    ClassIR, FuncIR, RType, Environment, object_rprimitive, FuncSignature,
+    VTableMethod, VTableAttr,
+)
 from mypyc.sametype import is_same_type
 from mypyc.namegen import NameGenerator
 
@@ -20,15 +23,20 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     name = cl.name
     name_prefix = cl.name_prefix(emitter.names)
     fullname = '{}.{}'.format(module, name)
-    setup_name = '{}_setup'.format(name_prefix)
-    new_name = '{}_new'.format(name_prefix)
-    traverse_name = '{}_traverse'.format(name_prefix)
-    clear_name = '{}_clear'.format(name_prefix)
-    dealloc_name = '{}_dealloc'.format(name_prefix)
-    getseters_name = '{}_getseters'.format(name_prefix)
+
+    setup_name = new_name = clear_name = dealloc_name = '0'
+    traverse_name = getseters_name = vtable_name = '0'
+    if not cl.is_trait:
+        setup_name = '{}_setup'.format(name_prefix)
+        new_name = '{}_new'.format(name_prefix)
+        traverse_name = '{}_traverse'.format(name_prefix)
+        clear_name = '{}_clear'.format(name_prefix)
+        dealloc_name = '{}_dealloc'.format(name_prefix)
+        getseters_name = '{}_getseters'.format(name_prefix)
+        vtable_name = '{}_vtable'.format(name_prefix)
+
     methods_name = '{}_methods'.format(name_prefix)
-    vtable_name = '{}_vtable'.format(name_prefix)
-    base_arg = "&{}".format(cl.base.type_struct_name(emitter.names)) if cl.base else "0"
+    base_arg = "&{}".format(emitter.type_struct_name(cl.base)) if cl.base else "0"
 
     def emit_line() -> None:
         emitter.emit_line()
@@ -48,27 +56,32 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
         init_name = '0'
         init_args = []
 
-    emitter.emit_line('static PyObject *{}(void);'.format(setup_name))
-    # TODO: Use RInstance
-    ctor = FuncIR(cl.name, None, module, init_args, object_rprimitive, [], Environment())
-    emitter.emit_line(native_function_header(ctor, emitter.names) + ';')
+    call_fn = cl.get_method('__call__')
+    call_name = '{}{}'.format(PREFIX, call_fn.cname(emitter.names)) if call_fn else '0'
 
-    emit_line()
-    generate_new_for_class(cl, new_name, vtable_name, setup_name, emitter)
-    emit_line()
-    generate_traverse_for_class(cl, traverse_name, emitter)
-    emit_line()
-    generate_clear_for_class(cl, clear_name, emitter)
-    emit_line()
-    generate_dealloc_for_class(cl, dealloc_name, clear_name, emitter)
-    emit_line()
-    generate_native_getters_and_setters(cl, emitter)
-    generate_vtable(cl, vtable_name, emitter)
-    emit_line()
-    generate_getseter_declarations(cl, emitter)
-    emit_line()
-    generate_getseters_table(cl, getseters_name, emitter)
-    emit_line()
+    if not cl.is_trait:
+        emitter.emit_line('static PyObject *{}(void);'.format(setup_name))
+        # TODO: Use RInstance
+        ctor = FuncIR(cl.name, None, module, FuncSignature(init_args, object_rprimitive),
+                      [], Environment())
+        emitter.emit_line(native_function_header(ctor, emitter.names) + ';')
+
+        emit_line()
+        generate_new_for_class(cl, new_name, vtable_name, setup_name, emitter)
+        emit_line()
+        generate_traverse_for_class(cl, traverse_name, emitter)
+        emit_line()
+        generate_clear_for_class(cl, clear_name, emitter)
+        emit_line()
+        generate_dealloc_for_class(cl, dealloc_name, clear_name, emitter)
+        emit_line()
+        generate_native_getters_and_setters(cl, emitter)
+        generate_vtable(cl, vtable_name, emitter)
+        emit_line()
+        generate_getseter_declarations(cl, emitter)
+        emit_line()
+        generate_getseters_table(cl, getseters_name, emitter)
+        emit_line()
     generate_methods_table(cl, methods_name, emitter)
     emit_line()
 
@@ -88,7 +101,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
             0,                         /* tp_as_sequence */
             0,                         /* tp_as_mapping */
             0,                         /* tp_hash  */
-            0,                         /* tp_call */
+            {tp_call},                 /* tp_call */
             0,                         /* tp_str */
             0,                         /* tp_getattro */
             0,                         /* tp_setattro */
@@ -113,12 +126,13 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
             0,                         /* tp_alloc */
             {new_name},                /* tp_new */
         }};\
-        """).format(type_struct=cl.type_struct_name(emitter.names),
+        """).format(type_struct=emitter.type_struct_name(cl),
                     struct_name=cl.struct_name(emitter.names),
                     fullname=fullname,
                     traverse_name=traverse_name,
                     clear_name=clear_name,
                     dealloc_name=dealloc_name,
+                    tp_call=call_name,
                     new_name=new_name,
                     methods_name=methods_name,
                     getseters_name=getseters_name,
@@ -126,11 +140,12 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
                     base_arg=base_arg,
                     ))
     emitter.emit_line()
-    generate_setup_for_class(cl, setup_name, vtable_name, emitter)
-    emitter.emit_line()
-    generate_constructor_for_class(cl, ctor, init_fn, setup_name, vtable_name, emitter)
-    emitter.emit_line()
-    generate_getseters(cl, emitter)
+    if not cl.is_trait:
+        generate_setup_for_class(cl, setup_name, vtable_name, emitter)
+        emitter.emit_line()
+        generate_constructor_for_class(cl, ctor, init_fn, setup_name, vtable_name, emitter)
+        emitter.emit_line()
+        generate_getseters(cl, emitter)
 
 
 def getter_name(cl: ClassIR, attribute: str, names: NameGenerator) -> str:
@@ -153,9 +168,10 @@ def generate_object_struct(cl: ClassIR, emitter: Emitter) -> None:
     emitter.emit_lines('typedef struct {',
                        'PyObject_HEAD',
                        'CPyVTableItem *vtable;')
-    for base in reversed(cl.mro):
-        for attr, rtype in base.attributes.items():
-            emitter.emit_line('{}{};'.format(rtype.ctype_spaced(), attr))
+    for base in reversed(cl.base_mro):
+        if not base.is_trait:
+            for attr, rtype in base.attributes.items():
+                emitter.emit_line('{}{};'.format(rtype.ctype_spaced(), attr))
     emitter.emit_line('}} {};'.format(cl.struct_name(emitter.names)))
 
 
@@ -200,22 +216,14 @@ def generate_vtable(base: ClassIR,
                     vtable_name: str,
                     emitter: Emitter) -> None:
     emitter.emit_line('static CPyVTableItem {}[] = {{'.format(vtable_name))
-    for cl in reversed(base.mro):
-        for attr in cl.attributes:
-            emitter.emit_line(
-                '(CPyVTableItem){},'.format(native_getter_name(cl, attr, emitter.names)))
-            emitter.emit_line(
-                '(CPyVTableItem){},'.format(native_setter_name(cl, attr, emitter.names)))
-        for fn in cl.methods:
-            # TODO: This is gross, and inefficient, and wrong if the type changes.
-            # This logic should all live on the genops side, I think
-            search = base.mro if fn.name != '__init__' else [cl]
-            for cl2 in search:
-                m = cl2.get_method(fn.name)
-                if m:
-                    emitter.emit_line('(CPyVTableItem){}{},'.format(NATIVE_PREFIX,
-                                                                    m.cname(emitter.names)))
-                    break
+    for entry in base.vtable_entries:
+        if isinstance(entry, VTableMethod):
+            emitter.emit_line('(CPyVTableItem){}{},'.format(NATIVE_PREFIX,
+                                                            entry.method.cname(emitter.names)))
+        else:
+            cl, attr, is_getter = entry
+            namer = native_getter_name if is_getter else native_setter_name
+            emitter.emit_line('(CPyVTableItem){},'.format(namer(cl, attr, emitter.names)))
     emitter.emit_line('};')
 
 
@@ -230,12 +238,13 @@ def generate_setup_for_class(cl: ClassIR,
     emitter.emit_line('{} *self;'.format(cl.struct_name(emitter.names)))
     emitter.emit_line('self = ({struct} *){type_struct}.tp_alloc(&{type_struct}, 0);'.format(
         struct=cl.struct_name(emitter.names),
-        type_struct=cl.type_struct_name(emitter.names)))
+        type_struct=emitter.type_struct_name(cl)))
     emitter.emit_line('if (self == NULL)')
     emitter.emit_line('    return NULL;')
     emitter.emit_line('self->vtable = {};'.format(vtable_name))
-    for attr, rtype in cl.attributes.items():
-        emitter.emit_line('self->{} = {};'.format(attr, rtype.c_undefined_value()))
+    for base in reversed(cl.base_mro):
+        for attr, rtype in base.attributes.items():
+            emitter.emit_line('self->{} = {};'.format(attr, rtype.c_undefined_value()))
     emitter.emit_line('return (PyObject *)self;')
     emitter.emit_line('}')
 
@@ -301,8 +310,9 @@ def generate_traverse_for_class(cl: ClassIR,
         func_name,
         cl.struct_name(emitter.names)))
     emitter.emit_line('{')
-    for attr, rtype in cl.attributes.items():
-        emitter.emit_gc_visit('self->{}'.format(attr), rtype)
+    for base in reversed(cl.base_mro):
+        for attr, rtype in base.attributes.items():
+            emitter.emit_gc_visit('self->{}'.format(attr), rtype)
     emitter.emit_line('return 0;')
     emitter.emit_line('}')
 
@@ -313,8 +323,9 @@ def generate_clear_for_class(cl: ClassIR,
     emitter.emit_line('static int')
     emitter.emit_line('{}({} *self)'.format(func_name, cl.struct_name(emitter.names)))
     emitter.emit_line('{')
-    for attr, rtype in cl.attributes.items():
-        emitter.emit_gc_clear('self->{}'.format(attr), rtype)
+    for base in reversed(cl.base_mro):
+        for attr, rtype in base.attributes.items():
+            emitter.emit_gc_clear('self->{}'.format(attr), rtype)
     emitter.emit_line('return 0;')
     emitter.emit_line('}')
 
@@ -336,7 +347,7 @@ def generate_methods_table(cl: ClassIR,
                            name: str,
                            emitter: Emitter) -> None:
     emitter.emit_line('static PyMethodDef {}[] = {{'.format(name))
-    for fn in cl.methods:
+    for fn in cl.methods.values():
         emitter.emit_line('{{"{}",'.format(fn.name))
         emitter.emit_line(' (PyCFunction){}{},'.format(PREFIX, fn.cname(emitter.names)))
         emitter.emit_line(' METH_VARARGS | METH_KEYWORDS, NULL},')

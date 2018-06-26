@@ -8,6 +8,7 @@ from mypyc.ops import (
 )
 from mypyc.ops_primitive import (
     name_ref_op, simple_emit, binary_op, unary_op, func_op, method_op, custom_op,
+    negative_int_emit,
 )
 
 
@@ -162,3 +163,36 @@ pycall_op = custom_op(arg_types=[object_rprimitive],
                       error_kind=ERR_MAGIC,
                       format_str = '{dest} = pycall({comma_args})',
                       emit=emit_pycall)
+
+
+def emit_isinstance(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+    temp = emitter.temp_name()
+    emitter.emit_lines('int %s = PyObject_IsInstance(%s, %s);' % (temp, args[0], args[1]),
+                       'if (%s < 0)' % temp,
+                       '    %s = %s;' % (dest, bool_rprimitive.c_error_value()),
+                       'else',
+                       '    %s = %s;' % (dest, temp))
+
+
+func_op('builtins.isinstance',
+        arg_types=[object_rprimitive, object_rprimitive],
+        result_type=bool_rprimitive,
+        error_kind=ERR_MAGIC,
+        emit=emit_isinstance)
+
+# Faster isinstance() that only works with native classes and doesn't perform type checking
+# of the type argument.
+fast_isinstance_op = func_op(
+    'builtins.isinstance',
+    arg_types=[object_rprimitive, object_rprimitive],
+    result_type=bool_rprimitive,
+    error_kind=ERR_NEVER,
+    emit=simple_emit('{dest} = PyObject_TypeCheck({args[0]}, (PyTypeObject *){args[1]});'),
+    priority=0)
+
+bool_op = func_op(
+    'builtins.bool',
+    arg_types=[object_rprimitive],
+    result_type=bool_rprimitive,
+    error_kind=ERR_MAGIC,
+    emit=negative_int_emit('{dest} = PyObject_IsTrue({args[0]});'))

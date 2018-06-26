@@ -75,7 +75,7 @@ class A:
 def g(a: A) -> None:
     a.f(1, 'hi')
 [out]
-def f(self, x, y):
+def A.f(self, x, y):
     self :: A
     x :: int
     y :: str
@@ -92,7 +92,7 @@ def g(a):
     r3 :: None
 L0:
     r0 = 1
-    r1 = __unicode_0 :: static
+    r1 = unicode_0 :: static  ('hi')
     r2 = a.f(r0, r1)
     r3 = None
     return r3
@@ -121,7 +121,7 @@ class Node:
             return 1 + self.next.length()
         return 1
 [out]
-def length(self):
+def Node.length(self):
     self :: Node
     r0 :: optional[Node]
     r1 :: int
@@ -151,8 +151,7 @@ class B(A):
         self.x = 20
         self.y = 30
 [out]
--- This is totally useless because we don't print any class info!!
-def __init__(self):
+def A.__init__(self):
     self :: A
     r0 :: int
     r1 :: bool
@@ -162,7 +161,7 @@ L0:
     self.x = r0; r1 = is_error
     r2 = None
     return r2
-def __init__(self):
+def B.__init__(self):
     self :: B
     r0 :: int
     r1 :: bool
@@ -186,7 +185,7 @@ def increment(o: O) -> O:
     o.x += 1
     return o
 [out]
-def __init__(self):
+def O.__init__(self):
     self :: O
     r0 :: int
     r1 :: bool
@@ -206,3 +205,124 @@ L0:
     r2 = r1 + r0 :: int
     o.x = r2; r3 = is_error
     return o
+
+[case testSubclassSpecialize2]
+class A:
+    def foo(self, x: int) -> object:
+        return str(x)
+class B(A):
+    def foo(self, x: object) -> object:
+        return x
+class C(B):
+    def foo(self, x: object) -> int:
+        return id(x)
+
+def use_a(x: A, y: int) -> object:
+    return x.foo(y)
+
+def use_b(x: B, y: object) -> object:
+    return x.foo(y)
+
+def use_c(x: C, y: object) -> int:
+    return x.foo(y)
+[out]
+def A.foo(self, x):
+    self :: A
+    x :: int
+    r0 :: object
+    r1 :: str
+L0:
+    r0 = box(int, x)
+    r1 = str r0 :: object
+    return r1
+def B.foo(self, x):
+    self :: B
+    x :: object
+L0:
+    return x
+def B.foo__A_glue(self, x):
+    self :: B
+    x :: int
+    r0, r1 :: object
+L0:
+    r0 = box(int, x)
+    r1 = self.foo(r0)
+    return r1
+def C.foo(self, x):
+    self :: C
+    x, r0 :: object
+    r1 :: str
+    r2, r3 :: object
+    r4 :: int
+L0:
+    r0 = builtins.module :: static
+    r1 = unicode_0 :: static  ('id')
+    r2 = getattr r0, r1
+    r3 = pycall(r2, x)
+    r4 = unbox(int, r3)
+    return r4
+def C.foo__B_glue(self, x):
+    self :: C
+    x :: object
+    r0 :: int
+    r1 :: object
+L0:
+    r0 = self.foo(x)
+    r1 = box(int, r0)
+    return r1
+def C.foo__A_glue(self, x):
+    self :: C
+    x :: int
+    r0 :: object
+    r1 :: int
+    r2 :: object
+L0:
+    r0 = box(int, x)
+    r1 = self.foo(r0)
+    r2 = box(int, r1)
+    return r2
+def use_a(x, y):
+    x :: A
+    y :: int
+    r0 :: object
+L0:
+    r0 = x.foo(y)
+    return r0
+def use_b(x, y):
+    x :: B
+    y, r0 :: object
+L0:
+    r0 = x.foo(y)
+    return r0
+def use_c(x, y):
+    x :: C
+    y :: object
+    r0 :: int
+L0:
+    r0 = x.foo(y)
+    return r0
+
+[case testIsInstance]
+class A: pass
+class B(A): pass
+
+def f(x: A) -> B:
+    if isinstance(x, B):
+        return x
+    return B()
+[out]
+def f(x):
+    x :: A
+    r0 :: object
+    r1 :: bool
+    r2, r3 :: B
+L0:
+    r0 = __main__.B :: type
+    r1 = isinstance x, r0
+    if r1 goto L1 else goto L2 :: bool
+L1:
+    r2 = cast(B, x)
+    return r2
+L2:
+    r3 = B()
+    return r3
