@@ -43,18 +43,19 @@ from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Value, Register, Return, FuncIR, Assign,
     Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple, Unreachable, TupleGet, TupleSet,
     ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, PyCall, ROptional,
-    c_module_name, PyMethodCall, MethodCall, INVALID_VALUE, INVALID_LABEL, int_rprimitive,
+    PyMethodCall, MethodCall, INVALID_VALUE, INVALID_LABEL, int_rprimitive,
     is_int_rprimitive, float_rprimitive, is_float_rprimitive, bool_rprimitive, list_rprimitive,
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp,
     ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap, FuncSignature,
-    VTableAttr, VTableMethod,
+    VTableAttr, VTableMethod, NAMESPACE_TYPE,
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import list_len_op, list_get_item_op, list_set_item_op, new_list_op
 from mypyc.ops_dict import new_dict_op, dict_get_item_op
 from mypyc.ops_misc import (
     none_op, iter_op, next_op, no_err_occurred_op, py_getattr_op, py_setattr_op,
+    fast_isinstance_op, bool_op,
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
@@ -74,7 +75,7 @@ def build_ir(modules: List[MypyFile],
     # Collect all class mappings so that we can bind arbitrary class name
     # references even if there are import cycles.
     for module_name, cdef in classes:
-        class_ir = ClassIR(cdef.name, module_name)
+        class_ir = ClassIR(cdef.name, module_name, is_trait(cdef))
         mapper.type_to_ir[cdef.info] = class_ir
 
     # Populate structural information in class IR.
@@ -102,9 +103,23 @@ def build_ir(modules: List[MypyFile],
     return result
 
 
+def is_trait(cdef: ClassDef) -> bool:
+    return any(d.fullname == 'mypy_extensions.trait' for d in cdef.decorators
+               if isinstance(d, NameExpr))
+
+
 def compute_vtable(cls: ClassIR) -> None:
     """Compute the vtable structure for a class."""
     if cls.vtable is not None: return
+
+    # Merge attributes from traits into the class
+    for t in cls.mro[1:]:
+        if not t.is_trait:
+            continue
+        for name, typ in t.attributes.items():
+            if not cls.is_trait and not any(name in b.attributes for b in cls.base_mro):
+                cls.attributes[name] = typ
+
     cls.vtable = {}
     entries = cls.vtable_entries
     if cls.base:
@@ -120,7 +135,9 @@ def compute_vtable(cls: ClassIR) -> None:
         if isinstance(entry, VTableMethod):
             method = entry.method
             if method.name in cls.methods:
-                if is_same_method_signature(method.sig, cls.methods[method.name].sig):
+                # TODO: emit a wrapper for __init__ that raises or something
+                if (is_same_method_signature(method.sig, cls.methods[method.name].sig)
+                        or method.name == '__init__'):
                     entry = VTableMethod(cls, cls.methods[method.name])
                 else:
                     entry = VTableMethod(cls, cls.glue_methods[(entry.cls, method.name)])
@@ -130,9 +147,12 @@ def compute_vtable(cls: ClassIR) -> None:
         cls.vtable[attr] = len(entries)
         entries.append(VTableAttr(cls, attr, is_getter=True))
         entries.append(VTableAttr(cls, attr, is_getter=False))
-    for fn in cls.methods.values():
-        cls.vtable[fn.name] = len(entries)
-        entries.append(VTableMethod(cls, fn))
+
+    for t in [cls] + cls.traits:
+        for fn in t.methods.values():
+            if fn == cls.get_method(fn.name):
+                cls.vtable[fn.name] = len(entries)
+                entries.append(VTableMethod(t, fn))
 
 
 class Mapper:
@@ -143,8 +163,7 @@ class Mapper:
 
     def __init__(self) -> None:
         self.type_to_ir = {}  # type: Dict[TypeInfo, ClassIR]
-        # Maps integer, float, and unicode literals to the static c name for that literal
-        # TODO: Maybe C names should generated only when emitting C?
+        # Maps integer, float, and unicode literals to a static name
         self.literals = {}  # type: LiteralsMap
 
     def type_to_rtype(self, typ: Type) -> RType:
@@ -163,7 +182,8 @@ class Mapper:
                 return dict_rprimitive
             elif typ.type.fullname() == 'builtins.tuple':
                 return tuple_rprimitive  # Varying-length tuple
-            elif typ.type in self.type_to_ir:
+            # TODO: don't erase traits
+            elif typ.type in self.type_to_ir and not self.type_to_ir[typ.type].is_trait:
                 return RInstance(self.type_to_ir[typ.type])
             else:
                 return object_rprimitive
@@ -196,17 +216,17 @@ class Mapper:
         ret = self.type_to_rtype(fdef.type.ret_type)
         return FuncSignature(args, ret)
 
-    def c_name_for_literal(self, value: Union[int, float, str]) -> str:
+    def literal_static_name(self, value: Union[int, float, str]) -> str:
         # Include type to distinguish between 1 and 1.0, and so on.
         key = (type(value), value)
         if key not in self.literals:
             if isinstance(value, str):
-                prefix = '__unicode_'
+                prefix = 'unicode_'
             elif isinstance(value, float):
-                prefix = '__float_'
+                prefix = 'float_'
             else:
                 assert isinstance(value, int)
-                prefix = '__int_'
+                prefix = 'int_'
             self.literals[key] = prefix + str(len(self.literals))
         return self.literals[key]
 
@@ -222,15 +242,28 @@ def prepare_class_def(cdef: ClassDef, mapper: Mapper) -> None:
             ir.method_types[name] = mapper.fdef_to_sig(node.node)
 
     # Set up the parent class
-    assert len(info.bases) == 1, "Only single inheritance is supported"
+    bases = [mapper.type_to_ir[base.type] for base in info.bases
+             if base.type.fullname() != 'builtins.object']
+    assert all(c.is_trait for c in bases[1:]), "Non trait bases must be first"
+    ir.traits = [c for c in bases if c.is_trait]
+
     mro = []
+    base_mro = []
     for cls in info.mro:
         if cls.fullname() == 'builtins.object': continue
-        assert cls in mapper.type_to_ir, "Can't subclass cpython types yet"
-        mro.append(mapper.type_to_ir[cls])
-    if len(mro) > 1:
-        ir.base = mro[1]
+        assert cls in mapper.type_to_ir, "Can't subclass cpython types"
+        base_ir = mapper.type_to_ir[cls]
+        if not base_ir.is_trait:
+            base_mro.append(base_ir)
+        mro.append(base_ir)
+
+    if len(base_mro) > 1:
+        ir.base = base_mro[1]
+    assert all(base_mro[i].base == base_mro[i + 1] for i in range(len(base_mro) - 1)), (
+        "non-trait MRO must be linear")
+
     ir.mro = mro
+    ir.base_mro = base_mro
 
 
 class AssignmentTarget(object):
@@ -332,7 +365,7 @@ class IRBuilder(NodeVisitor[Value]):
                 # If this overrides a parent class method with a different type, we need
                 # to generate a glue method to mediate between them.
                 for cls in ir.mro[1:]:
-                    if (name in cls.method_types
+                    if (name in cls.method_types and name != '__init__'
                             and not is_same_method_signature(ir.method_types[name],
                                                              cls.method_types[name])):
                         f = self.gen_glue_method(cls.method_types[name], func, ir, cls,
@@ -585,7 +618,8 @@ class IRBuilder(NodeVisitor[Value]):
                 return self.add(SetAttr(target.obj, target.attr, rvalue_reg, line))
             else:
                 key = self.load_static_unicode(target.attr)
-                return self.add(PrimitiveOp([target.obj, key, rvalue_reg], py_setattr_op, line))
+                boxed_reg = self.box(rvalue_reg)
+                return self.add(PrimitiveOp([target.obj, key, boxed_reg], py_setattr_op, line))
         elif isinstance(target, AssignmentTargetIndex):
             target_reg2 = self.translate_special_method_call(
                 target.base,
@@ -696,9 +730,7 @@ class IRBuilder(NodeVisitor[Value]):
             top = self.new_block()
             goto.label = top
             comparison = self.binary_op(index_reg, end_reg, '<', s.line)
-            branch = Branch(comparison, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
-            self.add(branch)
-            branches = [branch]
+            branches = self.add_bool_branch(comparison)
 
             body = self.new_block()
             self.set_branches(branches, True, body)
@@ -742,9 +774,7 @@ class IRBuilder(NodeVisitor[Value]):
             len_reg = self.add(PrimitiveOp([expr_reg], list_len_op, s.line))
 
             comparison = self.binary_op(index_reg, len_reg, '<', s.line)
-            branch = Branch(comparison, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
-            self.add(branch)
-            branches = [branch]
+            branches = self.add_bool_branch(comparison)
 
             body_block = self.new_block()
             self.set_branches(branches, True, body_block)
@@ -904,7 +934,6 @@ class IRBuilder(NodeVisitor[Value]):
         return self.load_static_float(expr.value)
 
     def is_native_name_expr(self, expr: NameExpr) -> bool:
-        # TODO later we want to support cross-module native calls too
         assert expr.node, "RefExpr not resolved"
         if '.' in expr.node.fullname():
             module_name = '.'.join(expr.node.fullname().split('.')[:-1])
@@ -924,12 +953,6 @@ class IRBuilder(NodeVisitor[Value]):
             assert desc.result_type is not None
             return self.add(PrimitiveOp([], desc, expr.line))
 
-        if self.is_global_name(expr.name):
-            return self.load_global(expr)
-
-        if not self.is_native_name_expr(expr):
-            return self.load_static_module_attr(expr)
-
         # TODO: Behavior currently only defined for Var and FuncDef node types.
         if expr.kind == LDEF:
             try:
@@ -938,14 +961,6 @@ class IRBuilder(NodeVisitor[Value]):
                 assert False, 'expression %s not defined in current scope'.format(expr.name)
         else:
             return self.load_global(expr)
-
-    def is_global_name(self, name: str) -> bool:
-        # TODO: this is pretty hokey
-        for _, names in self.from_imports.items():
-            for _, as_name in names:
-                if name == as_name:
-                    return True
-        return False
 
     def is_module_member_expr(self, expr: MemberExpr) -> bool:
         return isinstance(expr.expr, RefExpr) and expr.expr.kind == MODULE_REF
@@ -1014,6 +1029,14 @@ class IRBuilder(NodeVisitor[Value]):
             if isinstance(expr_rtype, RTuple):
                 # len() of fixed-length tuple can be trivially determined statically.
                 return self.add(LoadInt(len(expr_rtype.types)))
+        if (fullname == 'builtins.isinstance'
+                and len(expr.args) == 2
+                and expr.arg_kinds == [ARG_POS, ARG_POS]
+                and isinstance(expr.args[1], NameExpr)
+                and isinstance(expr.args[1].node, TypeInfo)
+                and self.is_native_module_name_expr(expr.args[1])):
+            # Special case native isinstance() checks as this makes them much faster.
+            return self.primitive_op(fast_isinstance_op, args, expr.line)
 
         # Handle data-driven special-cased primitive call ops.
         target_type = self.node_type(expr)
@@ -1203,9 +1226,7 @@ class IRBuilder(NodeVisitor[Value]):
         # Catch-all for arbitrary expressions.
         else:
             reg = self.accept(e)
-            branch = Branch(reg, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
-            self.add(branch)
-            return [branch]
+            return self.add_bool_branch(reg)
 
     def process_comparison(self, e: ComparisonExpr) -> List[Branch]:
         # TODO: Verify operand types.
@@ -1249,6 +1270,36 @@ class IRBuilder(NodeVisitor[Value]):
             else:
                 if b.false is INVALID_LABEL:
                     b.false = target
+
+    def add_bool_branch(self, value: Value) -> List[Branch]:
+        if is_same_type(value.type, int_rprimitive):
+            zero = self.add(LoadInt(0))
+            value = self.binary_op(value, zero, '!=', value.line)
+        elif is_same_type(value.type, list_rprimitive):
+            length = self.primitive_op(list_len_op, [value], value.line)
+            zero = self.add(LoadInt(0))
+            value = self.binary_op(length, zero, '!=', value.line)
+        elif isinstance(value.type, ROptional):
+            branch = Branch(value, INVALID_LABEL, INVALID_LABEL, Branch.IS_NONE)
+            branch.negated = True
+            self.add(branch)
+            value_type = value.type.value_type
+            if isinstance(value_type, RInstance):
+                # Optional[X] where X is always truthy
+                # TODO: Support __bool__
+                return [branch]
+            else:
+                # Optional[X] where X may be falsey and requires a check
+                new = self.new_block()
+                self.set_branches([branch], True, new)
+                remaining = self.coerce(value, value.type.value_type, value.line)
+                more = self.add_bool_branch(remaining)
+                return [branch] + more
+        elif not is_same_type(value.type, bool_rprimitive):
+            value = self.primitive_op(bool_op, [value], value.line)
+        branch = Branch(value, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
+        self.add(branch)
+        return [branch]
 
     def visit_pass_stmt(self, o: PassStmt) -> Value:
         return INVALID_VALUE
@@ -1498,24 +1549,34 @@ class IRBuilder(NodeVisitor[Value]):
         func_reg = self.environment.add_local(fdef, object_rprimitive)
         return self.add(Assign(func_reg, temp_reg))
 
+    def is_builtin_name_expr(self, expr: NameExpr) -> bool:
+        assert expr.node, "RefExpr not resolved"
+        return '.' in expr.node.fullname() and expr.node.fullname().split('.')[0] == 'builtins'
+
     def load_global(self, expr: NameExpr) -> Value:
         """Loads a Python-level global.
 
         This takes a NameExpr and uses its name as a key to retrieve the corresponding PyObject *
         from the _globals dictionary in the C-generated code.
         """
-        _globals = self.add(LoadStatic(object_rprimitive, '_globals'))
+        # If the global is from 'builtins', turn it into a module attr load instead
+        if self.is_builtin_name_expr(expr):
+            return self.load_static_module_attr(expr)
+        if self.is_native_module_name_expr(expr) and isinstance(expr.node, TypeInfo):
+            assert expr.fullname is not None
+            return self.load_native_type_object(expr.fullname)
+        _globals = self.add(LoadStatic(object_rprimitive, 'globals', self.module_name))
         reg = self.load_static_unicode(expr.name)
         return self.add(PrimitiveOp([_globals, reg], dict_get_item_op, expr.line))
 
     def load_static_int(self, value: int) -> Value:
         """Loads a static integer Python 'int' object into a register."""
-        static_symbol = self.mapper.c_name_for_literal(value)
+        static_symbol = self.mapper.literal_static_name(value)
         return self.add(LoadStatic(int_rprimitive, static_symbol, ann=value))
 
     def load_static_float(self, value: float) -> Value:
         """Loads a static float value into a register."""
-        static_symbol = self.mapper.c_name_for_literal(value)
+        static_symbol = self.mapper.literal_static_name(value)
         return self.add(LoadStatic(float_rprimitive, static_symbol, ann=value))
 
     def load_static_unicode(self, value: str) -> Value:
@@ -1524,15 +1585,19 @@ class IRBuilder(NodeVisitor[Value]):
         This is useful for more than just unicode literals; for example, method calls
         also require a PyObject * form for the name of the method.
         """
-        static_symbol = self.mapper.c_name_for_literal(value)
+        static_symbol = self.mapper.literal_static_name(value)
         return self.add(LoadStatic(str_rprimitive, static_symbol, ann=value))
 
     def load_static_module_attr(self, expr: RefExpr) -> Value:
         assert expr.node, "RefExpr not resolved"
         module = '.'.join(expr.node.fullname().split('.')[:-1])
         name = expr.node.fullname().split('.')[-1]
-        left = self.add(LoadStatic(object_rprimitive, c_module_name(module)))
+        left = self.add(LoadStatic(object_rprimitive, 'module', module))
         return self.py_get_attr(left, name, expr.line)
+
+    def load_native_type_object(self, fullname: str) -> Value:
+        module, name = fullname.rsplit('.', 1)
+        return self.add(LoadStatic(object_rprimitive, name, module, NAMESPACE_TYPE))
 
     def coerce(self, src: Value, target_type: RType, line: int) -> Value:
         """Generate a coercion/cast from one type to other (only if needed).

@@ -92,7 +92,7 @@ def g(a):
     r3 :: None
 L0:
     r0 = 1
-    r1 = __unicode_0 :: static  ('hi')
+    r1 = unicode_0 :: static  ('hi')
     r2 = a.f(r0, r1)
     r3 = None
     return r3
@@ -255,8 +255,8 @@ def C.foo(self, x):
     r2, r3 :: object
     r4 :: int
 L0:
-    r0 = module_builtins :: static
-    r1 = __unicode_0 :: static  ('id')
+    r0 = builtins.module :: static
+    r1 = unicode_0 :: static  ('id')
     r2 = getattr r0, r1
     r3 = r2(x) :: object
     r4 = unbox(int, r3)
@@ -301,3 +301,28 @@ def use_c(x, y):
 L0:
     r0 = x.foo(y)
     return r0
+
+[case testIsInstance]
+class A: pass
+class B(A): pass
+
+def f(x: A) -> B:
+    if isinstance(x, B):
+        return x
+    return B()
+[out]
+def f(x):
+    x :: A
+    r0 :: object
+    r1 :: bool
+    r2, r3 :: B
+L0:
+    r0 = __main__.B :: type
+    r1 = isinstance x, r0
+    if r1 goto L1 else goto L2 :: bool
+L1:
+    r2 = cast(B, x)
+    return r2
+L2:
+    r3 = B()
+    return r3

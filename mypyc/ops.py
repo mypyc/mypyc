@@ -26,10 +26,6 @@ from mypyc.namegen import NameGenerator
 T = TypeVar('T')
 
 
-def c_module_name(module_name: str) -> str:
-    return 'module_{}'.format(module_name.replace('.', '__dot__'))
-
-
 def short_name(name: str) -> str:
     if name.startswith('builtins.'):
         return name[9:]
@@ -1007,15 +1003,37 @@ class SetAttr(RegisterOp):
         return visitor.visit_set_attr(self)
 
 
+# Default name space for statics, variables
+NAMESPACE_STATIC = 'static'
+# Static namespace for pointers to native type objects
+NAMESPACE_TYPE = 'type'
+
+
 class LoadStatic(RegisterOp):
-    """dest = name :: static"""
+    """dest = name :: static
+
+    Load a C static variable/pointer. The namespace for statics is shared
+    for the entire compilation unit. You can optionally provide a module
+    name and a sub-namespace identifier for additional namespacing to avoid
+    name conflicts. The static namespace does not overlap with other C names,
+    since the final C name will get a prefix, so conflicts only must be
+    avoided with other statics.
+    """
 
     error_kind = ERR_NEVER
     is_borrowed = True
 
-    def __init__(self, type: RType, identifier: str, line: int = -1, ann: object = None) -> None:
+    def __init__(self,
+                 type: RType,
+                 identifier: str,
+                 module_name: Optional[str] = None,
+                 namespace: str = NAMESPACE_STATIC,
+                 line: int = -1,
+                 ann: object = None) -> None:
         super().__init__(line)
         self.identifier = identifier
+        self.module_name = module_name
+        self.namespace = namespace
         self.type = type
         self.ann = ann  # An object to pretty print with the load
 
@@ -1024,7 +1042,10 @@ class LoadStatic(RegisterOp):
 
     def to_str(self, env: Environment) -> str:
         ann = '  ({})'.format(repr(self.ann)) if self.ann else ''
-        return env.format('%r = %s :: static%s', self, self.identifier, ann)
+        name = self.identifier
+        if self.module_name is not None:
+            name = '{}.{}'.format(self.module_name, name)
+        return env.format('%r = %s :: %s%s', self, name, self.namespace, ann)
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_load_static(self)
@@ -1221,9 +1242,10 @@ class ClassIR:
     This also describes the runtime structure of native instances.
     """
 
-    def __init__(self, name: str, module_name: str) -> None:
+    def __init__(self, name: str, module_name: str, is_trait: bool = False) -> None:
         self.name = name
         self.module_name = module_name
+        self.is_trait = is_trait
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
         # We populate method_types with the signatures of every method before
         # we generate methods, and we rely on this information being present.
@@ -1236,7 +1258,12 @@ class ClassIR:
         self.vtable = None  # type: Optional[Dict[str, int]]
         self.vtable_entries = []  # type: List[Union[VTableMethod, VTableAttr]]
         self.base = None  # type: Optional[ClassIR]
-        self.mro = []  # type: List[ClassIR]
+        self.traits = []  # type: List[ClassIR]
+        # Supply a working mro for most generated classes. Real classes will need to
+        # fix it up.
+        self.mro = [self]  # type: List[ClassIR]
+        # base_mro is the chain of concrete (non-trait) ancestors
+        self.base_mro = [self]  # type: List[ClassIR]
 
     def vtable_entry(self, name: str) -> int:
         assert self.vtable is not None, "vtable not computed yet"
@@ -1262,13 +1289,10 @@ class ClassIR:
         return '{}Object'.format(self.name_prefix(names))
 
     def get_method(self, name: str) -> Optional[FuncIR]:
-        match = self.methods.get(name)
-        if not match and self.base:
-            match = self.base.get_method(name)
-        return match
-
-    def type_struct_name(self, names: NameGenerator) -> str:
-        return '{}Type'.format(self.name_prefix(names))
+        for ir in self.mro:
+            if name in ir.methods:
+                return ir.methods[name]
+        return None
 
 
 LiteralsMap = Dict[Tuple[Type[object], Union[int, float, str]], str]

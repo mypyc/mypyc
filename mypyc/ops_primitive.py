@@ -9,7 +9,7 @@ count and argument types.
 from typing import Dict, List, Callable, Optional
 
 from mypyc.ops import (
-    OpDescription, PrimitiveOp, RType, EmitterInterface, EmitCallback, short_name
+    OpDescription, PrimitiveOp, RType, EmitterInterface, EmitCallback, short_name, bool_rprimitive
 )
 
 
@@ -35,6 +35,20 @@ def simple_emit(template: str) -> EmitCallback:
 
     def emit(emitter: EmitterInterface, args: List[str], dest: str) -> None:
         emitter.emit_line(template.format(args=args, dest=dest))
+
+    return emit
+
+
+def negative_int_emit(template: str) -> EmitCallback:
+    """Construct a simple PrimitiveOp emit callback function that checks for -1 return."""
+
+    def emit(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+        temp = emitter.temp_name()
+        emitter.emit_line(template.format(args=args, dest='int %s' % temp))
+        emitter.emit_lines('if (%s < 0)' % temp,
+                           '    %s = %s;' % (dest, bool_rprimitive.c_error_value()),
+                           'else',
+                           '    %s = %s;' % (dest, temp))
 
     return emit
 
@@ -75,7 +89,8 @@ def func_op(name: str,
             result_type: RType,
             error_kind: int,
             emit: EmitCallback,
-            format_str: Optional[str] = None) -> OpDescription:
+            format_str: Optional[str] = None,
+            priority: int = 1) -> OpDescription:
     ops = func_ops.setdefault(name, [])
     typename = ''
     if len(arg_types) == 1:
@@ -85,7 +100,8 @@ def func_op(name: str,
                                            ', '.join('{args[%d]}' % i
                                                      for i in range(len(arg_types))),
                                            typename)
-    desc = OpDescription(name, arg_types, result_type, False, error_kind, format_str, emit, 0)
+    desc = OpDescription(name, arg_types, result_type, False, error_kind, format_str, emit,
+                         priority)
     ops.append(desc)
     return desc
 

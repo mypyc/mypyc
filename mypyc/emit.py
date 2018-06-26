@@ -3,12 +3,12 @@
 from collections import OrderedDict
 from typing import List, Set, Dict, Optional
 
-from mypyc.common import REG_PREFIX
+from mypyc.common import REG_PREFIX, STATIC_PREFIX, TYPE_PREFIX
 from mypyc.ops import (
     Environment, BasicBlock, Value, Register, RType, RTuple, RInstance, ROptional,
     RPrimitive, is_int_rprimitive, is_float_rprimitive, is_bool_rprimitive,
     short_name, is_list_rprimitive, is_dict_rprimitive, is_tuple_rprimitive, is_none_rprimitive,
-    object_rprimitive, is_str_rprimitive
+    is_object_rprimitive, object_rprimitive, is_str_rprimitive, ClassIR
 )
 from mypyc.namegen import NameGenerator
 
@@ -83,6 +83,22 @@ class Emitter:
     def temp_name(self) -> str:
         self.context.temp_counter += 1
         return '__tmp%d' % self.context.temp_counter
+
+    def static_name(self, id: str, module: Optional[str], prefix: str = STATIC_PREFIX) -> str:
+        """Create name of a C static variable.
+
+        These are used for literals and imported modules, among other
+        things.
+
+        The caller should ensure that the (id, module) pair cannot
+        overlap with other calls to this method within a compilation
+        unit.
+        """
+        suffix = self.names.private_name(module or '', id)
+        return '{}{}'.format(prefix, suffix)
+
+    def type_struct_name(self, cl: ClassIR) -> str:
+        return self.static_name(cl.name, cl.module_name, prefix=TYPE_PREFIX)
 
     # Higher-level operations
 
@@ -201,7 +217,7 @@ class Emitter:
             self.emit_lines(
                 'if (PyObject_TypeCheck({}, &{}))'.format(
                     src,
-                    typ.class_ir.type_struct_name(self.names)),
+                    self.type_struct_name(typ.class_ir)),
                 '    {} = {};'.format(dest, src),
                 'else {',
                 err,
@@ -217,6 +233,10 @@ class Emitter:
                 err,
                 '{} = NULL;'.format(dest),
                 '}')
+        elif is_object_rprimitive(typ):
+            if declare_dest:
+                self.emit_line('PyObject *{};'.format(dest))
+            self.emit_line('{} = {};'.format(dest, src))
         elif isinstance(typ, ROptional):
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))

@@ -350,3 +350,62 @@ C
 B
 C
 C
+
+[case testIsInstance]
+class X: pass
+class A(X): pass
+class B(A): pass
+
+def isa(x: object) -> bool:
+    return isinstance(x, A)
+def isint(x: object) -> bool:
+    return isinstance(x, int)
+def isstr(x: object) -> bool:
+    return isinstance(x, str)
+def islist(x: object) -> bool:
+    return isinstance(x, list)
+def ist(x: object, t: object) -> bool:  # TODO: Second argument should be 'type'
+    return isinstance(x, t)
+[file driver.py]
+from native import X, A, B, isa, isint, isstr, islist, ist
+assert isa(1) == False
+assert isa(A()) == True
+assert isa(B()) == True
+assert isa(X()) == False
+
+assert isint(1) == True
+assert isint('') == False
+assert isint(A()) == False
+
+assert isstr(1) == False
+assert isstr('') == True
+
+assert islist(1) == False
+assert islist([]) == True
+
+assert ist(1, int) == True
+assert ist(1, str) == False
+try:
+    ist(1, 2)
+except TypeError:
+    pass
+else:
+    assert False
+
+[case testSubclassUninitAttr]
+class X:
+    x: int
+class A(X):
+    pass
+[file driver.py]
+import traceback
+from native import A
+try:
+    A().x
+except AttributeError:
+    traceback.print_exc()
+[out]
+Traceback (most recent call last):
+  File "tmp/driver.py", line 4, in <module>
+    A().x
+AttributeError: attribute 'x' of 'X' undefined
