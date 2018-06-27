@@ -85,19 +85,6 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     generate_methods_table(cl, methods_name, emitter)
     emit_line()
 
-    tp_members = '0'
-    # if name.endswith('_env'):
-    #     tp_members = name + '_members'
-    #     emitter.emit_line('static PyMemberDef {}[] = {{'.format(tp_members))
-    #     for symbol_name, rtype in cl.attributes.items():
-    #         emitter.emit_line('{{ "{var}", {typ}, offsetof({obj}, {var}), 0, "{var}" }},'.format(
-    #             var=symbol_name,
-    #             typ=get_c_type_macro(str(rtype)),
-    #             obj=name + 'Object'))
-    #     emitter.emit_line('{ NULL }  /* Sentinel */')
-    #     emitter.emit_line('};')
-    #     emitter.emit_line()
-
     emitter.emit_line(textwrap.dedent("""\
         static PyTypeObject {type_struct} = {{
             PyVarObject_HEAD_INIT(NULL, 0)
@@ -128,7 +115,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
             0,                         /* tp_iter */
             0,                         /* tp_iternext */
             {methods_name},            /* tp_methods */
-            {tp_members},              /* tp_members */
+            0,                         /* tp_members */
             {getseters_name},          /* tp_getset */
             {base_arg},                /* tp_base */
             0,                         /* tp_dict */
@@ -148,7 +135,6 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
                     tp_call=call_name,
                     new_name=new_name,
                     methods_name=methods_name,
-                    tp_members=tp_members,
                     getseters_name=getseters_name,
                     init_name=init_name,
                     base_arg=base_arg,
@@ -452,17 +438,3 @@ def generate_setter(cl: ClassIR,
     emitter.emit_line('    self->{} = {};'.format(attr, rtype.c_undefined_value()))
     emitter.emit_line('return 0;')
     emitter.emit_line('}')
-
-
-def get_c_type_macro(type: str) -> str:
-    table = {
-        'int': 'T_LONG',
-        'float': 'T_FLOAT',
-        'str': 'T_STRING',
-        'object': 'T_OBJECT',
-        'bool': 'T_BOOL'
-    }
-    try:
-        return table[type]
-    except KeyError:
-        return type
