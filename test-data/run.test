@@ -939,12 +939,22 @@ def b() -> int:
         return num
     return inner()
 
+def c(num: int) -> int:
+    x = 1
+    y = 2
+    def inner() -> int:
+        return num + x + y
+    return inner()
+
 [file driver.py]
 from native import a
 from native import b
+from native import c
 print(a(3))
 print(b())
+print(c(3))
 
 [out]
 3
 3
+6
