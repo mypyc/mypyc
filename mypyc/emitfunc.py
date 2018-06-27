@@ -288,7 +288,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         if op.message is not None:
             message = op.message.replace('"', '\\"')
             self.emitter.emit_line(
-                'PyErr_SetString(PyExc_{}, "{}");'.format(op.class_name, op.message))
+                'PyErr_SetString(PyExc_{}, "{}");'.format(op.class_name, message))
         else:
             self.emitter.emit_line('PyErr_SetNone(PyExc_{});'.format(op.class_name))
         self.emitter.emit_line('{} = 0;'.format(self.reg(op)))
