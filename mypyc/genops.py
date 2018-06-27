@@ -957,9 +957,6 @@ class IRBuilder(NodeVisitor[Value]):
                 # If there is a KeyError, then that means the target could not be found in the
                 # current scope. We need to search the hierarchy of environments to check if the
                 # target was defined in an outer scope.
-
-                print('visiting variable: {}'.format(expr.node.name()))
-
                 symbol_found = False
                 index = len(self.environments) - 2
                 while not symbol_found and index >= 1:
@@ -982,9 +979,15 @@ class IRBuilder(NodeVisitor[Value]):
                     self.env_members[index][expr.node] = symtable[expr.node]
                     env = self.selfs[-1]
                     for i in range(index, len(self.env_classes)):
-                        print('self: {}'.format(env.to_str(self.environment)))
                         env = self.add(GetAttr(env, 'env', expr.line))
-                    val = self.add(GetAttr(env, expr.node.name(), expr.line))
+
+                    # Create a target for this symbol and add it to the environment.
+                    target = AssignmentTargetAttr(env, expr.node.name())
+                    self.environment.add_target(expr.node, target)
+                    # self.env_members[index][expr.node] = self.environment.lookup(expr.node)
+
+                    return self.read_from_target(target, expr.line)
+
                     # TODO: Figure out how to cache the value into a register so that it doesn't
                     # need to be loaded next time. Perhaps put it into the environment symbol
                     # table?
@@ -1564,7 +1567,6 @@ class IRBuilder(NodeVisitor[Value]):
         # Iterate through the variables that are defined in the corresponding environment, and add
         # their initializing statements to the constructor.
         for symbol, target in env_members.items():
-            print('{} -> {}'.format(symbol, target))
             self.environment.add_local_reg(Var(symbol.name()), target.type, is_arg=True)
             self.add(SetAttr(self_reg, symbol.name(), self.read_from_target(target, line), line))
         self.add_implicit_return()

@@ -1103,7 +1103,7 @@ L0:
     r0 = unicode_8 :: static  ('third: normal function')
     return r0
 
-[case testFreeVars]
+[case testFreeVarss]
 from typing import Callable
 
 def a(num: int) -> int:
@@ -1116,6 +1116,13 @@ def b() -> int:
     def inner() -> int:
         return num
     return inner()
+
+def c(num: int) -> int:
+    def inner() -> None:
+        num = 1000
+    inner()
+    return num
+    
 [out]
 def inner_a_obj.__call__(self):
     self :: inner_a_obj
@@ -1183,3 +1190,33 @@ L0:
     r4 = inner() :: object
     r5 = unbox(int, r4)
     return r5
+def inner_c_obj.__call__(self):
+    self :: inner_c_obj
+    num, r0 :: int
+    r1 :: None
+L0:
+    r0 = 1000
+    num = r0
+    r1 = None
+    return r1
+def c__env.__init__(self, num):
+    self :: c__env
+    r0 :: None
+L0:
+    r0 = None
+    return r0
+def c(num):
+    num :: int
+    r0 :: c__env
+    r1, inner :: inner_c_obj
+    r2 :: bool
+    r3 :: object
+    r4 :: None
+L0:
+    r0 = c__env(num)
+    r1 = inner_c_obj()
+    inner = r1
+    inner.env = r0; r2 = is_error
+    r3 = inner() :: object
+    r4 = cast(None, r3)
+    return num
