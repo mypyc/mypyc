@@ -1138,8 +1138,11 @@ def a(num: int) -> int:
 def b() -> int:
     num = 3
     def inner() -> int:
+        nonlocal num
+        num = 4
+        foo = 6
         return num
-    return inner()
+    return inner() + num
     
 [out]
 def inner_a_obj.__call__(self):
@@ -1171,10 +1174,16 @@ def inner_b_obj.__call__(self):
     self :: inner_b_obj
     r0 :: b__env
     r1 :: int
+    r2 :: bool
+    foo, r3, r4 :: int
 L0:
     r0 = self.env
-    r1 = r0.num
-    return r1
+    r1 = 4
+    r0.num = r1; r2 = is_error
+    r3 = 6
+    foo = r3
+    r4 = r0.num
+    return r4
 def b():
     r0 :: b__env
     r1 :: int
@@ -1182,7 +1191,7 @@ def b():
     r3, inner :: inner_b_obj
     r4 :: bool
     r5 :: object
-    r6 :: int
+    r6, r7, r8 :: int
 L0:
     r0 = b__env()
     r1 = 3
@@ -1192,18 +1201,9 @@ L0:
     inner.env = r0; r4 = is_error
     r5 = inner() :: object
     r6 = unbox(int, r5)
-    return r6
-
-[case testTripleNested]
-def d(num: int) -> int:
-    x = 1
-    def outer() -> int:
-        def inner() -> int:
-            return num + x
-        return inner()
-    return outer()
-    
-[out]
+    r7 = r0.num
+    r8 = r6 + r7 :: int
+    return r8
 
 [case testObjectAsBoolean]
 from typing import List

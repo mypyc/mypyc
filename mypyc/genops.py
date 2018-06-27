@@ -543,7 +543,7 @@ class IRBuilder(NodeVisitor[Value]):
         else:
             func = FuncIR(fdef.name(), class_name, self.module_name, sig, blocks, env)
 
-        self.func_infos.pop()
+        self.most_recent_func_info = self.func_infos.pop()
 
         return func
 
@@ -610,23 +610,34 @@ class IRBuilder(NodeVisitor[Value]):
             # Assign to local variable.
             assert lvalue.kind == LDEF
             assert isinstance(lvalue.node, Var)  # TODO: Can this fail?
-            fn_info = self.func_infos[-1]
-            if fn_info.contains_nested:
-                if lvalue.node not in fn_info.env_members:
-                    env_class_val = fn_info.env_class_val
-                    env_class = fn_info.env_class
-                    env_class.attributes[lvalue.node.name()] = self.node_type(lvalue)
-                    target = AssignmentTargetAttr(env_class_val, lvalue.node.name())
+            if lvalue.node not in self.environment.symtable:
+                fn_info = self.func_infos[-1]
+
+                if (fn_info.is_nested and
+                        lvalue.node.name() in self.func_infos[-2].env_class.attributes):
+                    # Get the current function's outer environment class, and retrieve the
+                    # target associated with the variable name in that environment class. Add the
+                    # target to the current environment so it can be looked up later.
+                    env = self.add(GetAttr(fn_info.self_reg, 'env', lvalue.node.line))
+                    target = AssignmentTargetAttr(env, lvalue.node.name())
                     return self.environment.add_target(lvalue.node, target)
-                else:
-                    return self.environment.lookup(lvalue.node)
+
+                if fn_info.contains_nested:
+                    # First, define a new variable in the current function's environment class.
+                    # Next, define a target that refers to the newly defined variable in that
+                    # environment class. Add the target to the table containing class environment
+                    # variables, as well as the current environment.
+                    fn_info.env_class.attributes[lvalue.node.name()] = self.node_type(lvalue)
+                    target = AssignmentTargetAttr(fn_info.env_class_val, lvalue.node.name())
+                    fn_info.env_members[lvalue.node] = target
+                    return self.environment.add_target(lvalue.node, target)
+
+                # If the function neither is nested nor contains a nested function, then define a
+                # new local variable.
+                return self.environment.add_local_reg(lvalue.node, self.node_type(lvalue))
             else:
-                if lvalue.node not in self.environment.symtable:
-                    # Define a new variable.
-                    return self.environment.add_local_reg(lvalue.node, self.node_type(lvalue))
-                else:
-                    # Assign to a previously defined variable.
-                    return self.environment.lookup(lvalue.node)
+                # Assign to a previously defined variable.
+                return self.environment.lookup(lvalue.node)
         elif isinstance(lvalue, IndexExpr):
             # Indexed assignment x[y] = e
             base = self.accept(lvalue.base)
@@ -1616,7 +1627,7 @@ class IRBuilder(NodeVisitor[Value]):
         for symbol, target in env.symtable.items():
             ir.attributes[symbol.name()] = target.type
         if prev_env_class:
-            ir.attributes['prev_env'] = RInstance(prev_env_class)
+            ir.attributes['env'] = RInstance(prev_env_class)
         ir.mro = [ir]
         self.func_infos[-1].env_class = ir
         self.classes.append(ir)
