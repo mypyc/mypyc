@@ -6,7 +6,9 @@ from mypyc.ops import (
     EmitterInterface, PrimitiveOp, none_rprimitive, bool_rprimitive, object_rprimitive, ERR_NEVER,
     ERR_MAGIC, ERR_FALSE
 )
-from mypyc.ops_primitive import name_ref_op, simple_emit, binary_op, unary_op, func_op, method_op
+from mypyc.ops_primitive import (
+    name_ref_op, simple_emit, binary_op, unary_op, func_op, method_op, negative_int_emit
+)
 
 
 def emit_none(emitter: EmitterInterface, args: List[str], dest: str) -> None:
@@ -92,21 +94,11 @@ binary_op(op='**',
           emit=simple_emit('{dest} = PyNumber_Power({args[0]}, {args[1]}, Py_None);'),
           priority=0)
 
-
-def emit_in(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-    temp = emitter.temp_name()
-    emitter.emit_lines('int %s = PySequence_Contains(%s, %s);' % (temp, args[1], args[0]),
-                       'if (%s < 0)' % temp,
-                       '    %s = %s;' % (dest, bool_rprimitive.c_error_value()),
-                       'else',
-                       '    %s = %s;' % (dest, temp))
-
-
 binary_op('in',
           arg_types=[object_rprimitive, object_rprimitive],
           result_type=bool_rprimitive,
           error_kind=ERR_MAGIC,
-          emit=emit_in,
+          emit=negative_int_emit('{dest} = PySequence_Contains({args[1]}, {args[0]});'),
           priority=0)
 
 for op, funcname in [('-', 'PyNumber_Negative'),
@@ -149,22 +141,11 @@ py_setattr_op = func_op(
     emit=simple_emit('{dest} = PyObject_SetAttr({args[0]}, {args[1]}, {args[2]}) >= 0;')
 )
 
-
-def emit_isinstance(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-    temp = emitter.temp_name()
-    emitter.emit_lines('int %s = PyObject_IsInstance(%s, %s);' % (temp, args[0], args[1]),
-                       'if (%s < 0)' % temp,
-                       '    %s = %s;' % (dest, bool_rprimitive.c_error_value()),
-                       'else',
-                       '    %s = %s;' % (dest, temp))
-
-
 func_op('builtins.isinstance',
         arg_types=[object_rprimitive, object_rprimitive],
         result_type=bool_rprimitive,
         error_kind=ERR_MAGIC,
-        emit=emit_isinstance)
-
+        emit=negative_int_emit('{dest} = PyObject_IsInstance({args[0]}, {args[1]});'))
 
 # Faster isinstance() that only works with native classes and doesn't perform type checking
 # of the type argument.
@@ -175,3 +156,10 @@ fast_isinstance_op = func_op(
     error_kind=ERR_NEVER,
     emit=simple_emit('{dest} = PyObject_TypeCheck({args[0]}, (PyTypeObject *){args[1]});'),
     priority=0)
+
+bool_op = func_op(
+    'builtins.bool',
+    arg_types=[object_rprimitive],
+    result_type=bool_rprimitive,
+    error_kind=ERR_MAGIC,
+    emit=negative_int_emit('{dest} = PyObject_IsTrue({args[0]});'))

@@ -41,11 +41,11 @@ from mypy.checkmember import bind_self
 from mypyc.common import MAX_SHORT_INT
 from mypyc.ops import (
     BasicBlock, AssignmentTarget, AssignmentTargetRegister, AssignmentTargetIndex,
-    AssignmentTargetAttr, Environment, Op, LoadInt, RType, Value, Register, Label, Return, FuncIR,
+    AssignmentTargetAttr, Environment, Op, LoadInt, RType, Value, Register, Return, FuncIR,
     Assign, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple, Unreachable, TupleGet,
     TupleSet, ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, PyCall, ROptional,
     PyMethodCall, MethodCall, INVALID_VALUE, INVALID_LABEL, INVALID_CLASS, int_rprimitive,
-    is_int_rprimitive, float_rprimitive, is_float_rprimitive, bool_rprimitive, list_rprimitive,
+    float_rprimitive, is_float_rprimitive, bool_rprimitive, list_rprimitive,
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp,
     ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap, FuncSignature,
@@ -56,7 +56,7 @@ from mypyc.ops_list import list_len_op, list_get_item_op, list_set_item_op, new_
 from mypyc.ops_dict import new_dict_op, dict_get_item_op
 from mypyc.ops_misc import (
     none_op, iter_op, next_op, no_err_occurred_op, py_getattr_op, py_setattr_op,
-    fast_isinstance_op,
+    fast_isinstance_op, bool_op,
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
@@ -76,7 +76,7 @@ def build_ir(modules: List[MypyFile],
     # Collect all class mappings so that we can bind arbitrary class name
     # references even if there are import cycles.
     for module_name, cdef in classes:
-        class_ir = ClassIR(cdef.name, module_name)
+        class_ir = ClassIR(cdef.name, module_name, is_trait(cdef))
         mapper.type_to_ir[cdef.info] = class_ir
 
     # Populate structural information in class IR.
@@ -104,9 +104,23 @@ def build_ir(modules: List[MypyFile],
     return result
 
 
+def is_trait(cdef: ClassDef) -> bool:
+    return any(d.fullname == 'mypy_extensions.trait' for d in cdef.decorators
+               if isinstance(d, NameExpr))
+
+
 def compute_vtable(cls: ClassIR) -> None:
     """Compute the vtable structure for a class."""
     if cls.vtable is not None: return
+
+    # Merge attributes from traits into the class
+    for t in cls.mro[1:]:
+        if not t.is_trait:
+            continue
+        for name, typ in t.attributes.items():
+            if not cls.is_trait and not any(name in b.attributes for b in cls.base_mro):
+                cls.attributes[name] = typ
+
     cls.vtable = {}
     entries = cls.vtable_entries
     if cls.base:
@@ -122,7 +136,9 @@ def compute_vtable(cls: ClassIR) -> None:
         if isinstance(entry, VTableMethod):
             method = entry.method
             if method.name in cls.methods:
-                if is_same_method_signature(method.sig, cls.methods[method.name].sig):
+                # TODO: emit a wrapper for __init__ that raises or something
+                if (is_same_method_signature(method.sig, cls.methods[method.name].sig)
+                        or method.name == '__init__'):
                     entry = VTableMethod(cls, cls.methods[method.name])
                 else:
                     entry = VTableMethod(cls, cls.glue_methods[(entry.cls, method.name)])
@@ -132,9 +148,12 @@ def compute_vtable(cls: ClassIR) -> None:
         cls.vtable[attr] = len(entries)
         entries.append(VTableAttr(cls, attr, is_getter=True))
         entries.append(VTableAttr(cls, attr, is_getter=False))
-    for fn in cls.methods.values():
-        cls.vtable[fn.name] = len(entries)
-        entries.append(VTableMethod(cls, fn))
+
+    for t in [cls] + cls.traits:
+        for fn in t.methods.values():
+            if fn == cls.get_method(fn.name):
+                cls.vtable[fn.name] = len(entries)
+                entries.append(VTableMethod(t, fn))
 
 
 class Mapper:
@@ -164,7 +183,8 @@ class Mapper:
                 return dict_rprimitive
             elif typ.type.fullname() == 'builtins.tuple':
                 return tuple_rprimitive  # Varying-length tuple
-            elif typ.type in self.type_to_ir:
+            # TODO: don't erase traits
+            elif typ.type in self.type_to_ir and not self.type_to_ir[typ.type].is_trait:
                 return RInstance(self.type_to_ir[typ.type])
             else:
                 return object_rprimitive
@@ -223,15 +243,28 @@ def prepare_class_def(cdef: ClassDef, mapper: Mapper) -> None:
             ir.method_types[name] = mapper.fdef_to_sig(node.node)
 
     # Set up the parent class
-    assert len(info.bases) == 1, "Only single inheritance is supported"
+    bases = [mapper.type_to_ir[base.type] for base in info.bases
+             if base.type.fullname() != 'builtins.object']
+    assert all(c.is_trait for c in bases[1:]), "Non trait bases must be first"
+    ir.traits = [c for c in bases if c.is_trait]
+
     mro = []
+    base_mro = []
     for cls in info.mro:
         if cls.fullname() == 'builtins.object': continue
-        assert cls in mapper.type_to_ir, "Can't subclass cpython types yet"
-        mro.append(mapper.type_to_ir[cls])
-    if len(mro) > 1:
-        ir.base = mro[1]
+        assert cls in mapper.type_to_ir, "Can't subclass cpython types"
+        base_ir = mapper.type_to_ir[cls]
+        if not base_ir.is_trait:
+            base_mro.append(base_ir)
+        mro.append(base_ir)
+
+    if len(base_mro) > 1:
+        ir.base = base_mro[1]
+    assert all(base_mro[i].base == base_mro[i + 1] for i in range(len(base_mro) - 1)), (
+        "non-trait MRO must be linear")
+
     ir.mro = mro
+    ir.base_mro = base_mro
 
 
 class FuncInfo(object):
@@ -315,7 +348,7 @@ class IRBuilder(NodeVisitor[Value]):
                 # If this overrides a parent class method with a different type, we need
                 # to generate a glue method to mediate between them.
                 for cls in ir.mro[1:]:
-                    if (name in cls.method_types
+                    if (name in cls.method_types and name != '__init__'
                             and not is_same_method_signature(ir.method_types[name],
                                                              cls.method_types[name])):
                         f = self.gen_glue_method(cls.method_types[name], func, ir, cls,
@@ -679,13 +712,13 @@ class IRBuilder(NodeVisitor[Value]):
             else_leave = self.add_leave()
             next = self.new_block()
             if else_leave:
-                else_leave.label = next.label
+                else_leave.label = next
         else:
             # No else block.
             next = self.new_block()
             self.set_branches(branches, False, next)
         if if_leave:
-            if_leave.label = next.label
+            if_leave.label = next
         return INVALID_VALUE
 
     def add_leave(self) -> Optional[Goto]:
@@ -701,10 +734,10 @@ class IRBuilder(NodeVisitor[Value]):
 
     def pop_loop_stack(self, continue_block: BasicBlock, break_block: BasicBlock) -> None:
         for continue_goto in self.continue_gotos.pop():
-            continue_goto.label = continue_block.label
+            continue_goto.label = continue_block
 
         for break_goto in self.break_gotos.pop():
-            break_goto.label = break_block.label
+            break_goto.label = break_block
 
     def visit_while_stmt(self, s: WhileStmt) -> Value:
         self.push_loop_stack()
@@ -713,7 +746,7 @@ class IRBuilder(NodeVisitor[Value]):
         goto = Goto(INVALID_LABEL)
         self.add(goto)
         top = self.new_block()
-        goto.label = top.label
+        goto.label = top
         branches = self.process_conditional(s.expr)
 
         body = self.new_block()
@@ -721,7 +754,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.set_branches(branches, True, body)
         s.body.accept(self)
         # Add branch to the top at the end of the body.
-        self.add(Goto(top.label))
+        self.add(Goto(top))
         next = self.new_block()
         # Bind "false" branches to the new block.
         self.set_branches(branches, False, next)
@@ -749,11 +782,9 @@ class IRBuilder(NodeVisitor[Value]):
 
             # Add loop condition check.
             top = self.new_block()
-            goto.label = top.label
+            goto.label = top
             comparison = self.binary_op(index_reg, end_reg, '<', s.line)
-            branch = Branch(comparison, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
-            self.add(branch)
-            branches = [branch]
+            branches = self.add_bool_branch(comparison)
 
             body = self.new_block()
             self.set_branches(branches, True, body)
@@ -762,14 +793,14 @@ class IRBuilder(NodeVisitor[Value]):
             end_goto = Goto(INVALID_LABEL)
             self.add(end_goto)
             end_block = self.new_block()
-            end_goto.label = end_block.label
+            end_goto.label = end_block
 
             # Increment index register.
             one_reg = self.add(LoadInt(1))
             self.add(Assign(index_reg, self.binary_op(index_reg, one_reg, '+', s.line)))
 
             # Go back to loop condition check.
-            self.add(Goto(top.label))
+            self.add(Goto(top))
             next = self.new_block()
             self.set_branches(branches, False, next)
 
@@ -797,9 +828,7 @@ class IRBuilder(NodeVisitor[Value]):
             len_reg = self.add(PrimitiveOp([expr_reg], list_len_op, s.line))
 
             comparison = self.binary_op(index_reg, len_reg, '<', s.line)
-            branch = Branch(comparison, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
-            self.add(branch)
-            branches = [branch]
+            branches = self.add_bool_branch(comparison)
 
             body_block = self.new_block()
             self.set_branches(branches, True, body_block)
@@ -816,7 +845,7 @@ class IRBuilder(NodeVisitor[Value]):
 
             end_block = self.goto_new_block()
             self.add(Assign(index_reg, self.binary_op(index_reg, one_reg, '+', s.line)))
-            self.add(Goto(condition_block.label))
+            self.add(Goto(condition_block))
 
             next_block = self.new_block()
             self.set_branches(branches, False, next_block)
@@ -855,7 +884,7 @@ class IRBuilder(NodeVisitor[Value]):
             self.set_branches(branches, False, body_block)
             self.assign_to_target(lvalue, next_reg, s.line)
             s.body.accept(self)
-            self.add(Goto(next_block.label))
+            self.add(Goto(next_block))
 
             # Create a new block for when the loop is finished. Set the branch to go here if the
             # conditional evaluates to true. If an exception was raised during the loop, then
@@ -1212,8 +1241,8 @@ class IRBuilder(NodeVisitor[Value]):
         self.add(else_goto_next)
 
         next = self.new_block()
-        if_goto_next.label = next.label
-        else_goto_next.label = next.label
+        if_goto_next.label = next
+        else_goto_next.label = next
 
         return target
 
@@ -1283,9 +1312,7 @@ class IRBuilder(NodeVisitor[Value]):
         # Catch-all for arbitrary expressions.
         else:
             reg = self.accept(e)
-            branch = Branch(reg, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
-            self.add(branch)
-            return [branch]
+            return self.add_bool_branch(reg)
 
     def process_comparison(self, e: ComparisonExpr) -> List[Branch]:
         # TODO: Verify operand types.
@@ -1324,11 +1351,41 @@ class IRBuilder(NodeVisitor[Value]):
         """
         for b in branches:
             if condition:
-                if b.true < 0:
-                    b.true = target.label
+                if b.true is INVALID_LABEL:
+                    b.true = target
             else:
-                if b.false < 0:
-                    b.false = target.label
+                if b.false is INVALID_LABEL:
+                    b.false = target
+
+    def add_bool_branch(self, value: Value) -> List[Branch]:
+        if is_same_type(value.type, int_rprimitive):
+            zero = self.add(LoadInt(0))
+            value = self.binary_op(value, zero, '!=', value.line)
+        elif is_same_type(value.type, list_rprimitive):
+            length = self.primitive_op(list_len_op, [value], value.line)
+            zero = self.add(LoadInt(0))
+            value = self.binary_op(length, zero, '!=', value.line)
+        elif isinstance(value.type, ROptional):
+            branch = Branch(value, INVALID_LABEL, INVALID_LABEL, Branch.IS_NONE)
+            branch.negated = True
+            self.add(branch)
+            value_type = value.type.value_type
+            if isinstance(value_type, RInstance):
+                # Optional[X] where X is always truthy
+                # TODO: Support __bool__
+                return [branch]
+            else:
+                # Optional[X] where X may be falsey and requires a check
+                new = self.new_block()
+                self.set_branches([branch], True, new)
+                remaining = self.coerce(value, value.type.value_type, value.line)
+                more = self.add_bool_branch(remaining)
+                return [branch] + more
+        elif not is_same_type(value.type, bool_rprimitive):
+            value = self.primitive_op(bool_op, [value], value.line)
+        branch = Branch(value, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
+        self.add(branch)
+        return [branch]
 
     def visit_nonlocal_decl(self, o: NonlocalDecl) -> Value:
         return INVALID_VALUE
@@ -1469,15 +1526,15 @@ class IRBuilder(NodeVisitor[Value]):
         self.new_block()
 
     def new_block(self) -> BasicBlock:
-        new = BasicBlock(Label(len(self.blocks[-1])))
-        self.blocks[-1].append(new)
-        return new
+        block = BasicBlock()
+        self.blocks[-1].append(block)
+        return block
 
     def goto_new_block(self) -> BasicBlock:
         goto = Goto(INVALID_LABEL)
         self.add(goto)
         block = self.new_block()
-        goto.label = block.label
+        goto.label = block
         return block
 
     def leave(self) -> Tuple[List[BasicBlock], Environment, RType]:

@@ -959,23 +959,23 @@ def c(num: int) -> int:
 #             return x + y + z + first + second + third
 #         return inner(second)
 #     return outer(first)
-def d(num: int) -> int:
-    x = 1
-    def outer() -> int:
-        def inner() -> int:
-            return num + x
-        return inner()
-    return outer()
+# def d(num: int) -> int:
+#     x = 1
+#     def outer() -> int:
+#         def inner() -> int:
+#             return num + x
+#         return inner()
+#     return outer()
 
 [file driver.py]
 from native import a
 from native import b
 from native import c
-from native import d
+# from native import d
 print(a(3))
 print(b())
 print(c(3))
-print(d(3))
+# print(d(3))
 
 [out]
 3
