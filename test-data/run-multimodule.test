@@ -230,7 +230,7 @@ def f2() -> int:
 from native import f1
 assert f1() == 5
 
-[case testMultiModuleCycle2]
+[case testMultiModuleCycleWithClasses]
 import other
 
 class D: pass
@@ -273,3 +273,33 @@ except TypeError:
     pass
 else:
     assert False
+
+[case testMultiModuleCycleWithInheritance]
+import other
+
+class Deriv1(other.Base1):
+    pass
+
+class Base2:
+    y: int
+    def __init__(self) -> None:
+        self.y = 2
+
+[file other.py]
+import native
+
+class Base1:
+    x: int
+    def __init__(self) -> None:
+        self.x = 1
+
+class Deriv2(native.Base2):
+    pass
+
+[file driver.py]
+from native import Deriv1
+from other import Deriv2
+a = Deriv1()
+assert a.x == 1
+b = Deriv2()
+assert b.y == 2
