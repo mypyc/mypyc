@@ -957,18 +957,25 @@ def d() -> int:
         return num
     return inner() + num
 
+def e() -> int:
+    num = 3
+    def inner() -> int:
+        num = 5
+        foo = 6
+        return num
+    return inner() + num
+
 [file driver.py]
-from native import a
-from native import b
-from native import c
-from native import d
+from native import a, b, c, d, e
 print(a(3))
 print(b())
 print(c(3))
 print(d())
+print(e())
 
 [out]
 3
 3
 8
 10
+8

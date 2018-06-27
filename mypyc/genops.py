@@ -271,14 +271,12 @@ class FuncInfo(object):
     def __init__(self,
                  env_class: ClassIR = INVALID_CLASS,
                  env_class_val: Value = INVALID_VALUE,
-                 env_members: Dict[SymbolNode, AssignmentTarget] = {},
                  self_reg: Value = INVALID_VALUE,
                  is_nested: bool = False,
                  contains_nested: bool = False) -> None:
         # TODO: add field for ret_type: RType = none_rprimitive
         self.env_class = env_class
         self.env_class_val = env_class_val
-        self.env_members = env_members
         self.self_reg = self_reg
         self.is_nested = is_nested
         self.contains_nested = contains_nested
@@ -425,7 +423,7 @@ class IRBuilder(NodeVisitor[Value]):
 
         # The environment operates on Vars, so we make some up
         fake_vars = [(Var(arg.name), arg.type) for arg in rt_args]
-        args = [self.read_from_target(self.environment.add_local_reg(var, type, is_arg=True), -1)
+        args = [self.read_from_target(self.environment.add_local_reg(var, type, is_arg=True), line)
                 for var, type in fake_vars]  # type: List[Value]
         self.ret_types[-1] = sig.ret_type
 
@@ -612,15 +610,10 @@ class IRBuilder(NodeVisitor[Value]):
             assert isinstance(lvalue.node, Var)  # TODO: Can this fail?
             if lvalue.node not in self.environment.symtable:
                 fn_info = self.func_infos[-1]
-
-                if (fn_info.is_nested and
-                        lvalue.node.name() in self.func_infos[-2].env_class.attributes):
-                    # Get the current function's outer environment class, and retrieve the
-                    # target associated with the variable name in that environment class. Add the
-                    # target to the current environment so it can be looked up later.
-                    env = self.add(GetAttr(fn_info.self_reg, 'env', lvalue.node.line))
-                    target = AssignmentTargetAttr(env, lvalue.node.name())
-                    return self.environment.add_target(lvalue.node, target)
+                if fn_info.is_nested:
+                    target = self.load_from_outer_scope(lvalue.node)
+                    if target:
+                        return target
 
                 if fn_info.contains_nested:
                     # First, define a new variable in the current function's environment class.
@@ -629,7 +622,6 @@ class IRBuilder(NodeVisitor[Value]):
                     # variables, as well as the current environment.
                     fn_info.env_class.attributes[lvalue.node.name()] = self.node_type(lvalue)
                     target = AssignmentTargetAttr(fn_info.env_class_val, lvalue.node.name())
-                    fn_info.env_members[lvalue.node] = target
                     return self.environment.add_target(lvalue.node, target)
 
                 # If the function neither is nested nor contains a nested function, then define a
@@ -1022,38 +1014,13 @@ class IRBuilder(NodeVisitor[Value]):
         # TODO: Behavior currently only defined for Var and FuncDef node types.
         if expr.kind == LDEF:
             try:
-                target = self.environment.lookup(expr.node)
-                return self.read_from_target(target, expr.line)
+                return self.read_from_target(self.environment.lookup(expr.node), expr.line)
             except KeyError:
-                # If there is a KeyError, then that means the target could not be found in the
-                # current scope. We need to search the hierarchy of environments to check if the
-                # target was defined in an outer scope.
-                symbol_found = False
-                index = len(self.environments) - 2
-                while not symbol_found and index >= 1:
-                    symtable = self.environments[index].symtable
-                    if expr.node in symtable:
-                        rtype = symtable[expr.node].type
-                        symbol_found = True
-                    index -= 1
-
-                # Now, add the symbol to the function environment class corresponding to where it
-                # was defined. Then use GetAttr to retrieve the Value associated with the symbol.
-                if symbol_found:
-                    self.func_infos[index].env_class.attributes[expr.node.name()] = rtype
-                    self.func_infos[index].env_members[expr.node] = symtable[expr.node]
-                    env = self.func_infos[-1].self_reg
-                    for i in range(index, len(self.func_infos) - 1):
-                        env = self.add(GetAttr(env, 'env', expr.line))
-
-                    # Create a target for this symbol and add it to the environment.
-                    target = AssignmentTargetAttr(env, expr.node.name())
-                    self.environment.add_target(expr.node, target)
-
+                # If there is a KeyError, then the target could not be found in the current scope.
+                # Search environment stack to see if the target was defined in an outer scope.
+                target = self.load_from_outer_scope(expr.node)
+                if target:
                     return self.read_from_target(target, expr.line)
-                    # TODO: Figure out how to cache the value into a register so that it doesn't
-                    # need to be loaded next time. Perhaps put it into the environment symbol
-                    # table?
 
                 assert False, 'expression {} not defined in current scope'.format(expr.name)
         else:
@@ -1611,6 +1578,36 @@ class IRBuilder(NodeVisitor[Value]):
 
     def box_expr(self, expr: Expression) -> Value:
         return self.box(self.accept(expr))
+
+    def load_from_outer_scope(self, symbol: SymbolNode) -> Optional[AssignmentTarget]:
+        """Searches for a SymbolNode in each of the environment's symtables.
+
+        Given a particular SymbolNode, traverses the environment stack starting with the topmost
+        environment, and searches for the AssignmentTarget associated with that SymbolNode in each
+        of the environment's symtables. If the SymbolNode and corresponding AssignmentTarget are
+        found, load the AssignmentTarget into a local register, and add them to the current
+        environment's symtable so that they can be quickly looked up the next time the SymbolNode
+        is requested.
+
+        Returns the AssignmentTarget associated with the SymbolNode, or None if it cannot be found.
+        """
+        symbol_found = False
+        index = len(self.environments) - 2
+        while not symbol_found and index >= 1:
+            symbol_found = symbol in self.environments[index].symtable
+            index -= 1
+
+        if symbol_found:
+            # Traverse through the environment classes and call GetAttr until the environment that
+            # contains the symbol is reached.
+            env = self.func_infos[-1].self_reg
+            for i in range(index, len(self.func_infos) - 1):
+                env = self.add(GetAttr(env, 'env', symbol.line))
+            # Add the symbol and corresponding target to the current environment so that GetAttr
+            # does not have to be repeatedly called every time the symbol is accessed.
+            target = AssignmentTargetAttr(env, symbol.name())
+            return self.environment.add_target(symbol, target)
+        return None
 
     def gen_func_ns(self) -> str:
         """Generates a namespace for a nested function using its outer function names."""

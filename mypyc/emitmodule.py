@@ -117,7 +117,6 @@ class ModuleGenerator:
         declarations = Emitter(self.context)
         declarations.emit_line('#include <Python.h>')
         declarations.emit_line('#include <CPy.h>')
-        declarations.emit_line('#include "structmember.h"')
         declarations.emit_line()
 
         for declaration in self.toposort_declarations():
