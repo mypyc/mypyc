@@ -303,3 +303,30 @@ a = Deriv1()
 assert a.x == 1
 b = Deriv2()
 assert b.y == 2
+
+[case testImportCycleWithNonCompiledModule]
+import m
+
+class C: pass
+
+def f1() -> int:
+    m.D()
+    return m.f2()
+
+def f3() -> int:
+    return 2
+
+[file m.py]
+# This module is NOT compiled
+import native
+
+class D: pass
+
+def f2() -> int:
+    native.C()
+    return native.f3()
+
+[file driver.py]
+from native import f1
+
+assert f1() == 2
