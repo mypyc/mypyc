@@ -339,3 +339,23 @@ L5:
 L6:
     r16 = no_err_occurred
     return s
+
+[case testMultipleAssignmentFromTuple]
+from typing import Tuple
+def f(t: Tuple[int, str]) -> None:
+    x, y = t
+[out]
+def f(t):
+    t :: tuple[int, str]
+    x :: int
+    y :: str
+    r0 :: int
+    r1 :: str
+    r2 :: None
+L0:
+    r0 = t[0]
+    x = r0
+    r1 = t[1]
+    y = r1
+    r2 = None
+    return r2

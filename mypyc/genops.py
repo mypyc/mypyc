@@ -303,6 +303,13 @@ class AssignmentTargetAttr(AssignmentTarget):
             self.type = object_rprimitive
 
 
+class AssignmentTargetTuple(AssignmentTarget):
+    """x, ..., y as assignment target"""
+
+    def __init__(self, items: List[AssignmentTarget]) -> None:
+        self.items = items
+
+
 class IRBuilder(NodeVisitor[Value]):
     def __init__(self,
                  types: Dict[Expression, Type],
@@ -582,6 +589,11 @@ class IRBuilder(NodeVisitor[Value]):
             # Attribute assignment x.y = e
             obj = self.accept(lvalue.expr)
             return AssignmentTargetAttr(obj, lvalue.name)
+        elif isinstance(lvalue, TupleExpr):
+            # Multiple assignment a, ..., b = e
+            lvalues = [self.get_assignment_target(item)
+                       for item in lvalue.items]
+            return AssignmentTargetTuple(lvalues)
 
         assert False, 'Unsupported lvalue: %r' % lvalue
 
@@ -608,18 +620,18 @@ class IRBuilder(NodeVisitor[Value]):
     def assign_to_target(self,
                          target: AssignmentTarget,
                          rvalue_reg: Value,
-                         line: int) -> Value:
+                         line: int) -> None:
         if isinstance(target, AssignmentTargetRegister):
             rvalue_reg = self.coerce(rvalue_reg, target.type, line)
-            return self.add(Assign(target.register, rvalue_reg))
+            self.add(Assign(target.register, rvalue_reg))
         elif isinstance(target, AssignmentTargetAttr):
             if isinstance(target.obj_type, RInstance):
                 rvalue_reg = self.coerce(rvalue_reg, target.type, line)
-                return self.add(SetAttr(target.obj, target.attr, rvalue_reg, line))
+                self.add(SetAttr(target.obj, target.attr, rvalue_reg, line))
             else:
                 key = self.load_static_unicode(target.attr)
                 boxed_reg = self.box(rvalue_reg)
-                return self.add(PrimitiveOp([target.obj, key, boxed_reg], py_setattr_op, line))
+                self.add(PrimitiveOp([target.obj, key, boxed_reg], py_setattr_op, line))
         elif isinstance(target, AssignmentTargetIndex):
             target_reg2 = self.translate_special_method_call(
                 target.base,
@@ -627,12 +639,16 @@ class IRBuilder(NodeVisitor[Value]):
                 [target.index, rvalue_reg],
                 None,
                 line)
-            if target_reg2 is not None:
-                return target_reg2
-
-            assert False, target.base.type
-
-        assert False, 'Unsupported assignment target'
+            assert target_reg2 is not None, target.base.type
+        elif isinstance(target, AssignmentTargetTuple):
+            if isinstance(rvalue_reg.type, RTuple):
+                rtypes = rvalue_reg.type.types
+                assert len(rtypes) == len(target.items)
+                for i in range(len(rtypes)):
+                    item_value = self.add(TupleGet(rvalue_reg, i, line))
+                    self.assign_to_target(target.items[i], item_value, line)
+        else:
+            assert False, 'Unsupported assignment target'
 
     def assign(self,
                lvalue: Lvalue,
