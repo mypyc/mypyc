@@ -234,6 +234,24 @@ def prepare_class_def(cdef: ClassDef, mapper: Mapper) -> None:
     ir.mro = mro
 
 
+class FuncInfo(object):
+    def __init__(self,
+                 env_class: Optional[ClassIR] = None,
+                 env_class_val: Optional[Value] = None,
+                 env_members: Optional[Dict[SymbolNode, AssignmentTarget]] = {},
+                 self_reg: Optional[Value] = None,
+                 ret_type: Optional[RType] = none_rprimitive,
+                 is_nested: bool = False,
+                 contains_nested: bool = False) -> None:
+        self.env_class = env_class
+        self.env_class_val = env_class_val
+        self.env_members = env_members
+        self.self_reg = self_reg
+        self.ret_type = ret_type
+        self.is_nested = is_nested
+        self.contains_nested = contains_nested
+
+
 class IRBuilder(NodeVisitor[Value]):
     def __init__(self,
                  types: Dict[Expression, Type],
@@ -251,6 +269,8 @@ class IRBuilder(NodeVisitor[Value]):
         self.functions = []  # type: List[FuncIR]
         self.classes = []  # type: List[ClassIR]
         self.modules = set(modules)
+
+        self.func_infos = []  # type: List[FuncInfo]
 
         # These lists operate as stack frames for loops. Each loop adds a new
         # frame (i.e. adds a new empty list [] to the outermost list). Each
@@ -400,12 +420,18 @@ class IRBuilder(NodeVisitor[Value]):
                      class_name: Optional[str] = None) -> FuncIR:
 
         print('visiting function: {}'.format(fdef.name()))
+        func_info = FuncInfo()
+        self.func_infos.append(func_info)
 
         # If there is more than one environment in the environment stack, then we are visiting a
         # non-global function.
         is_nested = len(self.environments) > 1
         # If any of the blocks is another FuncDef, then this contains a nested function.
         contains_nested = any(isinstance(block, FuncDef) for block in fdef.body.body)
+
+        func_info.is_nested = is_nested
+        func_info.contains_nested = contains_nested
+
         namespace = self.gen_func_ns()
 
         # print('{} is nested function: {}'.format(fdef.name(), is_nested))
@@ -430,6 +456,7 @@ class IRBuilder(NodeVisitor[Value]):
                                                          RInstance(callable_class),
                                                          is_arg=True)
             self.selfs.append(self.read_from_target(self_target, fdef.line))
+
         for arg in fdef.arguments:
             assert arg.variable.type, "Function argument missing type"
             self.environment.add_local_reg(arg.variable, self.type_to_rtype(arg.variable.type),
@@ -448,7 +475,13 @@ class IRBuilder(NodeVisitor[Value]):
                 env_class = self.gen_env_class(fdef, namespace, Environment())
             env_members = self.env_members[-1]
 
-            self.instantiate_env_class(env_class, sig, fdef.line)
+            env_class_target = self.instantiate_env_class(env_class, sig, fdef.line)
+
+            for arg in fdef.arguments:
+                env_class.attributes[arg.variable.name()] = self.type_to_rtype(arg.variable.type)
+                target = AssignmentTargetAttr(env_class_target, arg.variable.name())
+                self.add(SetAttr(env_class_target, arg.variable.name(), self.read_from_target(self.environment.lookup(arg.variable), fdef.line), fdef.line))
+                self.environment.add_target(arg.variable, target)
 
         self.ret_types[-1] = sig.ret_type
 
@@ -463,19 +496,12 @@ class IRBuilder(NodeVisitor[Value]):
         blocks, env, ret_type = self.leave()
 
         if contains_nested:
-            self.add_init_to_env_class(env_class, env_members, sig, fdef.line)
+            # self.add_init_to_env_class(env_class, env_members, sig, fdef.line)
             compute_vtable(env_class)
 
         if is_nested:
             self.selfs.pop()
 
-            # Populate the callable class representing the function. Instantiate it and load it
-            # into a register in the current environment immediately so that it does not have to be
-            # loaded every time the function is called.
-            # callable_class, init_fn = self.add_init_to_callable_class(callable_class,
-            #                                                           prev_env_class,
-            #                                                           sig,
-            #                                                           fdef.line)
             callable_class, func = self.add_call_to_callable_class(callable_class, blocks, sig,
                                                                    env, fdef.line)
             callable_class_target = self.instantiate_callable_class(fdef, callable_class)
@@ -491,6 +517,8 @@ class IRBuilder(NodeVisitor[Value]):
             self.env_classes.pop()
             self.env_members.pop()
             self.env_class_targets.pop()
+
+        self.func_infos.pop()
 
         return func
 
@@ -529,6 +557,11 @@ class IRBuilder(NodeVisitor[Value]):
 
     def visit_assignment_stmt(self, stmt: AssignmentStmt) -> Value:
         assert len(stmt.lvalues) == 1
+
+        print('assigning {} to {}'.format(stmt.rvalue, stmt.lvalues[0]))
+        for symbol, target in self.environment.symtable.items():
+            print('{} -> {}'.format(symbol, target))
+
         if isinstance(stmt.rvalue, CallExpr) and isinstance(stmt.rvalue.analyzed, TypeVarExpr):
             # Just ignore type variable declarations -- they are a compile-time only thing.
             # TODO: It would be nice to actually construct TypeVar objects to match Python
@@ -557,12 +590,23 @@ class IRBuilder(NodeVisitor[Value]):
             # Assign to local variable.
             assert lvalue.kind == LDEF
             assert isinstance(lvalue.node, Var)  # TODO: Can this fail?
-            if lvalue.node not in self.environment.symtable:
-                # Define a new variable.
-                return self.environment.add_local_reg(lvalue.node, self.node_type(lvalue))
+            if self.func_infos[-1].contains_nested:
+                if lvalue.node not in self.env_members[-1]:
+                    env_class_target = self.env_class_targets[-1]
+                    env_class = self.env_classes[-1]
+
+                    env_class.attributes[lvalue.node.name()] = self.node_type(lvalue)
+                    target = AssignmentTargetAttr(env_class_target, lvalue.node.name())
+                    return self.environment.add_target(lvalue.node, target)
+                else:
+                    return self.environment.lookup(lvalue.node)
             else:
-                # Assign to a previously defined variable.
-                return self.environment.lookup(lvalue.node)
+                if lvalue.node not in self.environment.symtable:
+                    # Define a new variable.
+                    return self.environment.add_local_reg(lvalue.node, self.node_type(lvalue))
+                else:
+                    # Assign to a previously defined variable.
+                    return self.environment.lookup(lvalue.node)
         elif isinstance(lvalue, IndexExpr):
             # Indexed assignment x[y] = e
             base = self.accept(lvalue.base)
@@ -984,7 +1028,6 @@ class IRBuilder(NodeVisitor[Value]):
                     # Create a target for this symbol and add it to the environment.
                     target = AssignmentTargetAttr(env, expr.node.name())
                     self.environment.add_target(expr.node, target)
-                    # self.env_members[index][expr.node] = self.environment.lookup(expr.node)
 
                     return self.read_from_target(target, expr.line)
 
@@ -1601,37 +1644,6 @@ class IRBuilder(NodeVisitor[Value]):
         self.classes.append(ir)
         return ir
 
-    def add_init_to_callable_class(self,
-                                   callable_class: ClassIR,
-                                   env_class: ClassIR,
-                                   sig: FuncSignature,
-                                   line: int) -> Tuple[ClassIR, FuncIR]:
-        """Adds the '__init__' function to a callable class representing a nested function.
-
-        This takes a callable class and sets its '__init__' method to instantiate its 'env'
-        attribute to refer to an environment class, where relevant free variables are stored.
-
-        Returns the callable class ClassIR and the newly constructed '__init__' FuncIR.
-        """
-        self.enter()
-        self_target = self.environment.add_local_reg(Var('self'),
-                                                     RInstance(callable_class),
-                                                     is_arg=True)
-
-        env_class_target = self.instantiate_env_class(env_class, sig, line)
-        self.add(SetAttr(self.read_from_target(self_target, line),
-                         'env',
-                         env_class_target,
-                         line))
-        self.add_implicit_return()
-        blocks, env, ret_type = self.leave()
-        sig = FuncSignature((RuntimeArg('self', object_rprimitive),), none_rprimitive)
-        init_fn = FuncIR('__init__', callable_class.name, self.module_name, sig, blocks, env)
-        callable_class.methods['__init__'] = init_fn
-
-        self.functions.append(init_fn)
-        return callable_class, init_fn
-
     def add_call_to_callable_class(self,
                                    callable_class: ClassIR,
                                    blocks: List[BasicBlock],
@@ -1655,7 +1667,7 @@ class IRBuilder(NodeVisitor[Value]):
     def instantiate_env_class(self, cir: ClassIR, sig: FuncSignature, line: int) -> Value:
         """Assigns an environment class to a register named after the given function definition."""
         fullname = '{}.{}'.format(self.module_name, cir.name)
-        value = self.add(Call(RInstance(cir), fullname, sig.args, line))
+        value = self.add(Call(RInstance(cir), fullname, [], line))
         self.env_class_targets.append(value)
         return value
 

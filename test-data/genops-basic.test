@@ -1116,12 +1116,6 @@ def b() -> int:
     def inner() -> int:
         return num
     return inner()
-
-def c(num: int) -> int:
-    def inner() -> None:
-        num = 1000
-    inner()
-    return num
     
 [out]
 def inner_a_obj.__call__(self):
@@ -1132,30 +1126,23 @@ L0:
     r0 = self.env
     r1 = r0.num
     return r1
-def a__env.__init__(self, num):
-    self :: a__env
-    num :: int
-    r0 :: bool
-    r1 :: None
-L0:
-    self.num = num; r0 = is_error
-    r1 = None
-    return r1
 def a(num):
     num :: int
     r0 :: a__env
-    r1, inner :: inner_a_obj
-    r2 :: bool
-    r3 :: object
-    r4 :: int
+    r1 :: bool
+    r2, inner :: inner_a_obj
+    r3 :: bool
+    r4 :: object
+    r5 :: int
 L0:
-    r0 = a__env(num)
-    r1 = inner_a_obj()
-    inner = r1
-    inner.env = r0; r2 = is_error
-    r3 = inner() :: object
-    r4 = unbox(int, r3)
-    return r4
+    r0 = a__env()
+    r0.num = num; r1 = is_error
+    r2 = inner_a_obj()
+    inner = r2
+    inner.env = r0; r3 = is_error
+    r4 = inner() :: object
+    r5 = unbox(int, r4)
+    return r5
 def inner_b_obj.__call__(self):
     self :: inner_b_obj
     r0 :: b__env
@@ -1164,59 +1151,21 @@ L0:
     r0 = self.env
     r1 = r0.num
     return r1
-def b__env.__init__(self):
-    self :: b__env
-    num :: int
-    r0 :: bool
-    r1 :: None
-L0:
-    self.num = num; r0 = is_error
-    r1 = None
-    return r1
 def b():
     r0 :: b__env
-    num, r1 :: int
-    r2, inner :: inner_b_obj
-    r3 :: bool
-    r4 :: object
-    r5 :: int
+    r1 :: int
+    r2 :: bool
+    r3, inner :: inner_b_obj
+    r4 :: bool
+    r5 :: object
+    r6 :: int
 L0:
     r0 = b__env()
     r1 = 3
-    num = r1
-    r2 = inner_b_obj()
-    inner = r2
-    inner.env = r0; r3 = is_error
-    r4 = inner() :: object
-    r5 = unbox(int, r4)
-    return r5
-def inner_c_obj.__call__(self):
-    self :: inner_c_obj
-    num, r0 :: int
-    r1 :: None
-L0:
-    r0 = 1000
-    num = r0
-    r1 = None
-    return r1
-def c__env.__init__(self, num):
-    self :: c__env
-    r0 :: None
-L0:
-    r0 = None
-    return r0
-def c(num):
-    num :: int
-    r0 :: c__env
-    r1, inner :: inner_c_obj
-    r2 :: bool
-    r3 :: object
-    r4 :: None
-L0:
-    r0 = c__env(num)
-    r1 = inner_c_obj()
-    inner = r1
-    inner.env = r0; r2 = is_error
-    r3 = inner() :: object
-    r4 = cast(None, r3)
-    return num
+    r0.num = r1; r2 = is_error
+    r3 = inner_b_obj()
+    inner = r3
+    inner.env = r0; r4 = is_error
+    r5 = inner() :: object
+    r6 = unbox(int, r5)
+    return r6

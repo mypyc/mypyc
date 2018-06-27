@@ -933,16 +933,18 @@ def a(num: int) -> int:
         return num
     return inner()
 
-# def b() -> int:
-#     num = 3
-#     def inner() -> int:
-#         return num
-#     return inner()
+def b() -> int:
+    num = 3
+    def inner() -> int:
+        return num
+    return inner()
 
 [file driver.py]
-from native import a#, b
+from native import a
+from native import b
 print(a(3))
-# print(b())
+print(b())
 
 [out]
+3
 3
