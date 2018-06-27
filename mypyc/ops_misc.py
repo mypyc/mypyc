@@ -95,21 +95,11 @@ binary_op(op='**',
           emit=simple_emit('{dest} = PyNumber_Power({args[0]}, {args[1]}, Py_None);'),
           priority=0)
 
-
-def emit_in(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-    temp = emitter.temp_name()
-    emitter.emit_lines('int %s = PySequence_Contains(%s, %s);' % (temp, args[1], args[0]),
-                       'if (%s < 0)' % temp,
-                       '    %s = %s;' % (dest, bool_rprimitive.c_error_value()),
-                       'else',
-                       '    %s = %s;' % (dest, temp))
-
-
 binary_op('in',
           arg_types=[object_rprimitive, object_rprimitive],
           result_type=bool_rprimitive,
           error_kind=ERR_MAGIC,
-          emit=emit_in,
+          emit=negative_int_emit('{dest} = PySequence_Contains({args[1]}, {args[0]});'),
           priority=0)
 
 for op, funcname in [('-', 'PyNumber_Negative'),
@@ -178,7 +168,7 @@ func_op('builtins.isinstance',
         arg_types=[object_rprimitive, object_rprimitive],
         result_type=bool_rprimitive,
         error_kind=ERR_MAGIC,
-        emit=emit_isinstance)
+        emit=negative_int_emit('{dest} = PyObject_IsInstance({args[0]}, {args[1]});'))
 
 # Faster isinstance() that only works with native classes and doesn't perform type checking
 # of the type argument.
