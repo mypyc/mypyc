@@ -340,12 +340,16 @@ L6:
     r16 = no_err_occurred
     return s
 
-[case testMultipleAssignmentFromTuple]
-from typing import Tuple
-def f(t: Tuple[int, str]) -> None:
+[case testMultipleAssignment]
+from typing import Tuple, Any
+
+def from_tuple(t: Tuple[int, str]) -> None:
     x, y = t
+
+def from_any(a: Any) -> None:
+    x, y = a
 [out]
-def f(t):
+def from_tuple(t):
     t :: tuple[int, str]
     x :: int
     y :: str
@@ -359,3 +363,35 @@ L0:
     y = r1
     r2 = None
     return r2
+def from_any(a):
+    a, x, y, r0, r1 :: object
+    r2 :: bool
+    r3 :: object
+    r4 :: bool
+    r5 :: object
+    r6 :: bool
+    r7 :: None
+L0:
+    r0 = iter a :: object
+    r1 = next r0 :: object
+    if is_error(r1) goto L1 else goto L2
+L1:
+    raise ValueError('not enough values to unpack')
+    unreachable
+L2:
+    x = r1
+    r3 = next r0 :: object
+    if is_error(r3) goto L3 else goto L4
+L3:
+    raise ValueError('not enough values to unpack')
+    unreachable
+L4:
+    y = r3
+    r5 = next r0 :: object
+    if is_error(r5) goto L6 else goto L5
+L5:
+    raise ValueError('too many values to unpack')
+    unreachable
+L6:
+    r7 = None
+    return r7

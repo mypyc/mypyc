@@ -48,7 +48,7 @@ from mypyc.ops import (
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp,
     ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap, FuncSignature,
-    VTableAttr, VTableMethod, NAMESPACE_TYPE,
+    VTableAttr, VTableMethod, NAMESPACE_TYPE, RaiseStandardError,
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import list_len_op, list_get_item_op, list_set_item_op, new_list_op
@@ -647,8 +647,38 @@ class IRBuilder(NodeVisitor[Value]):
                 for i in range(len(rtypes)):
                     item_value = self.add(TupleGet(rvalue_reg, i, line))
                     self.assign_to_target(target.items[i], item_value, line)
+            else:
+                self.process_iterator_tuple_assignment(target, rvalue_reg, line)
         else:
             assert False, 'Unsupported assignment target'
+
+    def process_iterator_tuple_assignment(self,
+                                          target: AssignmentTargetTuple,
+                                          rvalue_reg: Value,
+                                          line: int) -> None:
+        iterator = self.primitive_op(iter_op, [rvalue_reg], line)
+        for litem in target.items:
+            ritem = self.primitive_op(next_op, [iterator], line)
+            branch = Branch(ritem, INVALID_LABEL, INVALID_LABEL, Branch.IS_ERROR)
+            self.add(branch)
+            error_block = self.new_block()
+            self.set_branches([branch], True, error_block)
+            self.add(RaiseStandardError(RaiseStandardError.VALUE_ERROR,
+                                        'not enough values to unpack', line))
+            self.add(Unreachable())
+            ok_block = self.new_block()
+            self.set_branches([branch], False, ok_block)
+            self.assign_to_target(litem, ritem, line)
+        extra = self.primitive_op(next_op, [iterator], line)
+        branch = Branch(extra, INVALID_LABEL, INVALID_LABEL, Branch.IS_ERROR)
+        self.add(branch)
+        error_block = self.new_block()
+        self.set_branches([branch], False, error_block)
+        self.add(RaiseStandardError(RaiseStandardError.VALUE_ERROR,
+                                    'too many values to unpack', line))
+        self.add(Unreachable())
+        ok_block = self.new_block()
+        self.set_branches([branch], True, ok_block)
 
     def assign(self,
                lvalue: Lvalue,
