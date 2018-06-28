@@ -308,6 +308,8 @@ class AssignmentTargetTuple(AssignmentTarget):
 
     def __init__(self, items: List[AssignmentTarget]) -> None:
         self.items = items
+        # The shouldn't be relevant, but provide it just in case.
+        self.type = object_rprimitive
 
 
 class IRBuilder(NodeVisitor[Value]):
