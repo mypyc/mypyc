@@ -143,16 +143,13 @@ py_setattr_op = func_op(
 )
 
 
-def emit_pycall(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-    emitter.emit_line('{} = PyObject_CallFunctionObjArgs({}, NULL);'.format(dest, ", ".join(args)))
-
-
-pycall_op = custom_op(arg_types=[object_rprimitive],
-                      result_type=object_rprimitive,
-                      is_var_arg=True,
-                      error_kind=ERR_MAGIC,
-                      format_str = '{dest} = pycall({comma_args})',
-                      emit=emit_pycall)
+pycall_op = custom_op(
+    arg_types=[object_rprimitive],
+    result_type=object_rprimitive,
+    is_var_arg=True,
+    error_kind=ERR_MAGIC,
+    format_str = '{dest} = pycall({comma_args})',
+    emit=simple_emit('{dest} = PyObject_CallFunctionObjArgs({comma_args}, NULL);'))
 
 
 func_op('builtins.isinstance',
