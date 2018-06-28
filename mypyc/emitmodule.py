@@ -165,8 +165,10 @@ class ModuleGenerator:
         emitter.emit_lines(declaration.format(module_name),
                            '{')
         module_static = self.module_static_name(module_name, emitter)
-        emitter.emit_lines('if ({} != NULL)'.format(module_static),
-                           '    return {};'.format(module_static))
+        emitter.emit_lines('if ({} != NULL) {{'.format(module_static),
+                           'Py_INCREF({});'.format(module_static),
+                           'return {};'.format(module_static),
+                           '}')
         for cl in module.classes:
             type_struct = emitter.type_struct_name(cl)
             if cl.traits:
