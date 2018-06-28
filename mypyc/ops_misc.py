@@ -155,15 +155,6 @@ pycall_op = custom_op(arg_types=[object_rprimitive],
                       emit=emit_pycall)
 
 
-def emit_isinstance(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-    temp = emitter.temp_name()
-    emitter.emit_lines('int %s = PyObject_IsInstance(%s, %s);' % (temp, args[0], args[1]),
-                       'if (%s < 0)' % temp,
-                       '    %s = %s;' % (dest, bool_rprimitive.c_error_value()),
-                       'else',
-                       '    %s = %s;' % (dest, temp))
-
-
 func_op('builtins.isinstance',
         arg_types=[object_rprimitive, object_rprimitive],
         result_type=bool_rprimitive,

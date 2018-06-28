@@ -13,7 +13,7 @@ can hold various things:
 from abc import abstractmethod, abstractproperty
 import re
 from typing import (
-    List, Sequence, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, NewType, Callable,
+    List, Sequence, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, Callable,
     Union, Iterable, Type,
 )
 from collections import OrderedDict
@@ -36,28 +36,14 @@ class RType:
     """Abstract base class for runtime types (erased, only concrete; no generics)."""
 
     name = None  # type: str
-    ctype = None  # type: str
     is_unboxed = False
     c_undefined = None  # type: str
     is_refcounted = True  # If unboxed: does the unboxed version use reference counting?
+    _ctype = None  # type: str  # C type; use Emitter.ctype() to access
 
     @abstractmethod
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         raise NotImplementedError
-
-    @abstractmethod
-    def c_undefined_value(self) -> str:
-        raise NotImplementedError
-
-    def ctype_spaced(self) -> str:
-        """Adds a space after ctype for non-pointers."""
-        if self.ctype[-1] == '*':
-            return self.ctype
-        else:
-            return self.ctype + ' '
-
-    def c_error_value(self) -> str:
-        return self.c_undefined_value()
 
     def short_name(self) -> str:
         return short_name(self.name)
@@ -85,9 +71,6 @@ class RVoid(RType):
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_rvoid(self)
 
-    def c_undefined_value(self) -> str:
-        return ''
-
 
 void_rtype = RVoid()
 
@@ -105,7 +88,7 @@ class RPrimitive(RType):
                  ctype: str = 'PyObject *') -> None:
         self.name = name
         self.is_unboxed = is_unboxed
-        self.ctype = ctype
+        self._ctype = ctype
         self.is_refcounted = is_refcounted
         if ctype == 'CPyTagged':
             self.c_undefined = 'CPY_INT_TAG'
@@ -115,9 +98,6 @@ class RPrimitive(RType):
             self.c_undefined = '2'
         else:
             assert False, 'Uncognized ctype: %r' % ctype
-
-    def c_undefined_value(self) -> str:
-        return self.c_undefined
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_rprimitive(self)
@@ -185,40 +165,19 @@ def is_tuple_rprimitive(rtype: RType) -> bool:
 
 
 class RTuple(RType):
-    """Fixed-length tuple."""
+    """Fixed-length unboxed tuple (represented as a C struct)."""
 
     is_unboxed = True
 
     def __init__(self, types: List[RType]) -> None:
         self.name = 'tuple'
         self.types = tuple(types)
-        self.ctype = 'struct {}'.format(self.struct_name())
+        # Emitter has logic for generating a C type for RTuple.
+        self._ctype = ''
         self.is_refcounted = any(t.is_refcounted for t in self.types)
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_rtuple(self)
-
-    def c_undefined_value(self) -> str:
-        # This doesn't work since this is expected to return a C expression, but
-        # defining an undefined tuple requires declaring a temp variable, such as:
-        #
-        #    struct foo _tmp = { <item0-undefined>, <item1-undefined>, ... };
-        assert False, "Tuple undefined value can't be represented as a C expression"
-
-    @property
-    def unique_id(self) -> str:
-        """Generate a unique id which is used in naming corresponding C identifiers.
-
-        This is necessary since C does not have anonymous structural type equivalence
-        in the same way python can just assign a Tuple[int, bool] to a Tuple[int, bool].
-
-        TODO: a better unique id. (#38)
-        """
-        return str(abs(hash(self)))[0:15]
-
-    def struct_name(self) -> str:
-        # max c length is 31 charas, this should be enough entropy to be unique.
-        return 'tuple_def_' + self.unique_id
 
     def __str__(self) -> str:
         return 'tuple[%s]' % ', '.join(str(typ) for typ in self.types)
@@ -232,17 +191,6 @@ class RTuple(RType):
     def __hash__(self) -> int:
         return hash((self.name, self.types))
 
-    def get_c_declaration(self) -> List[str]:
-        result = ['struct {} {{'.format(self.struct_name())]
-        i = 0
-        for typ in self.types:
-            result.append('    {}f{};'.format(typ.ctype_spaced(), i))
-            i += 1
-        result.append('};')
-        result.append('')
-
-        return result
-
 
 class RInstance(RType):
     """Instance of user-defined class (compiled to C extension class)."""
@@ -252,13 +200,10 @@ class RInstance(RType):
     def __init__(self, class_ir: 'ClassIR') -> None:
         self.name = class_ir.name
         self.class_ir = class_ir
-        self.ctype = 'PyObject *'
+        self._ctype = 'PyObject *'
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_rinstance(self)
-
-    def c_undefined_value(self) -> str:
-        return 'NULL'
 
     def struct_name(self, names: NameGenerator) -> str:
         return self.class_ir.struct_name(names)
@@ -287,13 +232,10 @@ class ROptional(RType):
     def __init__(self, value_type: RType) -> None:
         self.name = 'optional'
         self.value_type = value_type
-        self.ctype = 'PyObject *'
+        self._ctype = 'PyObject *'
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_roptional(self)
-
-    def c_undefined_value(self) -> str:
-        return 'NULL'
 
     def __repr__(self) -> str:
         return '<ROptional %s>' % self.value_type
@@ -746,6 +688,10 @@ class EmitterInterface:
         raise NotImplementedError
 
     @abstractmethod
+    def c_error_value(self, rtype: RType) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
     def temp_name(self) -> str:
         raise NotImplementedError
 
@@ -1094,6 +1040,38 @@ class Unbox(RegisterOp):
         return visitor.visit_unbox(self)
 
 
+class RaiseStandardError(RegisterOp):
+    """Raise built-in exception with an optional error string.
+
+    We have a separate opcode for this for convenience and to
+    generate smaller, more idiomatic C code.
+    """
+
+    # TODO: Make it more explicit at IR level that this always raises
+
+    error_kind = ERR_FALSE
+
+    VALUE_ERROR = 'ValueError'
+
+    def __init__(self, class_name: str, message: Optional[str], line: int) -> None:
+        super().__init__(line)
+        self.class_name = class_name
+        self.message = message
+        self.type = bool_rprimitive
+
+    def to_str(self, env: Environment) -> str:
+        if self.message is not None:
+            return 'raise %s(%r)' % (self.class_name, self.message)
+        else:
+            return 'raise %s' % self.class_name
+
+    def sources(self) -> List[Value]:
+        return []
+
+    def accept(self, visitor: 'OpVisitor[T]') -> T:
+        return visitor.visit_raise_standard_error(self)
+
+
 class RuntimeArg:
     def __init__(self, name: str, typ: RType) -> None:
         self.name = name
@@ -1320,6 +1298,10 @@ class OpVisitor(Generic[T]):
 
     @abstractmethod
     def visit_unbox(self, op: Unbox) -> T:
+        raise NotImplementedError
+
+    @abstractmethod
+    def visit_raise_standard_error(self, op: RaiseStandardError) -> T:
         raise NotImplementedError
 
 
