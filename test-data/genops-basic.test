@@ -506,7 +506,7 @@ L0:
     r1 = unicode_0 :: static  ('factorial')
     r2 = getattr r0, r1
     r3 = box(int, x)
-    r4 = pycall(r2, r3)
+    r4 = py_call(r2, r3)
     r5 = unbox(int, r4)
     return r5
 
@@ -530,7 +530,7 @@ L0:
     r1 = unicode_0 :: static  ('g')
     r2 = r0[r1] :: dict
     r3 = box(int, x)
-    r4 = pycall(r2, r3)
+    r4 = py_call(r2, r3)
     r5 = unbox(int, r4)
     return r5
 
@@ -553,7 +553,7 @@ L0:
     r2 = getattr r0, r1
     r3 = 5
     r4 = box(int, r3)
-    r5 = pycall(r2, r4)
+    r5 = py_call(r2, r4)
     r6 = cast(None, r5)
     r7 = None
     return r7
@@ -575,7 +575,7 @@ L0:
     r2 = unicode_0 :: static  ('print')
     r3 = getattr r1, r2
     r4 = box(int, r0)
-    r5 = pycall(r3, r4)
+    r5 = py_call(r3, r4)
     r6 = cast(None, r5)
     r7 = None
     return r7
@@ -603,22 +603,20 @@ def f(x):
     x :: list
     y :: int
     r0 :: str
-    r1, r2 :: object
-    r3 :: int
-    r4 :: str
-    r5, r6 :: object
-    r7 :: int
+    r1 :: object
+    r2 :: int
+    r3 :: str
+    r4 :: object
+    r5 :: int
 L0:
     r0 = unicode_0 :: static  ('pop')
-    r1 = getattr x, r0
-    r2 = pycall(r1)
-    r3 = unbox(int, r2)
-    y = r3
-    r4 = unicode_0 :: static  ('pop')
-    r5 = getattr x, r4
-    r6 = pycall(r5)
-    r7 = unbox(int, r6)
-    return r7
+    r1 = py_method_call(x, r0)
+    r2 = unbox(int, r1)
+    y = r2
+    r3 = unicode_0 :: static  ('pop')
+    r4 = py_method_call(x, r3)
+    r5 = unbox(int, r4)
+    return r5
 
 [case testObjectType]
 def g(y: object) -> None:
@@ -949,7 +947,7 @@ L0:
     r1 = unicode_0 :: static  ('int')
     r2 = getattr r0, r1
     r3 = box(int, x)
-    r4 = pycall(r2, r3)
+    r4 = py_call(r2, r3)
     r5 = unbox(int, r4)
     return r5
 def return_float():
@@ -972,7 +970,7 @@ def call_callable_type():
 L0:
     r0 = return_callable_type()
     f = r0
-    r1 = pycall(f)
+    r1 = py_call(f)
     r2 = cast(float, r1)
     return r2
 
@@ -1080,11 +1078,11 @@ L0:
     r0 = zwei_eins_obj()
     zwei = r0
     r1 = unicode_4 :: static  ('eins')
-    r2 = pycall(zwei, r1)
+    r2 = py_call(zwei, r1)
     r3 = cast(str, r2)
     a = r3
     r4 = unicode_5 :: static  ('zwei')
-    r5 = pycall(zwei, r4)
+    r5 = py_call(zwei, r4)
     r6 = cast(str, r5)
     b = r6
     return a

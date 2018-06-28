@@ -143,13 +143,22 @@ py_setattr_op = func_op(
 )
 
 
-pycall_op = custom_op(
+py_call_op = custom_op(
     arg_types=[object_rprimitive],
     result_type=object_rprimitive,
     is_var_arg=True,
     error_kind=ERR_MAGIC,
-    format_str = '{dest} = pycall({comma_args})',
+    format_str = '{dest} = py_call({comma_args})',
     emit=simple_emit('{dest} = PyObject_CallFunctionObjArgs({comma_args}, NULL);'))
+
+
+py_method_call_op = custom_op(
+    arg_types=[object_rprimitive],
+    result_type=object_rprimitive,
+    is_var_arg=True,
+    error_kind=ERR_MAGIC,
+    format_str = '{dest} = py_method_call({comma_args})',
+    emit=simple_emit('{dest} = PyObject_CallMethodObjArgs({comma_args}, NULL);'))
 
 
 func_op('builtins.isinstance',
