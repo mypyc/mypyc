@@ -952,6 +952,7 @@ assert first() == 'first: normal function'
 assert second() == 'second: normal function'
 
 [case testFreeVars]
+from typing import Callable
 def a(num: int) -> int:
     def inner() -> int:
         return num
@@ -977,7 +978,6 @@ def d() -> int:
     def inner() -> int:
         nonlocal num
         num = 5
-        foo = 6
         return num
     return inner() + num
 
@@ -985,18 +985,37 @@ def e() -> int:
     num = 3
     def inner() -> int:
         num = 5
-        foo = 6
         return num
     return inner() + num
 
+def f() -> Callable[[], int]:
+    num = 1
+    def inner() -> int:
+        num += 1
+        return num
+    num += 1
+    return inner
+
+def g() -> int:
+    x = 1
+    def add_one() -> None:
+        x += 1
+    def add_two() -> None:
+        x += 2
+    add_one()
+    add_two()
+    return x
+
 [file driver.py]
-from native import a, b, c, d, e
+from native import a, b, c, d, e, f, g
 
 assert a(3) == 3
 assert b() == 3
 assert c(3) == 8
 assert d() == 10
 assert e() == 8
+assert f()() == 3
+assert g() == 4
 
 [case testNestedFunctionInsideIf]
 def f(flag: int) -> str:
