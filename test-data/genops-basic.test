@@ -1024,7 +1024,7 @@ L0:
     r0 = outer__env()
     r1 = inner_outer_obj()
     inner = r1
-    inner.env = r0; r2 = is_error
+    inner.__mypyc_env__ = r0; r2 = is_error
     return inner
 def third_first_second_obj.__call__(self):
     self :: third_first_second_obj
@@ -1041,7 +1041,7 @@ L0:
     r0 = second_first_env()
     r1 = third_first_second_obj()
     third = r1
-    third.env = r0; r2 = is_error
+    third.__mypyc_env__ = r0; r2 = is_error
     return third
 def first():
     r0 :: first__env
@@ -1051,7 +1051,7 @@ L0:
     r0 = first__env()
     r1 = second_first_obj()
     second = r1
-    second.env = r0; r2 = is_error
+    second.__mypyc_env__ = r0; r2 = is_error
     return second
 def dos_uno_obj.__call__(self, s):
     self :: dos_uno_obj
@@ -1071,7 +1071,7 @@ L0:
     r0.num = num; r1 = is_error
     r2 = dos_uno_obj()
     dos = r2
-    dos.env = r0; r3 = is_error
+    dos.__mypyc_env__ = r0; r3 = is_error
     return dos
 def zwei_eins_obj.__call__(self, s):
     self :: zwei_eins_obj
@@ -1100,7 +1100,7 @@ L0:
     r0.num = num; r1 = is_error
     r2 = zwei_eins_obj()
     zwei = r2
-    zwei.env = r0; r3 = is_error
+    zwei.__mypyc_env__ = r0; r3 = is_error
     r4 = unicode_3 :: static  ('eins')
     r5 = zwei(r4) :: object
     r6 = cast(str, r5)
@@ -1150,7 +1150,7 @@ def inner_a_obj.__call__(self):
     r0 :: a__env
     r1 :: int
 L0:
-    r0 = self.env
+    r0 = self.__mypyc_env__
     r1 = r0.num
     return r1
 def a(num):
@@ -1166,7 +1166,7 @@ L0:
     r0.num = num; r1 = is_error
     r2 = inner_a_obj()
     inner = r2
-    inner.env = r0; r3 = is_error
+    inner.__mypyc_env__ = r0; r3 = is_error
     r4 = inner() :: object
     r5 = unbox(int, r4)
     return r5
@@ -1177,7 +1177,7 @@ def inner_b_obj.__call__(self):
     r2 :: bool
     foo, r3, r4 :: int
 L0:
-    r0 = self.env
+    r0 = self.__mypyc_env__
     r1 = 4
     r0.num = r1; r2 = is_error
     r3 = 6
@@ -1198,7 +1198,7 @@ L0:
     r0.num = r1; r2 = is_error
     r3 = inner_b_obj()
     inner = r3
-    inner.env = r0; r4 = is_error
+    inner.__mypyc_env__ = r0; r4 = is_error
     r5 = inner() :: object
     r6 = unbox(int, r5)
     r7 = r0.num

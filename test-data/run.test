@@ -967,15 +967,24 @@ def e() -> int:
 
 [file driver.py]
 from native import a, b, c, d, e
-print(a(3))
-print(b())
-print(c(3))
-print(d())
-print(e())
+assert a(3) == 3
+assert b() == 3
+assert c(3) == 8
+assert d() == 10
+assert e() == 8
 
-[out]
-3
-3
-8
-10
-8
+[case testNestedFunctionsInsideClass]
+class A:
+    def __init__(self, x: int) -> None:
+        self.x = x
+
+    def outer(self, num: int) -> int:
+        y = 5
+        def inner() -> int:
+            return self.x + y + num
+        return inner()
+
+[file driver.py]
+from native import A
+
+assert A(3).outer(4) == 12

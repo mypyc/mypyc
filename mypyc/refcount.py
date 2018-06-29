@@ -180,10 +180,6 @@ def after_branch_decrefs(label: BasicBlock,
     target_pre_live = pre_live[label, 0]
     decref = source_live_regs - target_pre_live - source_borrowed
     if decref:
-        for i, d in enumerate(decref):
-            if isinstance(d, AssignmentTargetRegister):
-                decref[i] = d.register
-
         return [DecRef(reg)
                 for reg in sorted(decref, key=lambda r: env.indexes[r])
                 if reg.type.is_refcounted and reg not in omitted]

@@ -55,7 +55,7 @@ class Emitter:
         return 'CPyL%s' % label.label
 
     def reg(self, reg: Value) -> str:
-        return REG_PREFIX + self.read(reg)
+        return REG_PREFIX + reg.name
 
     def emit_line(self, line: str = '') -> None:
         if line.startswith('}'):
@@ -99,11 +99,6 @@ class Emitter:
 
     def type_struct_name(self, cl: ClassIR) -> str:
         return self.static_name(cl.name, cl.module_name, prefix=TYPE_PREFIX)
-
-    def read(self, value: Any) -> str:
-        if isinstance(value, AssignmentTarget):
-            return value.to_str(self.env)
-        return value.name
 
     # Higher-level operations
 
