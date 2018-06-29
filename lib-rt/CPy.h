@@ -428,9 +428,8 @@ static PyObject *CPyList_GetItem(PyObject *list, CPyTagged index) {
                 return NULL;
             }
         }
-        PyObject *result = PyList_GET_ITEM(list, n);
-        Py_INCREF(result);
-        return result;
+        /* N.B Returns borrowed value */
+        return PyList_GET_ITEM(list, n);
     } else {
         PyErr_SetString(PyExc_IndexError, "list index out of range");
         return NULL;
@@ -478,9 +477,8 @@ static PyObject *CPySequenceTuple_GetItem(PyObject *tuple, CPyTagged index) {
                 return NULL;
             }
         }
-        PyObject *result = PyTuple_GET_ITEM(tuple, n);
-        Py_INCREF(result);
-        return result;
+        /* N.B Returns borrowed value */
+        return PyTuple_GET_ITEM(tuple, n);
     } else {
         PyErr_SetString(PyExc_IndexError, "tuple index out of range");
         return NULL;

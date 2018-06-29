@@ -69,9 +69,7 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
 
     def test_load_None(self) -> None:
         self.assert_emit(PrimitiveOp([], none_op, 0),
-                         """cpy_r_r0 = Py_None;
-                            Py_INCREF(cpy_r_r0);
-                         """)
+                         """cpy_r_r0 = Py_None;""")
 
     def test_load_True(self) -> None:
         self.assert_emit(PrimitiveOp([], true_op, 0), "cpy_r_r0 = 1;")
@@ -204,8 +202,6 @@ class TestFunctionEmitterVisitor(unittest.TestCase):
                          """cpy_r_r0 = PyDict_GetItemWithError(cpy_r_d, cpy_r_o2);
                             if (!cpy_r_r0)
                                 PyErr_SetObject(PyExc_KeyError, cpy_r_o2);
-                            else
-                                Py_INCREF(cpy_r_r0);
                          """)
 
     def test_dict_set_item(self) -> None:

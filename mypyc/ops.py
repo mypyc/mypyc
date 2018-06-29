@@ -711,14 +711,18 @@ class EmitterInterface:
 EmitCallback = Callable[[EmitterInterface, List[str], str], None]
 
 OpDescription = NamedTuple(
-    'OpDescription', [('name', str),
-                      ('arg_types', List[RType]),
-                      ('result_type', Optional[RType]),
-                      ('is_var_arg', bool),
-                      ('error_kind', int),
-                      ('format_str', str),
-                      ('emit', EmitCallback),
-                      ('priority', int)])  # To resolve ambiguities, highest priority wins
+    'OpDescription', [
+        ('name', str),
+        ('arg_types', List[RType]),
+        ('result_type', Optional[RType]),
+        ('is_var_arg', bool),
+        ('error_kind', int),
+        ('format_str', str),
+        ('emit', EmitCallback),
+        ('priority', int),  # To resolve ambiguities, highest priority wins
+        ('is_borrowed', bool),
+    ]
+)
 
 
 class PrimitiveOp(RegisterOp):
@@ -743,6 +747,7 @@ class PrimitiveOp(RegisterOp):
         super().__init__(line)
         self.args = args
         self.desc = desc
+        self.is_borrowed = desc.is_borrowed
         if desc.result_type is None:
             assert desc.error_kind == ERR_FALSE  # TODO: No-value ops not supported yet
             self.type = bool_rprimitive
@@ -763,7 +768,7 @@ class PrimitiveOp(RegisterOp):
         args = [env.format('%r', arg) for arg in self.args]
         params['args'] = args
         params['comma_args'] = ', '.join(args)
-        return self.desc.format_str.format(**params)
+        return self.desc.format_str.format(**params).strip()
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_primitive_op(self)

@@ -12,15 +12,11 @@ from mypyc.ops_primitive import (
 )
 
 
-def emit_none(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-    emitter.emit_lines('{} = Py_None;'.format(dest),
-                       'Py_INCREF({});'.format(dest))
-
-
 none_op = name_ref_op('builtins.None',
                       result_type=none_rprimitive,
                       error_kind=ERR_NEVER,
-                      emit=emit_none)
+                      is_borrowed=True,
+                      emit=simple_emit('{dest} = Py_None;'))
 
 true_op = name_ref_op('builtins.True',
                       result_type=bool_rprimitive,

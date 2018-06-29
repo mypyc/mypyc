@@ -59,12 +59,14 @@ def binary_op(op: str,
               error_kind: int,
               emit: EmitCallback,
               format_str: Optional[str] = None,
-              priority: int = 1) -> None:
+              priority: int = 1,
+              is_borrowed: bool = False) -> None:
     assert len(arg_types) == 2
     ops = binary_ops.setdefault(op, [])
     if format_str is None:
         format_str = '{dest} = {args[0]} %s {args[1]}' % op
-    desc = OpDescription(op, arg_types, result_type, False, error_kind, format_str, emit, priority)
+    desc = OpDescription(op, arg_types, result_type, False, error_kind, format_str, emit,
+                         priority, is_borrowed)
     ops.append(desc)
 
 
@@ -74,12 +76,13 @@ def unary_op(op: str,
              error_kind: int,
              emit: EmitCallback,
              format_str: Optional[str] = None,
-             priority: int = 1) -> OpDescription:
+             priority: int = 1,
+             is_borrowed: bool = False) -> OpDescription:
     ops = unary_ops.setdefault(op, [])
     if format_str is None:
         format_str = '{dest} = %s{args[0]}' % op
     desc = OpDescription(op, [arg_type], result_type, False, error_kind, format_str, emit,
-                         priority)
+                         priority, is_borrowed)
     ops.append(desc)
     return desc
 
@@ -90,7 +93,8 @@ def func_op(name: str,
             error_kind: int,
             emit: EmitCallback,
             format_str: Optional[str] = None,
-            priority: int = 1) -> OpDescription:
+            priority: int = 1,
+            is_borrowed: bool = False) -> OpDescription:
     ops = func_ops.setdefault(name, [])
     typename = ''
     if len(arg_types) == 1:
@@ -101,7 +105,7 @@ def func_op(name: str,
                                                      for i in range(len(arg_types))),
                                            typename)
     desc = OpDescription(name, arg_types, result_type, False, error_kind, format_str, emit,
-                         priority)
+                         priority, is_borrowed)
     ops.append(desc)
     return desc
 
@@ -111,7 +115,8 @@ def method_op(name: str,
               result_type: Optional[RType],
               error_kind: int,
               emit: EmitCallback,
-              priority: int = 1) -> OpDescription:
+              priority: int = 1,
+              is_borrowed: bool = False) -> OpDescription:
     """Define a primitive op that replaces a method call.
 
     Args:
@@ -129,7 +134,7 @@ def method_op(name: str,
     else:
         format_str = '{dest} = {args[0]}.%s(%s) :: %s' % (name, args, type_name)
     desc = OpDescription(name, arg_types, result_type, False, error_kind, format_str, emit,
-                         priority)
+                         priority, is_borrowed)
     ops.append(desc)
     return desc
 
@@ -137,7 +142,8 @@ def method_op(name: str,
 def name_ref_op(name: str,
                 result_type: RType,
                 error_kind: int,
-                emit: EmitCallback) -> OpDescription:
+                emit: EmitCallback,
+                is_borrowed: bool = False) -> OpDescription:
     """Define an op that is used to implement reading a module attribute.
 
     Args:
@@ -145,7 +151,8 @@ def name_ref_op(name: str,
     """
     assert name not in name_ref_ops, 'already defined: %s' % name
     format_str = '{dest} = %s' % short_name(name)
-    desc = OpDescription(name, [], result_type, False, error_kind, format_str, emit, 0)
+    desc = OpDescription(name, [], result_type, False, error_kind, format_str, emit,
+                         0, is_borrowed)
     name_ref_ops[name] = desc
     return desc
 
@@ -155,7 +162,8 @@ def custom_op(arg_types: List[RType],
               error_kind: int,
               format_str: str,
               emit: EmitCallback,
-              is_var_arg: bool = False) -> OpDescription:
+              is_var_arg: bool = False,
+              is_borrowed: bool = False) -> OpDescription:
     """Create a one-off op that can't be automatically generated from the AST."""
     return OpDescription('<custom>', arg_types, result_type, is_var_arg, error_kind, format_str,
-                         emit, 0)
+                         emit, 0, is_borrowed)
