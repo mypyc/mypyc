@@ -33,6 +33,7 @@ list_get_item_op = method_op(
     arg_types=[list_rprimitive, int_rprimitive],
     result_type=object_rprimitive,
     error_kind=ERR_MAGIC,
+    is_borrowed=True,
     emit=simple_emit('{dest} = CPyList_GetItem({args[0]}, {args[1]});'))
 
 

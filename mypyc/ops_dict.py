@@ -12,9 +12,7 @@ from mypyc.ops_primitive import method_op, binary_op, func_op, simple_emit, nega
 def emit_get_item(emitter: EmitterInterface, args: List[str], dest: str) -> None:
     emitter.emit_lines('%s = PyDict_GetItemWithError(%s, %s);' % (dest, args[0], args[1]),
                        'if (!%s)' % dest,
-                       '    PyErr_SetObject(PyExc_KeyError, %s);' % args[1],
-                       'else',
-                       '    Py_INCREF(%s);' % dest)
+                       '    PyErr_SetObject(PyExc_KeyError, %s);' % args[1])
 
 
 dict_get_item_op = method_op(

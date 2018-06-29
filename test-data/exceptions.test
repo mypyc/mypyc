@@ -14,7 +14,6 @@ L0:
     if is_error(r1) goto L3 (error at f:3) else goto L1
 L1:
     r2 = unbox(int, r1)
-    dec_ref r1
     if is_error(r2) goto L3 (error at f:3) else goto L2
 L2:
     return r2
@@ -44,6 +43,7 @@ L1:
     if not r4 goto L3 (error at f:4) else goto L2 :: bool
 L2:
     r5 = None
+    inc_ref r5
     return r5
 L3:
     r6 = <error> :: None
@@ -111,7 +111,6 @@ L2:
     if is_error(r3) goto L8 (error at sum:6) else goto L3
 L3:
     r4 = unbox(int, r3)
-    dec_ref r3
     if is_error(r4) goto L9 (error at sum:6) else goto L4
 L4:
     r5 = sum + r4 :: int
