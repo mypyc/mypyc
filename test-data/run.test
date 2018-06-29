@@ -922,6 +922,7 @@ def second() -> str:
 
 [file driver.py]
 from native import a, b, c, d, e, f, g, inner, first, second
+
 assert a()() == None
 assert b()()() == 'b.first.second: nested function'
 assert c(5.0)('c') == 'c!'
@@ -934,8 +935,6 @@ assert first() == 'first: normal function'
 assert second() == 'second: normal function'
 
 [case testFreeVars]
-from typing import Callable
-
 def a(num: int) -> int:
     def inner() -> int:
         return num
@@ -975,13 +974,58 @@ def e() -> int:
 
 [file driver.py]
 from native import a, b, c, d, e
+
 assert a(3) == 3
 assert b() == 3
 assert c(3) == 8
 assert d() == 10
 assert e() == 8
 
-[case testNestedFunctionsInsideClass]
+[case testNestedFunctionInsideIf]
+def f(flag: int) -> str:
+    if flag < 0:
+        def inner() -> str:
+            return 'f.inner: first definition'
+    elif flag > 0:
+        def inner() -> str:
+            return 'f.inner: second definition'
+    else:
+        def inner() -> str:
+            return 'f.inner: third definition'
+    return inner()
+
+[file driver.py]
+from native import f
+
+assert f(-1) == 'f.inner: first definition'
+assert f(1) == 'f.inner: second definition'
+assert f(0) == 'f.inner: third definition'
+
+[case testNestedFunctionInsideLoops]
+def f() -> int:
+    for i in range(5):
+        def inner(i: int) -> int:
+            return i
+        if i == 3:
+            return inner(i)
+    return 0
+
+def g() -> int:
+    i = 0
+    while i < 5:
+        def inner(i: int) -> int:
+            return i
+        if i == 3:
+            return inner(i)
+        i += 1
+    return 0
+
+[file driver.py]
+from native import f, g
+assert f() == 3
+assert g() == 3
+
+[case testNestedFunctionInsideClass]
 class A:
     def __init__(self, x: int) -> None:
         self.x = x

@@ -13,17 +13,18 @@ It would be translated to something that conceptually looks like this:
    r3 = r2 + r1 :: int
    return r3
 """
+import random
 
-from typing import Dict, List, Tuple, Optional, Union, Sequence
+from typing import Dict, List, Tuple, Optional, Union, Sequence, Set
 
 from mypy.nodes import (
-    Node, MypyFile, SymbolNode, FuncDef, ReturnStmt, AssignmentStmt, OpExpr, IntExpr, NameExpr,
-    LDEF, Var, IfStmt, UnaryExpr, ComparisonExpr, WhileStmt, Argument, CallExpr, IndexExpr, Block,
-    Expression, ListExpr, ExpressionStmt, MemberExpr, ForStmt, RefExpr, Lvalue, BreakStmt,
-    ContinueStmt, ConditionalExpr, OperatorAssignmentStmt, TupleExpr, ClassDef, TypeInfo,
-    Import, ImportFrom, ImportAll, DictExpr, StrExpr, CastExpr, TempNode, ARG_POS, MODULE_REF,
-    PassStmt, PromoteExpr, AwaitExpr, BackquoteExpr, AssertStmt, BytesExpr, ComplexExpr,
-    Decorator, DelStmt, DictionaryComprehension, EllipsisExpr, EnumCallExpr, ExecStmt,
+    Node, MypyFile, SymbolNode, Statement, FuncItem, FuncDef, ReturnStmt, AssignmentStmt, OpExpr,
+    IntExpr, NameExpr, LDEF, Var, IfStmt, UnaryExpr, ComparisonExpr, WhileStmt, Argument, CallExpr,
+    IndexExpr, Block, Expression, ListExpr, ExpressionStmt, MemberExpr, ForStmt, RefExpr, Lvalue,
+    BreakStmt, ContinueStmt, ConditionalExpr, OperatorAssignmentStmt, TupleExpr, ClassDef,
+    TypeInfo, Import, ImportFrom, ImportAll, DictExpr, StrExpr, CastExpr, TempNode, ARG_POS,
+    MODULE_REF, PassStmt, PromoteExpr, AwaitExpr, BackquoteExpr, AssertStmt, BytesExpr,
+    ComplexExpr, Decorator, DelStmt, DictionaryComprehension, EllipsisExpr, EnumCallExpr, ExecStmt,
     FloatExpr, GeneratorExpr, GlobalDecl, LambdaExpr, ListComprehension, SetComprehension,
     NamedTupleExpr, NewTypeExpr, NonlocalDecl, OverloadedFuncDef, PrintStmt, RaiseStmt,
     RevealExpr, SetExpr, SliceExpr, StarExpr, SuperExpr, TryStmt, TypeAliasExpr,
@@ -303,6 +304,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.functions = []  # type: List[FuncIR]
         self.classes = []  # type: List[ClassIR]
         self.modules = set(modules)
+        self.callable_class_names = set()  # type: Set[str]
 
         # This list operates similarly to a function call stack for nested functions. Whenever a
         # function definition begins to be generated, a FuncInfo instance is added to the stack,
@@ -455,20 +457,39 @@ class IRBuilder(NodeVisitor[Value]):
                       cls.name, self.module_name,
                       FuncSignature(rt_args, ret_type), blocks, env)
 
+    def contains_func_def(self, stmt: Statement) -> bool:
+        """Traverses a Statement recursively using BFS and checks if it or any nested statements
+        contain a FuncDef.
+        """
+        if isinstance(stmt, (FuncItem, ForStmt, WhileStmt)):
+            if (any(isinstance(s, FuncDef) for s in stmt.body.body) or
+                    any(self.contains_func_def(s) for s in stmt.body.body)):
+                return True
+
+        if isinstance(stmt, IfStmt):
+            for block in stmt.body:
+                if (any(isinstance(s, FuncDef) for s in block.body) or
+                        any(self.contains_func_def(s) for s in block.body)):
+                    return True
+            if stmt.else_body:
+                if (any(isinstance(s, FuncDef) for s in stmt.else_body.body) or
+                        any(self.contains_func_def(s) for s in stmt.else_body.body)):
+                    return True
+
+        return False
+
     def gen_func_def(self, fdef: FuncDef, sig: FuncSignature,
                      class_name: Optional[str] = None) -> FuncIR:
 
         func_info = FuncInfo()
         self.func_infos.append(func_info)
 
-        # TODO: If there exists a nested function in an if or loop statement, then the below code
-        #       will miss it. Make sure to fix this.
-
         # If there is more than one environment in the environment stack, then we are visiting a
         # non-global function.
         func_info.is_nested = len(self.environments) > 1
         # If any of the blocks is another FuncDef, then this contains a nested function.
-        func_info.contains_nested = any(isinstance(block, FuncDef) for block in fdef.body.body)
+        func_info.contains_nested = self.contains_func_def(fdef)
+        # func_info.contains_nested = any(isinstance(block, FuncDef) for block in fdef.body.body)
 
         namespace = self.gen_func_ns()
 
@@ -517,11 +538,6 @@ class IRBuilder(NodeVisitor[Value]):
             func = self.gen_func_for_callable_class(blocks, sig, env)
             self.add_call_to_callable_class(func)
             self.instantiate_callable_class(fdef)
-
-            # Set the callable class' environment attribute to point at the environment class
-            # defined in the callable class' immediate outer scope.
-            self.add(SetAttr(func_info.callable_class_val, ENV_ATTR_NAME,
-                             self.func_infos[-2].env_class_val, fdef.line))
         else:
             func = FuncIR(fdef.name(), class_name, self.module_name, sig, blocks, env)
 
@@ -799,16 +815,20 @@ class IRBuilder(NodeVisitor[Value]):
             end = s.expr.args[0]
             end_reg = self.accept(end)
 
+            # TODO: Currently, if the for-statement contains nested functions, we add the indices
+            #       of what we're iterating to the environment class. We shouldn't do this, since
+            #       these indices are used internally to traverse the data structure and not
+            #       actually seen by the user. That is, they should be stored in registers instead.
+
             # Initialize loop index to 0.
-            assign_target = self.assign(s.index, IntExpr(0))
-            assert isinstance(assign_target, AssignmentTargetRegister)
-            index_reg = assign_target.register
+            index_target = self.assign(s.index, IntExpr(0))
             goto = Goto(INVALID_LABEL)
             self.add(goto)
 
             # Add loop condition check.
             top = self.new_block()
             goto.label = top
+            index_reg = self.read_from_target(index_target, s.line)
             comparison = self.binary_op(index_reg, end_reg, '<', s.line)
             branches = self.add_bool_branch(comparison)
 
@@ -823,7 +843,8 @@ class IRBuilder(NodeVisitor[Value]):
 
             # Increment index register.
             one_reg = self.add(LoadInt(1))
-            self.add(Assign(index_reg, self.binary_op(index_reg, one_reg, '+', s.line)))
+            self.assign_to_target(index_target,
+                                  self.binary_op(index_reg, one_reg, '+', s.line), s.line)
 
             # Go back to loop condition check.
             self.add(Goto(top))
@@ -1691,6 +1712,11 @@ class IRBuilder(NodeVisitor[Value]):
         Returns a newly constructed FuncIR associated with the given FuncDef.
         """
         name = '{}_{}_obj'.format(fdef.name(), namespace)
+        count = 0
+        while name in self.callable_class_names:
+            name += '_' + str(count)
+        self.callable_class_names.add(name)
+
         callable_class = ClassIR(name, self.module_name)
         callable_class.attributes[ENV_ATTR_NAME] = RInstance(self.func_infos[-2].env_class)
         callable_class.mro = [callable_class]
@@ -1731,9 +1757,22 @@ class IRBuilder(NodeVisitor[Value]):
         """Assigns a callable class to a register named after the given function definition."""
         fn_info = self.func_infos[-1]
         fullname = '{}.{}'.format(self.module_name, fn_info.callable_class.name)
-        ret_type = RInstance(fn_info.callable_class)
-        func_reg = self.add(Call(ret_type, fullname, [], fdef.line))
-        func_target = self.environment.add_local_reg(fdef, ret_type)
+        func_reg = self.add(Call(RInstance(fn_info.callable_class), fullname, [], fdef.line))
+
+        # Set the callable class' environment attribute to point at the environment class
+        # defined in the callable class' immediate outer scope.
+        self.add(SetAttr(func_reg, ENV_ATTR_NAME, self.func_infos[-2].env_class_val, fdef.line))
+
+        if fdef.original_def:
+            # Get the target associated with the previously defined FuncDef.
+            func_target = self.environment.lookup(fdef.original_def)
+        else:
+            # The return type is 'object' instead of an RInstance of the callable class because
+            # differently defined functions with the same name and signature in conditional blocks
+            # will generate different callable classes, so the callable class that gets
+            # instantiated must be generic.
+            func_target = self.environment.add_local_reg(fdef, object_rprimitive)
+
         self.assign_to_target(func_target, func_reg, fdef.line)
         fn_info.callable_class_val = self.read_from_target(func_target, fdef.line)
         return fn_info.callable_class_val
