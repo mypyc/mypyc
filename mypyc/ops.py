@@ -1157,7 +1157,6 @@ class FuncIR:
 # bar() and B overrides bar() with a more specific type.
 # Then B's vtable will look something like:
 #
-#
 #      T1 type object
 #      ptr to B's T1 trait vtable
 #      T2 type object
@@ -1225,6 +1224,7 @@ class ClassIR:
         self.base_mro = [self]  # type: List[ClassIR]
 
     def real_base(self) -> Optional['ClassIR']:
+        """Return the actual concrete base class, if there is one."""
         if len(self.mro) > 1 and not self.mro[1].is_trait:
             return self.mro[1]
         return None

@@ -217,6 +217,13 @@ def generate_native_getters_and_setters(cl: ClassIR,
 def generate_vtables(base: ClassIR,
                      vtable_name: str,
                      emitter: Emitter) -> str:
+    """Emit the vtables for a class.
+
+    This includes both the primary vtable and any trait implementation vtables.
+
+    Returns the expression to use to refer to the vtable, which might be
+    different than the name, if there are trait vtables."""
+
     subtables = []
     for trait, vtable in base.trait_vtables.items():
         name = '{}_{}_trait_vtable'.format(

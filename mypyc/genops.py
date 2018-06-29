@@ -109,9 +109,10 @@ def is_trait(cdef: ClassDef) -> bool:
                if isinstance(d, NameExpr))
 
 
-def update_parent_vtable(entries: VTableEntries, cls: ClassIR, is_trait: bool) -> VTableEntries:
+def specialize_parent_vtable(cls: ClassIR, parent: ClassIR) -> VTableEntries:
+    """Generate the part of a vtable corresponding to a parent class or trait"""
     updated = []
-    for entry in entries:
+    for entry in parent.vtable_entries:
         if isinstance(entry, VTableMethod):
             method = entry.method
             if method.name in cls.methods:
@@ -122,13 +123,13 @@ def update_parent_vtable(entries: VTableEntries, cls: ClassIR, is_trait: bool) -
                 else:
                     entry = VTableMethod(cls, entry.name,
                                          cls.glue_methods[(entry.cls, method.name)])
-            elif is_trait:
+            elif parent.is_trait:
                 assert cls.vtable is not None
                 entry = cls.vtable_entries[cls.vtable[entry.name]]
         else:
             # If it is an attribute from a trait, we need to find out real class it got
             # mixed in at and point to that.
-            if is_trait:
+            if parent.is_trait:
                 assert cls.vtable is not None
                 entry = cls.vtable_entries[cls.vtable[entry.name] + int(entry.is_setter)]
 
@@ -153,12 +154,9 @@ def compute_vtable(cls: ClassIR) -> None:
         compute_vtable(cls.base)
         assert cls.base.vtable is not None
         cls.vtable.update(cls.base.vtable)
-        prefix = cls.base.vtable_entries
-    else:
-        prefix = []
+        cls.vtable_entries = specialize_parent_vtable(cls, cls.base)
 
     # Include the vtable from the parent classes, but handle method overrides.
-    cls.vtable_entries = update_parent_vtable(prefix, cls, is_trait=False)
     entries = cls.vtable_entries
 
     for attr in cls.attributes:
@@ -178,8 +176,7 @@ def compute_vtable(cls: ClassIR) -> None:
     if not cls.is_trait:
         for trait in all_traits:
             compute_vtable(trait)
-            cls.trait_vtables[trait] = update_parent_vtable(
-                trait.vtable_entries, cls, is_trait=True)
+            cls.trait_vtables[trait] = specialize_parent_vtable(cls, trait)
 
 
 class Mapper:
