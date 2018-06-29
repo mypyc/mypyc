@@ -56,8 +56,7 @@ from mypyc.ops_list import list_len_op, list_get_item_op, list_set_item_op, new_
 from mypyc.ops_dict import new_dict_op, dict_get_item_op
 from mypyc.ops_misc import (
     none_op, iter_op, next_op, no_err_occurred_op, py_getattr_op, py_setattr_op,
-    py_call_op, py_method_call_op,
-    fast_isinstance_op, bool_op,
+    py_call_op, py_method_call_op, fast_isinstance_op, bool_op, new_slice_op,
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
@@ -1262,8 +1261,17 @@ class IRBuilder(NodeVisitor[Value]):
         return self.add(TupleSet(items, expr.line))
 
     def visit_dict_expr(self, expr: DictExpr) -> Value:
-        assert not expr.items  # TODO
-        return self.add(PrimitiveOp([], new_dict_op, expr.line))
+        dict_reg = self.add(PrimitiveOp([], new_dict_op, expr.line))
+        for key_expr, value_expr in expr.items:
+            key_reg = self.accept(key_expr)
+            value_reg = self.accept(value_expr)
+            self.translate_special_method_call(
+                dict_reg,
+                '__setitem__',
+                [key_reg, value_reg],
+                result_type=None,
+                line=expr.line)
+        return dict_reg
 
     def visit_str_expr(self, expr: StrExpr) -> Value:
         return self.load_static_unicode(expr.value)
@@ -1371,6 +1379,18 @@ class IRBuilder(NodeVisitor[Value]):
         self.add(branch)
         return [branch]
 
+    def visit_slice_expr(self, expr: SliceExpr) -> Value:
+        def get_arg(arg: Optional[Expression]) -> Value:
+            if arg is None:
+                return self.primitive_op(none_op, [], expr.line)
+            else:
+                return self.accept(arg)
+
+        args = [get_arg(expr.begin_index),
+                get_arg(expr.end_index),
+                get_arg(expr.stride)]
+        return self.primitive_op(new_slice_op, args, expr.line)
+
     def visit_pass_stmt(self, o: PassStmt) -> Value:
         return INVALID_VALUE
 
@@ -1456,9 +1476,6 @@ class IRBuilder(NodeVisitor[Value]):
         raise NotImplementedError
 
     def visit_set_expr(self, o: SetExpr) -> Value:
-        raise NotImplementedError
-
-    def visit_slice_expr(self, o: SliceExpr) -> Value:
         raise NotImplementedError
 
     def visit_star_expr(self, o: StarExpr) -> Value:
