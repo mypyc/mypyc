@@ -123,6 +123,9 @@ class ModuleGenerator:
         for declaration in self.toposort_declarations():
             declarations.emit_lines(*declaration.body)
 
+        for static_def in self.context.statics.values():
+            declarations.emit_line(static_def)
+
         return ''.join(declarations.fragments + emitter.fragments)
 
     def generate_module_def(self, emitter: Emitter, module_name: str, module: ModuleIR) -> None:
@@ -188,8 +191,9 @@ class ModuleGenerator:
         for cl in module.classes:
             type_struct = emitter.type_struct_name(cl)
             # FIXME: This ought to be driven by emitclass, maybe?
-            bases = ([cl.base] if cl.base else []) + cl.traits
-            if len(bases) > 1:
+            if cl.traits:
+                real_base = cl.real_base()
+                bases = ([real_base] if real_base else []) + cl.traits
                 emitter.emit_lines('{}.tp_bases = PyTuple_Pack({}, {});'.format(
                     type_struct,
                     len(bases),
@@ -352,6 +356,7 @@ def sort_classes(classes: List[Tuple[str, ClassIR]]) -> List[Tuple[str, ClassIR]
             deps[ir] = set()
         if ir.base:
             deps[ir].add(ir.base)
+        deps[ir].update(ir.traits)
     sorted_irs = toposort(deps)
     return [(mod_name[ir], ir) for ir in sorted_irs]
 
