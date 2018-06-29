@@ -977,114 +977,114 @@ L0:
 [case testNestedFunctions]
 from typing import Callable
 
-def outer() -> Callable[[], object]:
+def a() -> Callable[[], object]:
     def inner() -> object:
         return None
     return inner
 
-def first() -> Callable[[], Callable[[], str]]:
-    def second() -> Callable[[], str]:
-        def third() -> str:
-            return 'third: nested function'
-        return third
-    return second
+def b() -> Callable[[], Callable[[], str]]:
+    def first() -> Callable[[], str]:
+        def second() -> str:
+            return 'b.first.second: nested function'
+        return second
+    return first
 
-def uno(num: float) -> Callable[[str], str]:
-    def dos(s: str) -> str:
+def c(num: float) -> Callable[[str], str]:
+    def inner(s: str) -> str:
         return s + '!'
-    return dos
+    return inner
 
-def eins(num: float) -> str:
-    def zwei(s: str) -> str:
+def d(num: float) -> str:
+    def inner(s: str) -> str:
         return s + '?'
-    a = zwei('eins')
-    b = zwei('zwei')
+    a = inner('one')
+    b = inner('two')
     return a
 
 def inner() -> str:
     return 'inner: normal function'
 
+def first() -> str:
+    return 'first: normal function'
+
 def second() -> str:
     return 'second: normal function'
-
-def third() -> str:
-    return 'third: normal function'
 [out]
-def inner_outer_obj.__call__(self):
-    self :: inner_outer_obj
+def inner_a_obj.__call__(self):
+    self :: inner_a_obj
     r0 :: None
 L0:
     r0 = None
     return r0
-def outer():
-    r0 :: outer__env
-    r1, inner :: inner_outer_obj
+def a():
+    r0 :: a__env
+    r1, inner :: inner_a_obj
     r2 :: bool
 L0:
-    r0 = outer__env()
-    r1 = inner_outer_obj()
+    r0 = a__env()
+    r1 = inner_a_obj()
     inner = r1
     inner.__mypyc_env__ = r0; r2 = is_error
     return inner
-def third_first_second_obj.__call__(self):
-    self :: third_first_second_obj
+def second_b_first_obj.__call__(self):
+    self :: second_b_first_obj
     r0 :: str
 L0:
-    r0 = unicode_0 :: static  ('third: nested function')
+    r0 = unicode_0 :: static  ('b.first.second: nested function')
     return r0
-def second_first_obj.__call__(self):
-    self :: second_first_obj
-    r0 :: second_first_env
-    r1, third :: third_first_second_obj
+def first_b_obj.__call__(self):
+    self :: first_b_obj
+    r0 :: first_b_env
+    r1, second :: second_b_first_obj
     r2 :: bool
 L0:
-    r0 = second_first_env()
-    r1 = third_first_second_obj()
-    third = r1
-    third.__mypyc_env__ = r0; r2 = is_error
-    return third
-def first():
-    r0 :: first__env
-    r1, second :: second_first_obj
-    r2 :: bool
-L0:
-    r0 = first__env()
-    r1 = second_first_obj()
+    r0 = first_b_env()
+    r1 = second_b_first_obj()
     second = r1
     second.__mypyc_env__ = r0; r2 = is_error
     return second
-def dos_uno_obj.__call__(self, s):
-    self :: dos_uno_obj
+def b():
+    r0 :: b__env
+    r1, first :: first_b_obj
+    r2 :: bool
+L0:
+    r0 = b__env()
+    r1 = first_b_obj()
+    first = r1
+    first.__mypyc_env__ = r0; r2 = is_error
+    return first
+def inner_c_obj.__call__(self, s):
+    self :: inner_c_obj
     s, r0, r1 :: str
 L0:
     r0 = unicode_1 :: static  ('!')
     r1 = s + r0
     return r1
-def uno(num):
+def c(num):
     num :: float
-    r0 :: uno__env
+    r0 :: c__env
     r1 :: bool
-    r2, dos :: dos_uno_obj
+    r2, inner :: inner_c_obj
     r3 :: bool
 L0:
-    r0 = uno__env()
+    r0 = c__env()
     r0.num = num; r1 = is_error
-    r2 = dos_uno_obj()
-    dos = r2
-    dos.__mypyc_env__ = r0; r3 = is_error
-    return dos
-def zwei_eins_obj.__call__(self, s):
-    self :: zwei_eins_obj
+    r2 = inner_c_obj()
+    inner = r2
+    inner.__mypyc_env__ = r0; r3 = is_error
+    return inner
+def inner_d_obj.__call__(self, s):
+    self :: inner_d_obj
     s, r0, r1 :: str
 L0:
     r0 = unicode_2 :: static  ('?')
     r1 = s + r0
     return r1
-def eins(num):
+def d(num):
     num :: float
-    r0 :: eins__env
+    r0 :: d__env
     r1 :: bool
-    r2, zwei :: zwei_eins_obj
+    r2, inner :: inner_d_obj
     r3 :: bool
     r4 :: str
     r5 :: object
@@ -1096,17 +1096,17 @@ def eins(num):
     r11 :: bool
     r12 :: str
 L0:
-    r0 = eins__env()
+    r0 = d__env()
     r0.num = num; r1 = is_error
-    r2 = zwei_eins_obj()
-    zwei = r2
-    zwei.__mypyc_env__ = r0; r3 = is_error
-    r4 = unicode_3 :: static  ('eins')
-    r5 = py_call(zwei, r4)
+    r2 = inner_d_obj()
+    inner = r2
+    inner.__mypyc_env__ = r0; r3 = is_error
+    r4 = unicode_3 :: static  ('one')
+    r5 = py_call(inner, r4)
     r6 = cast(str, r5)
     r0.a = r6; r7 = is_error
-    r8 = unicode_4 :: static  ('zwei')
-    r9 = py_call(zwei, r8)
+    r8 = unicode_4 :: static  ('two')
+    r9 = py_call(inner, r8)
     r10 = cast(str, r9)
     r0.b = r10; r11 = is_error
     r12 = r0.a
@@ -1116,15 +1116,15 @@ def inner():
 L0:
     r0 = unicode_5 :: static  ('inner: normal function')
     return r0
+def first():
+    r0 :: str
+L0:
+    r0 = unicode_6 :: static  ('first: normal function')
+    return r0
 def second():
     r0 :: str
 L0:
-    r0 = unicode_6 :: static  ('second: normal function')
-    return r0
-def third():
-    r0 :: str
-L0:
-    r0 = unicode_7 :: static  ('third: normal function')
+    r0 = unicode_7 :: static  ('second: normal function')
     return r0
 
 [case testFreeVars]

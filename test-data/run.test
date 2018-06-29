@@ -874,56 +874,64 @@ assert increment_all_keys({'a':1, 'b':2, 'c':3}) == {'a':2, 'b':3, 'c':4}
 [case testNestedFunctions]
 from typing import Callable
 
-def outer() -> Callable[[], object]:
+def a() -> Callable[[], object]:
     def inner() -> object:
         return None
     return inner
 
-def first() -> Callable[[], Callable[[], str]]:
-    def second() -> Callable[[], str]:
-        def third() -> str:
-            return 'third: nested function'
-        return third
-    return second
+def b() -> Callable[[], Callable[[], str]]:
+    def first() -> Callable[[], str]:
+        def second() -> str:
+            return 'b.first.second: nested function'
+        return second
+    return first
 
-def uno(num: float) -> Callable[[str], str]:
-    def dos(s: str) -> str:
+def c(num: float) -> Callable[[str], str]:
+    def inner(s: str) -> str:
         return s + '!'
-    return dos
+    return inner
 
-def eins(num: float) -> str:
-    def zwei(s: str) -> str:
+def d(num: float) -> str:
+    def inner(s: str) -> str:
         return s + '?'
-    a = zwei('eins')
-    b = zwei('zwei')
+    a = inner('one')
+    b = inner('two')
     return a
+
+def e() -> int:
+    return 0
+
+def f() -> int:
+    def inner() -> int:
+        return e()
+    return inner()
+
+def g() -> Callable[[], Callable[[], int]]:
+    def inner() -> Callable[[], int]:
+        return e
+    return inner
 
 def inner() -> str:
     return 'inner: normal function'
 
+def first() -> str:
+    return 'first: normal function'
+
 def second() -> str:
     return 'second: normal function'
 
-def third() -> str:
-    return 'third: normal function'
-
 [file driver.py]
-from native import outer, inner, first, uno, eins, second, third
-print(outer()())
-print(inner())
-print(first()()())
-print(uno(5.0)('uno'))
-print(eins(4.0))
-print(second())
-print(third())
-[out]
-None
-inner: normal function
-third: nested function
-uno!
-eins?
-second: normal function
-third: normal function
+from native import a, b, c, d, e, f, g, inner, first, second
+assert a()() == None
+assert b()()() == 'b.first.second: nested function'
+assert c(5.0)('c') == 'c!'
+assert d(4.0) == 'one?'
+assert e() == 0
+assert f() == 0
+assert g()()() == 0
+assert inner() == 'inner: normal function'
+assert first() == 'first: normal function'
+assert second() == 'second: normal function'
 
 [case testFreeVars]
 from typing import Callable
