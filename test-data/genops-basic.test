@@ -1260,6 +1260,72 @@ L3:
     r8 = cast(str, r7)
     return r8
 
+[case testSpecialNested]
+def a() -> int:
+    x = 1
+    def b() -> int:
+        nonlocal x
+        x += 1        
+        def c() -> int:
+            return x
+        return c()
+    return b()
+
+[out]
+def c_a_b_obj.__call__(self):
+    self :: c_a_b_obj
+    r0 :: b_a_env
+    r1 :: int
+L0:
+    r0 = self.__mypyc_env__
+    r1 = r0.x
+    return r1
+def b_a_obj.__call__(self):
+    self :: b_a_obj
+    r0 :: b_a_env
+    r1 :: a__env
+    r2 :: bool
+    r3 :: a__env
+    r4, r5, r6 :: int
+    r7 :: bool
+    r8 :: c_a_b_obj
+    r9 :: bool
+    c, r10 :: object
+    r11 :: int
+L0:
+    r0 = b_a_env()
+    r1 = self.__mypyc_env__
+    r0.__mypyc_env__ = r1; r2 = is_error
+    r3 = self.__mypyc_env__
+    r4 = 1
+    r5 = r3.x
+    r6 = r5 + r4 :: int
+    r3.x = r6; r7 = is_error
+    r8 = c_a_b_obj()
+    r8.__mypyc_env__ = r0; r9 = is_error
+    c = r8
+    r10 = py_call(c)
+    r11 = unbox(int, r10)
+    return r11
+def a():
+    r0 :: a__env
+    r1 :: int
+    r2 :: bool
+    r3 :: b_a_obj
+    r4 :: bool
+    b, r5 :: object
+    r6 :: int
+L0:
+    r0 = a__env()
+    r1 = 1
+    r0.x = r1; r2 = is_error
+    r3 = b_a_obj()
+    r3.__mypyc_env__ = r0; r4 = is_error
+    b = r3
+    r5 = py_call(b)
+    r6 = unbox(int, r5)
+    return r6
+
 [case testNestedFunctionInsideStatements]
 def f(flag: bool) -> str:
     if flag:

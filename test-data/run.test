@@ -1017,6 +1017,21 @@ assert e() == 8
 assert f()() == 3
 assert g() == 4
 
+[case testSpecialNested]
+def a() -> int:
+    x = 1
+    def b() -> int:     
+        def c() -> int:
+            return x
+        return c()
+    return b()
+[file driver.py]
+from native import a
+print(a())
+
+[out]
+1
+
 [case testNestedFunctionInsideIf]
 def f(flag: int) -> str:
     if flag < 0:

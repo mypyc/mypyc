@@ -300,6 +300,7 @@ class FuncInfo(object):
                  callable_class_val: Value = INVALID_VALUE,
                  env_class: ClassIR = INVALID_CLASS,
                  env_class_val: Value = INVALID_VALUE,
+                 self_var: Var = None,
                  self_reg: Value = INVALID_VALUE,
                  is_nested: bool = False,
                  contains_nested: bool = False) -> None:
@@ -308,6 +309,7 @@ class FuncInfo(object):
         self.callable_class_val = callable_class_val
         self.env_class = env_class
         self.env_class_val = env_class_val
+        self.self_var = self_var
         self.self_reg = self_reg
         self.is_nested = is_nested
         self.contains_nested = contains_nested
@@ -524,7 +526,8 @@ class IRBuilder(NodeVisitor[Value]):
 
             # Add a 'self' field to the environment, since nested functions become the '__call__'
             # class methods of callable classes. Use the callable class as the RInstance type.
-            self_target = self.environment.add_local_reg(Var('self'),
+            func_info.self_var = Var('self')
+            self_target = self.environment.add_local_reg(func_info.self_var,
                                                          RInstance(func_info.callable_class),
                                                          is_arg=True)
             func_info.self_reg = self.read_from_target(self_target, fdef.line)
@@ -1669,8 +1672,11 @@ class IRBuilder(NodeVisitor[Value]):
         symbol_found = False
         index = len(self.environments) - 2
         while not symbol_found and index >= 1:
-            symbol_found = symbol in self.environments[index].symtable
-            index -= 1
+            if symbol in self.environments[index].symtable:
+                symbol_found = True
+                target = self.environments[index].symtable[symbol]
+            else:
+                index -= 1
 
         if symbol_found:
             # TODO: Despite the below code being able to cache symbols so that they do not have to
@@ -1680,11 +1686,13 @@ class IRBuilder(NodeVisitor[Value]):
 
             # Traverse through the environment classes and call GetAttr until the environment that
             # contains the symbol is reached.
+            self.func_infos[index].env_class.attributes[symbol.name()] = target.type
             env = self.func_infos[-1].self_reg
-            for i in range(index, len(self.func_infos) - 1):
+            for i in range(index, len(self.func_infos)):
                 env = self.add(GetAttr(env, ENV_ATTR_NAME, symbol.line))
             # Add the symbol and corresponding target to the current environment so that GetAttr
             # does not have to be repeatedly called every time the symbol is accessed.
+
             target = AssignmentTargetAttr(env, symbol.name())
             return self.environment.add_target(symbol, target)
         return None
@@ -1713,6 +1721,8 @@ class IRBuilder(NodeVisitor[Value]):
                 # Override the local definition of the variable to instead point at the variable in
                 # the environment class.
                 self.environment.add_target(arg.variable, attr_target)
+
+                self.add(LoadInt(900))
 
     def gen_func_ns(self) -> str:
         """Generates a namespace for a nested function using its outer function names."""
@@ -1791,6 +1801,11 @@ class IRBuilder(NodeVisitor[Value]):
         fullname = '{}.{}'.format(self.module_name, fn_info.env_class.name)
         value = self.add(Call(RInstance(fn_info.env_class), fullname, [], line))
         fn_info.env_class_val = value
+
+        if fn_info.is_nested:
+            prev_env = self.add(GetAttr(fn_info.self_reg, ENV_ATTR_NAME, line))
+            self.add(SetAttr(fn_info.env_class_val, ENV_ATTR_NAME, prev_env, line))
+
         return value
 
     def instantiate_callable_class(self, fdef: FuncDef) -> Value:
