@@ -854,6 +854,8 @@ class IRBuilder(NodeVisitor[Value]):
             return INVALID_VALUE
 
         else:
+            body_block, end_block = BasicBlock(), BasicBlock()
+
             self.push_loop_stack()
 
             assert isinstance(s.index, NameExpr)
@@ -871,16 +873,13 @@ class IRBuilder(NodeVisitor[Value]):
             # checks only for NULL (an exception does not necessarily have to be raised).
             next_block = self.goto_new_block()
             next_reg = self.add(PrimitiveOp([iter_reg], next_op, s.line))
-            branch = Branch(next_reg, INVALID_LABEL, INVALID_LABEL, Branch.IS_ERROR)
-            self.add(branch)
-            branches = [branch]
+            self.add(Branch(next_reg, end_block, body_block, Branch.IS_ERROR))
 
             # Create a new block for the body of the loop. Set the previous branch to go here if
             # the conditional evaluates to false. Assign the value obtained from __next__ to the
             # lvalue so that it can be referenced by code in the body of the loop. At the end of
             # the body, goto the label that calls the iterator's __next__ function again.
-            body_block = self.new_block()
-            self.set_branches(branches, False, body_block)
+            self.activate_block(body_block)
             self.add(Assign(lvalue_reg, next_reg))
             s.body.accept(self)
             self.add(Goto(next_block))
@@ -889,8 +888,7 @@ class IRBuilder(NodeVisitor[Value]):
             # conditional evaluates to true. If an exception was raised during the loop, then
             # err_reg wil be set to True. If no_err_occurred_op returns False, then the exception
             # will be propagated using the ERR_FALSE flag.
-            end_block = self.new_block()
-            self.set_branches(branches, True, end_block)
+            self.activate_block(end_block)
             self.add(PrimitiveOp([], no_err_occurred_op, s.line))
 
             self.pop_loop_stack(next_block, end_block)
