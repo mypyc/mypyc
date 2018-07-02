@@ -715,36 +715,26 @@ class IRBuilder(NodeVisitor[Value]):
         return target
 
     def visit_if_stmt(self, stmt: IfStmt) -> Value:
+        if_body, next = BasicBlock(), BasicBlock()
+        else_body = BasicBlock() if stmt.else_body else next
+
         # If statements are normalized
         assert len(stmt.expr) == 1
 
-        branches = self.process_conditional(stmt.expr[0])
-        if_body = self.new_block()
-        self.set_branches(branches, True, if_body)
+        self.process_conditional_new(stmt.expr[0], if_body, else_body)
+        self.activate_block(if_body)
         stmt.body[0].accept(self)
-        if_leave = self.add_leave()
+        self.add_leave(next)
         if stmt.else_body:
-            else_body = self.new_block()
-            self.set_branches(branches, False, else_body)
+            self.activate_block(else_body)
             stmt.else_body.accept(self)
-            else_leave = self.add_leave()
-            next = self.new_block()
-            if else_leave:
-                else_leave.label = next
-        else:
-            # No else block.
-            next = self.new_block()
-            self.set_branches(branches, False, next)
-        if if_leave:
-            if_leave.label = next
+            self.add_leave(next)
+        self.activate_block(next)
         return INVALID_VALUE
 
-    def add_leave(self) -> Optional[Goto]:
+    def add_leave(self, target: BasicBlock) -> None:
         if not self.blocks[-1][-1].ops or not isinstance(self.blocks[-1][-1].ops[-1], Return):
-            leave = Goto(INVALID_LABEL)
-            self.add(leave)
-            return leave
-        return None
+            self.add(Goto(target))
 
     def push_loop_stack(self) -> None:
         self.break_gotos.append([])
@@ -758,24 +748,20 @@ class IRBuilder(NodeVisitor[Value]):
             break_goto.label = break_block
 
     def visit_while_stmt(self, s: WhileStmt) -> Value:
+        body, next = BasicBlock(), BasicBlock()
+
         self.push_loop_stack()
 
         # Split block so that we get a handle to the top of the loop.
-        goto = Goto(INVALID_LABEL)
-        self.add(goto)
-        top = self.new_block()
-        goto.label = top
-        branches = self.process_conditional(s.expr)
+        top = self.goto_new_block()
+        self.process_conditional_new(s.expr, body, next)
 
-        body = self.new_block()
-        # Bind "true" branches to the body block.
-        self.set_branches(branches, True, body)
+        self.activate_block(body)
         s.body.accept(self)
         # Add branch to the top at the end of the body.
         self.add(Goto(top))
-        next = self.new_block()
-        # Bind "false" branches to the new block.
-        self.set_branches(branches, False, next)
+
+        self.activate_block(next)
 
         self.pop_loop_stack(top, next)
         return INVALID_VALUE
@@ -838,7 +824,6 @@ class IRBuilder(NodeVisitor[Value]):
             lvalue_reg = self.environment.add_local(s.index.node, self.node_type(s.index))
 
             condition_block = self.goto_new_block()
-
 
             # For compatibility with python semantics we recalculate the length
             # at every iteration.
@@ -1229,30 +1214,26 @@ class IRBuilder(NodeVisitor[Value]):
         return target
 
     def visit_conditional_expr(self, expr: ConditionalExpr) -> Value:
-        branches = self.process_conditional(expr.cond)
+        if_body, else_body, next = BasicBlock(), BasicBlock(), BasicBlock()
+
+        self.process_conditional_new(expr.cond, if_body, else_body)
         expr_type = self.node_type(expr)
         # Having actual Phi nodes would be really nice here!
         target = self.alloc_temp(expr_type)
 
-        if_body = self.new_block()
-        self.set_branches(branches, True, if_body)
+        self.activate_block(if_body)
         true_value = self.accept(expr.if_expr)
         true_value = self.coerce(true_value, expr_type, expr.line)
         self.add(Assign(target, true_value))
-        if_goto_next = Goto(INVALID_LABEL)
-        self.add(if_goto_next)
+        self.add(Goto(next))
 
-        else_body = self.new_block()
-        self.set_branches(branches, False, else_body)
+        self.activate_block(else_body)
         false_value = self.accept(expr.else_expr)
         false_value = self.coerce(false_value, expr_type, expr.line)
         self.add(Assign(target, false_value))
-        else_goto_next = Goto(INVALID_LABEL)
-        self.add(else_goto_next)
+        self.add(Goto(next))
 
-        next = self.new_block()
-        if_goto_next.label = next
-        else_goto_next.label = next
+        self.activate_block(next)
 
         return target
 
