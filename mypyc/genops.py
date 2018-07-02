@@ -684,27 +684,27 @@ class IRBuilder(NodeVisitor[Value]):
                                           line: int) -> None:
         iterator = self.primitive_op(iter_op, [rvalue_reg], line)
         for litem in target.items:
+            error_block, ok_block = BasicBlock(), BasicBlock()
             ritem = self.primitive_op(next_op, [iterator], line)
-            branch = Branch(ritem, INVALID_LABEL, INVALID_LABEL, Branch.IS_ERROR)
-            self.add(branch)
-            error_block = self.new_block()
-            self.set_branches([branch], True, error_block)
+            self.add(Branch(ritem, error_block, ok_block, Branch.IS_ERROR))
+
+            self.activate_block(error_block)
             self.add(RaiseStandardError(RaiseStandardError.VALUE_ERROR,
                                         'not enough values to unpack', line))
             self.add(Unreachable())
-            ok_block = self.new_block()
-            self.set_branches([branch], False, ok_block)
+
+            self.activate_block(ok_block)
             self.assign_to_target(litem, ritem, line)
         extra = self.primitive_op(next_op, [iterator], line)
-        branch = Branch(extra, INVALID_LABEL, INVALID_LABEL, Branch.IS_ERROR)
-        self.add(branch)
-        error_block = self.new_block()
-        self.set_branches([branch], False, error_block)
+        error_block, ok_block = BasicBlock(), BasicBlock()
+        self.add(Branch(extra, ok_block, error_block, Branch.IS_ERROR))
+
+        self.activate_block(error_block)
         self.add(RaiseStandardError(RaiseStandardError.VALUE_ERROR,
                                     'too many values to unpack', line))
         self.add(Unreachable())
-        ok_block = self.new_block()
-        self.set_branches([branch], True, ok_block)
+
+        self.activate_block(ok_block)
 
     def assign(self,
                lvalue: Lvalue,
@@ -1328,20 +1328,6 @@ class IRBuilder(NodeVisitor[Value]):
         if negate:
             target = self.unary_op(target, 'not', e.line)
         return target
-
-    def set_branches(self, branches: List[Branch], condition: bool,
-                     target: BasicBlock) -> None:
-        """Set branch targets for the given condition (True or False).
-
-        If the target has already been set for a branch, skip the branch.
-        """
-        for b in branches:
-            if condition:
-                if b.true is INVALID_LABEL:
-                    b.true = target
-            else:
-                if b.false is INVALID_LABEL:
-                    b.false = target
 
     def add_bool_branch(self, value: Value, true: BasicBlock, false: BasicBlock) -> None:
         if is_same_type(value.type, int_rprimitive):
