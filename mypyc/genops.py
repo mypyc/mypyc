@@ -43,7 +43,7 @@ from mypyc.ops import (
     BasicBlock, Environment, Op, LoadInt, RType, Value, Register, Return, FuncIR, Assign,
     Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple, Unreachable, TupleGet, TupleSet,
     ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, ROptional,
-    MethodCall, INVALID_VALUE, INVALID_LABEL, int_rprimitive,
+    MethodCall, INVALID_VALUE, int_rprimitive,
     is_int_rprimitive, float_rprimitive, is_float_rprimitive, bool_rprimitive, list_rprimitive,
     is_list_rprimitive, dict_rprimitive, is_dict_rprimitive, str_rprimitive, is_tuple_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp,
@@ -350,13 +350,9 @@ class IRBuilder(NodeVisitor[Value]):
         self.classes = []  # type: List[ClassIR]
         self.modules = set(modules)
 
-        # These lists operate as stack frames for loops. Each loop adds a new
-        # frame (i.e. adds a new empty list [] to the outermost list). Each
-        # break or continue is inserted within that frame as they are visited
-        # and at the end of the loop the stack is popped and any break/continue
-        # gotos have their targets rewritten to the next basic block.
-        self.break_gotos = []  # type: List[List[Goto]]
-        self.continue_gotos = []  # type: List[List[Goto]]
+        # This list operate as stack frames for loops. Each loop adds a new
+        # frame containing the continue and break targets for the loop.
+        self.loop_exits = []  # type: List[Tuple[BasicBlock, BasicBlock]]
 
         self.mapper = mapper
         self.imports = []  # type: List[str]
@@ -736,24 +732,19 @@ class IRBuilder(NodeVisitor[Value]):
         if not self.blocks[-1][-1].ops or not isinstance(self.blocks[-1][-1].ops[-1], Return):
             self.add(Goto(target))
 
-    def push_loop_stack(self) -> None:
-        self.break_gotos.append([])
-        self.continue_gotos.append([])
+    def push_loop_stack(self, continue_block: BasicBlock, break_block: BasicBlock) -> None:
+        self.loop_exits.append((continue_block, break_block))
 
-    def pop_loop_stack(self, continue_block: BasicBlock, break_block: BasicBlock) -> None:
-        for continue_goto in self.continue_gotos.pop():
-            continue_goto.label = continue_block
-
-        for break_goto in self.break_gotos.pop():
-            break_goto.label = break_block
+    def pop_loop_stack(self) -> None:
+        self.loop_exits.pop()
 
     def visit_while_stmt(self, s: WhileStmt) -> Value:
-        body, next = BasicBlock(), BasicBlock()
+        body, next, top = BasicBlock(), BasicBlock(), BasicBlock()
 
-        self.push_loop_stack()
+        self.push_loop_stack(top, next)
 
         # Split block so that we get a handle to the top of the loop.
-        top = self.goto_new_block()
+        self.goto_and_activate(top)
         self.process_conditional(s.expr, body, next)
 
         self.activate_block(body)
@@ -763,7 +754,7 @@ class IRBuilder(NodeVisitor[Value]):
 
         self.activate_block(next)
 
-        self.pop_loop_stack(top, next)
+        self.pop_loop_stack()
         return INVALID_VALUE
 
     def visit_for_stmt(self, s: ForStmt) -> Value:
@@ -772,7 +763,7 @@ class IRBuilder(NodeVisitor[Value]):
                 and s.expr.callee.fullname == 'builtins.range'):
             body, next, top, end_block = BasicBlock(), BasicBlock(), BasicBlock(), BasicBlock()
 
-            self.push_loop_stack()
+            self.push_loop_stack(end_block, next)
 
             # Special case for x in range(...)
             # TODO: Check argument counts and kinds; check the lvalue
@@ -793,8 +784,7 @@ class IRBuilder(NodeVisitor[Value]):
             self.activate_block(body)
             s.body.accept(self)
 
-            self.add(Goto(end_block))
-            self.activate_block(end_block)
+            self.goto_and_activate(end_block)
 
             # Increment index register.
             one_reg = self.add(LoadInt(1))
@@ -804,13 +794,13 @@ class IRBuilder(NodeVisitor[Value]):
             self.add(Goto(top))
             self.activate_block(next)
 
-            self.pop_loop_stack(end_block, next)
+            self.pop_loop_stack()
             return INVALID_VALUE
 
         elif is_list_rprimitive(self.node_type(s.expr)):
             body_block, next_block, end_block = BasicBlock(), BasicBlock(), BasicBlock()
 
-            self.push_loop_stack()
+            self.push_loop_stack(end_block, next_block)
 
             expr_reg = self.accept(s.expr)
 
@@ -842,21 +832,20 @@ class IRBuilder(NodeVisitor[Value]):
 
             s.body.accept(self)
 
-            self.add(Goto(end_block))
-            self.activate_block(end_block)
+            self.goto_and_activate(end_block)
             self.add(Assign(index_reg, self.binary_op(index_reg, one_reg, '+', s.line)))
             self.add(Goto(condition_block))
 
             self.activate_block(next_block)
 
-            self.pop_loop_stack(end_block, next_block)
+            self.pop_loop_stack()
 
             return INVALID_VALUE
 
         else:
-            body_block, end_block = BasicBlock(), BasicBlock()
+            body_block, end_block, next_block = BasicBlock(), BasicBlock(), BasicBlock()
 
-            self.push_loop_stack()
+            self.push_loop_stack(next_block, end_block)
 
             assert isinstance(s.index, NameExpr)
             assert isinstance(s.index.node, Var)
@@ -871,7 +860,7 @@ class IRBuilder(NodeVisitor[Value]):
             # checked to see if the value returned is NULL, which would signal either the end of
             # the Iterable being traversed or an exception being raised. Note that Branch.IS_ERROR
             # checks only for NULL (an exception does not necessarily have to be raised).
-            next_block = self.goto_new_block()
+            self.goto_and_activate(next_block)
             next_reg = self.add(PrimitiveOp([iter_reg], next_op, s.line))
             self.add(Branch(next_reg, end_block, body_block, Branch.IS_ERROR))
 
@@ -891,19 +880,17 @@ class IRBuilder(NodeVisitor[Value]):
             self.activate_block(end_block)
             self.add(PrimitiveOp([], no_err_occurred_op, s.line))
 
-            self.pop_loop_stack(next_block, end_block)
+            self.pop_loop_stack()
 
             return INVALID_VALUE
 
     def visit_break_stmt(self, node: BreakStmt) -> Value:
-        self.break_gotos[-1].append(Goto(INVALID_LABEL))
-        self.add(self.break_gotos[-1][-1])
+        self.add(Goto(self.loop_exits[-1][1]))
         self.new_block()
         return INVALID_VALUE
 
     def visit_continue_stmt(self, node: ContinueStmt) -> Value:
-        self.continue_gotos[-1].append(Goto(INVALID_LABEL))
-        self.add(self.continue_gotos[-1][-1])
+        self.add(Goto(self.loop_exits[-1][0]))
         self.new_block()
         return INVALID_VALUE
 
@@ -1503,16 +1490,18 @@ class IRBuilder(NodeVisitor[Value]):
     def activate_block(self, block: BasicBlock) -> None:
         self.blocks[-1].append(block)
 
+    def goto_and_activate(self, block: BasicBlock) -> None:
+        self.add(Goto(block))
+        self.activate_block(block)
+
     def new_block(self) -> BasicBlock:
         block = BasicBlock()
         self.activate_block(block)
         return block
 
     def goto_new_block(self) -> BasicBlock:
-        goto = Goto(INVALID_LABEL)
-        self.add(goto)
-        block = self.new_block()
-        goto.label = block
+        block = BasicBlock()
+        self.goto_and_activate(block)
         return block
 
     def leave(self) -> Tuple[List[BasicBlock], Environment, RType]:
