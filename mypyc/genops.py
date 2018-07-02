@@ -798,14 +798,15 @@ class IRBuilder(NodeVisitor[Value]):
             goto = Goto(INVALID_LABEL)
             self.add(goto)
 
+            body, next = BasicBlock(), BasicBlock()
+
             # Add loop condition check.
             top = self.new_block()
             goto.label = top
             comparison = self.binary_op(index_reg, end_reg, '<', s.line)
-            branches = self.add_bool_branch(comparison)
+            self.add_bool_branch(comparison, body, next)
 
-            body = self.new_block()
-            self.set_branches(branches, True, body)
+            self.activate_block(body)
             s.body.accept(self)
 
             end_goto = Goto(INVALID_LABEL)
@@ -819,8 +820,7 @@ class IRBuilder(NodeVisitor[Value]):
 
             # Go back to loop condition check.
             self.add(Goto(top))
-            next = self.new_block()
-            self.set_branches(branches, False, next)
+            self.activate_block(next)
 
             self.pop_loop_stack(end_block, next)
             return INVALID_VALUE
@@ -841,16 +841,16 @@ class IRBuilder(NodeVisitor[Value]):
 
             condition_block = self.goto_new_block()
 
+            body_block, next_block = BasicBlock(), BasicBlock()
+
             # For compatibility with python semantics we recalculate the length
             # at every iteration.
             len_reg = self.add(PrimitiveOp([expr_reg], list_len_op, s.line))
 
             comparison = self.binary_op(index_reg, len_reg, '<', s.line)
-            branches = self.add_bool_branch(comparison)
+            self.add_bool_branch(comparison, body_block, next_block)
 
-            body_block = self.new_block()
-            self.set_branches(branches, True, body_block)
-
+            self.activate_block(body_block)
             target_list_type = self.types[s.expr]
             assert isinstance(target_list_type, Instance)
             target_type = self.type_to_rtype(target_list_type.args[0])
@@ -864,8 +864,7 @@ class IRBuilder(NodeVisitor[Value]):
             self.add(Assign(index_reg, self.binary_op(index_reg, one_reg, '+', s.line)))
             self.add(Goto(condition_block))
 
-            next_block = self.new_block()
-            self.set_branches(branches, False, next_block)
+            self.activate_block(next_block)
 
             self.pop_loop_stack(end_block, next_block)
 
@@ -1215,9 +1214,7 @@ class IRBuilder(NodeVisitor[Value]):
             (right_body, left_body) if expr.op == 'and' else (left_body, right_body))
 
         left_value = self.accept(expr.left)
-        branches = self.add_bool_branch(left_value)
-        self.set_branches(branches, True, true_body)
-        self.set_branches(branches, False, false_body)
+        self.add_bool_branch(left_value, true_body, false_body)
 
         self.activate_block(left_body)
         left_coerced = self.coerce(left_value, expr_type, expr.line)
@@ -1310,6 +1307,11 @@ class IRBuilder(NodeVisitor[Value]):
 
     # Conditional expressions
 
+    def process_conditional_new(self, e: Node, true: BasicBlock, false: BasicBlock) -> None:
+        branches = self.process_conditional(e)
+        self.set_branches(branches, True, true)
+        self.set_branches(branches, False, false)
+
     def process_conditional(self, e: Node) -> List[Branch]:
         if isinstance(e, OpExpr) and e.op in ['and', 'or']:
             if e.op == 'and':
@@ -1334,7 +1336,7 @@ class IRBuilder(NodeVisitor[Value]):
         # Catch-all for arbitrary expressions.
         else:
             reg = self.accept(e)
-            return self.add_bool_branch(reg)
+            return self.add_bool_branch_old(reg)
 
     def visit_comparison_expr(self, e: ComparisonExpr) -> Value:
         assert len(e.operators) == 1, 'more than 1 operator not supported'
@@ -1374,7 +1376,12 @@ class IRBuilder(NodeVisitor[Value]):
                 if b.false is INVALID_LABEL:
                     b.false = target
 
-    def add_bool_branch(self, value: Value) -> List[Branch]:
+    def add_bool_branch(self, value: Value, true: BasicBlock, false: BasicBlock) -> None:
+        branches = self.add_bool_branch_old(value)
+        self.set_branches(branches, True, true)
+        self.set_branches(branches, False, false)
+
+    def add_bool_branch_old(self, value: Value) -> List[Branch]:
         if is_same_type(value.type, int_rprimitive):
             zero = self.add(LoadInt(0))
             value = self.binary_op(value, zero, '!=', value.line)
@@ -1397,7 +1404,7 @@ class IRBuilder(NodeVisitor[Value]):
                 new = self.new_block()
                 self.set_branches([branch], True, new)
                 remaining = self.coerce(value, value.type.value_type, value.line)
-                more = self.add_bool_branch(remaining)
+                more = self.add_bool_branch_old(remaining)
                 return [branch] + more
         elif not is_same_type(value.type, bool_rprimitive):
             value = self.primitive_op(bool_op, [value], value.line)
