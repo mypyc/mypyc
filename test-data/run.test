@@ -989,13 +989,22 @@ def f(b: bool) -> Tuple[object, object, object]:
 def g() -> Tuple[object, object]:
     return (foo() or bar(), foo() and bar())
 
+def nand(p: bool, q: bool) -> bool:
+    if not (p and q):
+        return True
+    return False
 [file driver.py]
-from native import f, g
+from native import f, g, nand
 assert f(True) == ('foo', True, 'foo')
 print()
 assert f(False) == ('bar', 'foo', False)
 print()
 assert g() == ('foo', 'bar')
+
+assert nand(True, True) == False
+assert nand(True, False) == True
+assert nand(False, True) == True
+assert nand(False, False) == True
 [out]
 foo
 foo
