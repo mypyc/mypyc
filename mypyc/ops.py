@@ -375,7 +375,7 @@ class Environment:
                 typespec = fmt[n + 1]
                 arg = arglist.pop(0)
                 if typespec == 'r':
-                    result.append(self.read(arg))
+                    result.append(arg.name)
                 elif typespec == 'd':
                     result.append('%d' % arg)
                 elif typespec == 'f':
@@ -407,11 +407,6 @@ class Environment:
             i += 1
             result.append('%s :: %s' % (', '.join(group), regs[i0].type))
         return result
-
-    def read(self, arg: Any) -> str:
-        if isinstance(arg, AssignmentTarget):
-            return arg.to_str(self)
-        return arg.name
 
 
 class BasicBlock:
