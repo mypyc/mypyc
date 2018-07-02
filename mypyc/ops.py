@@ -1473,6 +1473,10 @@ def format_func(fn: FuncIR) -> List[str]:
     return lines
 
 
+def is_empty_module_top_level(fn: FuncIR) -> bool:
+    return fn.name == '__top_level__' and len(fn.blocks) == 1 and len(fn.blocks[0].ops) == 2
+
+
 class RTypeVisitor(Generic[T]):
     @abstractmethod
     def visit_rprimitive(self, typ: RPrimitive) -> T:

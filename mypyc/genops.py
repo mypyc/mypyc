@@ -371,9 +371,15 @@ class IRBuilder(NodeVisitor[Value]):
             self.classes.append(ir)
 
         # Generate ops.
+        self.enter('<top level>')
         self.current_module_name = mypyfile.fullname()
         for node in mypyfile.defs:
             node.accept(self)
+        self.add_func_end()
+        blocks, env, ret_type = self.leave()
+        sig = FuncSignature([], none_rprimitive)
+        func_ir = FuncIR('__top_level__', None, self.module_name, sig, blocks, env)
+        self.functions.append(func_ir)
 
         return INVALID_VALUE
 
@@ -518,8 +524,8 @@ class IRBuilder(NodeVisitor[Value]):
         self.func_infos.append(func_info)
 
         # If there is more than one environment in the environment stack, then we are visiting a
-        # non-global function.
-        func_info.is_nested = len(self.environments) > 1
+        # non-global function (the top-most environment is for the module top level).
+        func_info.is_nested = len(self.environments) > 2
         func_info.contains_nested = self.contains_func_def(fdef)
 
         namespace = self.gen_func_ns()
@@ -538,10 +544,7 @@ class IRBuilder(NodeVisitor[Value]):
 
         fdef.body.accept(self)
 
-        if is_none_rprimitive(self.ret_types[-1]) or is_object_rprimitive(self.ret_types[-1]):
-            self.add_implicit_return()
-        else:
-            self.add_implicit_unreachable()
+        self.add_func_end()
 
         blocks, env, ret_type = self.leave()
 
@@ -553,6 +556,13 @@ class IRBuilder(NodeVisitor[Value]):
         self.func_infos.pop()
 
         return func
+
+    def add_func_end(self) -> None:
+        if (is_none_rprimitive(self.ret_types[-1]) or
+                is_object_rprimitive(self.ret_types[-1])):
+            self.add_implicit_return()
+        else:
+            self.add_implicit_unreachable()
 
     def visit_func_def(self, fdef: FuncDef) -> Value:
         self.functions.append(self.gen_func_def(fdef, self.mapper.fdef_to_sig(fdef)))
@@ -615,30 +625,36 @@ class IRBuilder(NodeVisitor[Value]):
     def get_assignment_target(self, lvalue: Lvalue) -> AssignmentTarget:
         if isinstance(lvalue, NameExpr):
             # Assign to local variable.
-            assert lvalue.kind == LDEF
             assert isinstance(lvalue.node, SymbolNode)  # TODO: Can this fail?
-            if lvalue.node not in self.environment.symtable:
-                fn_info = self.func_infos[-1]
-                if fn_info.is_nested:
-                    target = self.load_from_outer_scope(lvalue.node)
-                    if target:
-                        return target
+            if lvalue.kind == LDEF:
+                if lvalue.node not in self.environment.symtable:
+                    fn_info = self.func_infos[-1]
+                    if fn_info.is_nested:
+                        target = self.load_from_outer_scope(lvalue.node)
+                        if target:
+                            return target
 
-                if fn_info.contains_nested:
-                    # First, define a new variable in the current function's environment class.
-                    # Next, define a target that refers to the newly defined variable in that
-                    # environment class. Add the target to the table containing class environment
-                    # variables, as well as the current environment.
-                    fn_info.env_class.attributes[lvalue.node.name()] = self.node_type(lvalue)
-                    target = AssignmentTargetAttr(fn_info.env_class_val, lvalue.node.name())
-                    return self.environment.add_target(lvalue.node, target)
+                    if fn_info.contains_nested:
+                        # First, define a new variable in the current function's environment class.
+                        # Next, define a target that refers to the newly defined variable in that
+                        # environment class. Add the target to the table containing class environment
+                        # variables, as well as the current environment.
+                        fn_info.env_class.attributes[lvalue.node.name()] = self.node_type(lvalue)
+                        target = AssignmentTargetAttr(fn_info.env_class_val, lvalue.node.name())
+                        return self.environment.add_target(lvalue.node, target)
 
-                # If the function neither is nested nor contains a nested function, then define a
-                # new local variable.
-                return self.environment.add_local_reg(lvalue.node, self.node_type(lvalue))
+                    # If the function neither is nested nor contains a nested function, then define a
+                    # new local variable.
+                    return self.environment.add_local_reg(lvalue.node, self.node_type(lvalue))
+                lvalue_reg = self.environment.lookup(lvalue.node)
+            elif lvalue.kind == GDEF:
+                globals_dict = self.load_globals_dict()
+                name = self.load_static_unicode(lvalue.name)
+                return AssignmentTargetIndex(globals_dict, name)
             else:
-                # Assign to a previously defined variable.
-                return self.environment.lookup(lvalue.node)
+                assert False, lvalue.kind
+
+            return AssignmentTargetRegister(lvalue_reg)
         elif isinstance(lvalue, IndexExpr):
             # Indexed assignment x[y] = e
             base = self.accept(lvalue.base)
@@ -1464,6 +1480,10 @@ class IRBuilder(NodeVisitor[Value]):
     def visit_pass_stmt(self, o: PassStmt) -> Value:
         return INVALID_VALUE
 
+    def visit_global_decl(self, o: GlobalDecl) -> Value:
+        # Pure declaration -- no runtime effect
+        return INVALID_VALUE
+
     def visit_cast_expr(self, o: CastExpr) -> Value:
         assert False, "CastExpr handled in CallExpr"
 
@@ -1507,9 +1527,6 @@ class IRBuilder(NodeVisitor[Value]):
         raise NotImplementedError
 
     def visit_generator_expr(self, o: GeneratorExpr) -> Value:
-        raise NotImplementedError
-
-    def visit_global_decl(self, o: GlobalDecl) -> Value:
         raise NotImplementedError
 
     def visit_lambda_expr(self, o: LambdaExpr) -> Value:
@@ -1893,9 +1910,12 @@ class IRBuilder(NodeVisitor[Value]):
         if self.is_native_module_ref_expr(expr) and isinstance(expr.node, TypeInfo):
             assert expr.fullname is not None
             return self.load_native_type_object(expr.fullname)
-        _globals = self.add(LoadStatic(object_rprimitive, 'globals', self.module_name))
+        _globals = self.load_globals_dict()
         reg = self.load_static_unicode(expr.name)
         return self.add(PrimitiveOp([_globals, reg], dict_get_item_op, expr.line))
+
+    def load_globals_dict(self) -> Value:
+        return self.add(LoadStatic(object_rprimitive, 'globals', self.module_name))
 
     def load_static_int(self, value: int) -> Value:
         """Loads a static integer Python 'int' object into a register."""

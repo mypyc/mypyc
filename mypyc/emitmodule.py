@@ -13,7 +13,7 @@ from mypyc.emit import EmitterContext, Emitter, HeaderDeclaration
 from mypyc.emitfunc import generate_native_function, native_function_header
 from mypyc.emitclass import generate_class
 from mypyc.emitwrapper import generate_wrapper_function, wrapper_function_header
-from mypyc.ops import FuncIR, ClassIR, ModuleIR
+from mypyc.ops import FuncIR, ClassIR, ModuleIR, is_empty_module_top_level
 from mypyc.refcount import insert_ref_count_opcodes
 from mypyc.exceptions import insert_exception_handling
 
@@ -92,6 +92,8 @@ class ModuleGenerator:
 
         for module in module_irs:
             for fn in module.functions:
+                if is_empty_module_top_level(fn):
+                    continue
                 generate_function_declaration(fn, emitter)
 
         classes = []
@@ -110,6 +112,9 @@ class ModuleGenerator:
 
         for module_name, module in self.modules:
             for fn in module.functions:
+                if is_empty_module_top_level(fn):
+                    # Omit for simplicity (for now)
+                    continue
                 emitter.emit_line()
                 generate_native_function(fn, emitter, self.source_paths[module_name], module_name)
                 emitter.emit_line()
@@ -129,11 +134,12 @@ class ModuleGenerator:
         return ''.join(declarations.fragments + emitter.fragments)
 
     def generate_module_def(self, emitter: Emitter, module_name: str, module: ModuleIR) -> None:
+        """Emit the PyModuleDef struct for a module and the module init function."""
         # Emit module methods
         module_prefix = emitter.names.private_name(module_name)
         emitter.emit_line('static PyMethodDef {}module_methods[] = {{'.format(module_prefix))
         for fn in module.functions:
-            if fn.class_name is not None:
+            if fn.class_name is not None or fn.name == '__top_level__':
                 continue
             emitter.emit_line(
                 ('{{"{name}", (PyCFunction){prefix}{cname}, METH_VARARGS | METH_KEYWORDS, '
@@ -231,8 +237,21 @@ class ModuleGenerator:
                 'Py_INCREF(&{});'.format(type_struct),
                 'PyModule_AddObject({}, "{}", (PyObject *)&{});'.format(module_static, name,
                                                                         type_struct))
+
+        self.generate_top_level_call(module, emitter)
+
         emitter.emit_line('return {};'.format(module_static))
         emitter.emit_line('}')
+
+    def generate_top_level_call(self, module: ModuleIR, emitter: Emitter) -> None:
+        for fn in module.functions:
+            if fn.name == '__top_level__' and not is_empty_module_top_level(fn):
+                emitter.emit_lines(
+                    'PyObject *result = {}();'.format(emitter.native_function_name(fn)),
+                    'if (result == NULL)',
+                    '    return NULL;',
+                    'Py_DECREF(result);'
+                )
 
     def toposort_declarations(self) -> List[HeaderDeclaration]:
         """Topologically sort the declaration dict by dependencies.
