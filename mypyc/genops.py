@@ -784,6 +784,8 @@ class IRBuilder(NodeVisitor[Value]):
         if (isinstance(s.expr, CallExpr)
                 and isinstance(s.expr.callee, RefExpr)
                 and s.expr.callee.fullname == 'builtins.range'):
+            body, next, top, end_block = BasicBlock(), BasicBlock(), BasicBlock(), BasicBlock()
+
             self.push_loop_stack()
 
             # Special case for x in range(...)
@@ -795,24 +797,18 @@ class IRBuilder(NodeVisitor[Value]):
             assign_target = self.assign(s.index, IntExpr(0))
             assert isinstance(assign_target, AssignmentTargetRegister)
             index_reg = assign_target.register
-            goto = Goto(INVALID_LABEL)
-            self.add(goto)
-
-            body, next = BasicBlock(), BasicBlock()
+            self.add(Goto(top))
 
             # Add loop condition check.
-            top = self.new_block()
-            goto.label = top
+            self.activate_block(top)
             comparison = self.binary_op(index_reg, end_reg, '<', s.line)
             self.add_bool_branch(comparison, body, next)
 
             self.activate_block(body)
             s.body.accept(self)
 
-            end_goto = Goto(INVALID_LABEL)
-            self.add(end_goto)
-            end_block = self.new_block()
-            end_goto.label = end_block
+            self.add(Goto(end_block))
+            self.activate_block(end_block)
 
             # Increment index register.
             one_reg = self.add(LoadInt(1))
@@ -826,6 +822,8 @@ class IRBuilder(NodeVisitor[Value]):
             return INVALID_VALUE
 
         elif is_list_rprimitive(self.node_type(s.expr)):
+            body_block, next_block, end_block = BasicBlock(), BasicBlock(), BasicBlock()
+
             self.push_loop_stack()
 
             expr_reg = self.accept(s.expr)
@@ -841,7 +839,6 @@ class IRBuilder(NodeVisitor[Value]):
 
             condition_block = self.goto_new_block()
 
-            body_block, next_block = BasicBlock(), BasicBlock()
 
             # For compatibility with python semantics we recalculate the length
             # at every iteration.
@@ -860,7 +857,8 @@ class IRBuilder(NodeVisitor[Value]):
 
             s.body.accept(self)
 
-            end_block = self.goto_new_block()
+            self.add(Goto(end_block))
+            self.activate_block(end_block)
             self.add(Assign(index_reg, self.binary_op(index_reg, one_reg, '+', s.line)))
             self.add(Goto(condition_block))
 
