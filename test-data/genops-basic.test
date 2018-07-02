@@ -1036,14 +1036,18 @@ L0:
 def first_b_obj.__call__(self):
     self :: first_b_obj
     r0 :: first_b_env
-    r1 :: second_b_first_obj
+    r1 :: b__env
     r2 :: bool
+    r3 :: second_b_first_obj
+    r4 :: bool
     second :: object
 L0:
     r0 = first_b_env()
-    r1 = second_b_first_obj()
-    r1.__mypyc_env__ = r0; r2 = is_error
-    second = r1
+    r1 = self.__mypyc_env__
+    r0.__mypyc_env__ = r1; r2 = is_error
+    r3 = second_b_first_obj()
+    r3.__mypyc_env__ = r0; r4 = is_error
+    second = r3
     return second
 def b():
     r0 :: b__env
@@ -1189,15 +1193,18 @@ def inner_b_obj.__call__(self):
     r0 :: b__env
     r1 :: int
     r2 :: bool
-    foo, r3, r4 :: int
+    foo, r3 :: int
+    r4 :: b__env
+    r5 :: int
 L0:
     r0 = self.__mypyc_env__
     r1 = 4
     r0.num = r1; r2 = is_error
     r3 = 6
     foo = r3
-    r4 = r0.num
-    return r4
+    r4 = self.__mypyc_env__
+    r5 = r4.num
+    return r5
 def b():
     r0 :: b__env
     r1 :: int
@@ -1260,11 +1267,10 @@ L3:
     r8 = cast(str, r7)
     return r8
 
-[case testSpecialNested]
+[case testSpecialNestedd]
 def a() -> int:
     x = 1
     def b() -> int:
-        nonlocal x
         x += 1        
         def c() -> int:
             return x
@@ -1275,11 +1281,13 @@ def a() -> int:
 def c_a_b_obj.__call__(self):
     self :: c_a_b_obj
     r0 :: b_a_env
-    r1 :: int
+    r1 :: a__env
+    r2 :: int
 L0:
     r0 = self.__mypyc_env__
-    r1 = r0.x
-    return r1
+    r1 = r0.__mypyc_env__
+    r2 = r1.x
+    return r2
 def b_a_obj.__call__(self):
     self :: b_a_obj
     r0 :: b_a_env

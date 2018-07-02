@@ -1020,17 +1020,20 @@ assert g() == 4
 [case testSpecialNested]
 def a() -> int:
     x = 1
-    def b() -> int:     
+    def b() -> int:
+        nonlocal x
+        x += 1
         def c() -> int:
             return x
         return c()
     return b()
+
 [file driver.py]
 from native import a
 print(a())
 
 [out]
-1
+2
 
 [case testNestedFunctionInsideIf]
 def f(flag: int) -> str:
