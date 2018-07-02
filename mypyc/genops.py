@@ -721,7 +721,7 @@ class IRBuilder(NodeVisitor[Value]):
         # If statements are normalized
         assert len(stmt.expr) == 1
 
-        self.process_conditional_new(stmt.expr[0], if_body, else_body)
+        self.process_conditional(stmt.expr[0], if_body, else_body)
         self.activate_block(if_body)
         stmt.body[0].accept(self)
         self.add_leave(next)
@@ -754,7 +754,7 @@ class IRBuilder(NodeVisitor[Value]):
 
         # Split block so that we get a handle to the top of the loop.
         top = self.goto_new_block()
-        self.process_conditional_new(s.expr, body, next)
+        self.process_conditional(s.expr, body, next)
 
         self.activate_block(body)
         s.body.accept(self)
@@ -1216,7 +1216,7 @@ class IRBuilder(NodeVisitor[Value]):
     def visit_conditional_expr(self, expr: ConditionalExpr) -> Value:
         if_body, else_body, next = BasicBlock(), BasicBlock(), BasicBlock()
 
-        self.process_conditional_new(expr.cond, if_body, else_body)
+        self.process_conditional(expr.cond, if_body, else_body)
         expr_type = self.node_type(expr)
         # Having actual Phi nodes would be really nice here!
         target = self.alloc_temp(expr_type)
@@ -1286,36 +1286,26 @@ class IRBuilder(NodeVisitor[Value]):
 
     # Conditional expressions
 
-    def process_conditional_new(self, e: Node, true: BasicBlock, false: BasicBlock) -> None:
-        branches = self.process_conditional(e)
-        self.set_branches(branches, True, true)
-        self.set_branches(branches, False, false)
-
-    def process_conditional(self, e: Node) -> List[Branch]:
+    def process_conditional(self, e: Node, true: BasicBlock, false: BasicBlock) -> None:
         if isinstance(e, OpExpr) and e.op in ['and', 'or']:
             if e.op == 'and':
                 # Short circuit 'and' in a conditional context.
-                lbranches = self.process_conditional(e.left)
-                new = self.new_block()
-                self.set_branches(lbranches, True, new)
-                rbranches = self.process_conditional(e.right)
-                return lbranches + rbranches
+                new = BasicBlock()
+                self.process_conditional(e.left, new, false)
+                self.activate_block(new)
+                self.process_conditional(e.right, true, false)
             else:
                 # Short circuit 'or' in a conditional context.
-                lbranches = self.process_conditional(e.left)
-                new = self.new_block()
-                self.set_branches(lbranches, False, new)
-                rbranches = self.process_conditional(e.right)
-                return lbranches + rbranches
+                new = BasicBlock()
+                self.process_conditional(e.left, true, new)
+                self.activate_block(new)
+                self.process_conditional(e.right, true, false)
         elif isinstance(e, UnaryExpr) and e.op == 'not':
-            branches = self.process_conditional(e.expr)
-            for b in branches:
-                b.invert()
-            return branches
+            self.process_conditional(e.expr, false, true)
         # Catch-all for arbitrary expressions.
         else:
             reg = self.accept(e)
-            return self.add_bool_branch_old(reg)
+            self.add_bool_branch(reg, true, false)
 
     def visit_comparison_expr(self, e: ComparisonExpr) -> Value:
         assert len(e.operators) == 1, 'more than 1 operator not supported'
@@ -1356,11 +1346,6 @@ class IRBuilder(NodeVisitor[Value]):
                     b.false = target
 
     def add_bool_branch(self, value: Value, true: BasicBlock, false: BasicBlock) -> None:
-        branches = self.add_bool_branch_old(value)
-        self.set_branches(branches, True, true)
-        self.set_branches(branches, False, false)
-
-    def add_bool_branch_old(self, value: Value) -> List[Branch]:
         if is_same_type(value.type, int_rprimitive):
             zero = self.add(LoadInt(0))
             value = self.binary_op(value, zero, '!=', value.line)
@@ -1371,25 +1356,21 @@ class IRBuilder(NodeVisitor[Value]):
         elif isinstance(value.type, ROptional):
             is_none = self.binary_op(value, self.add(PrimitiveOp([], none_op, value.line)),
                                      'is not', value.line)
-            branch = Branch(is_none, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
+            branch = Branch(is_none, true, false, Branch.BOOL_EXPR)
             self.add(branch)
             value_type = value.type.value_type
             if isinstance(value_type, RInstance):
                 # Optional[X] where X is always truthy
                 # TODO: Support __bool__
-                return [branch]
+                pass
             else:
                 # Optional[X] where X may be falsey and requires a check
-                new = self.new_block()
-                self.set_branches([branch], True, new)
+                branch.true = self.new_block()
                 remaining = self.coerce(value, value.type.value_type, value.line)
-                more = self.add_bool_branch_old(remaining)
-                return [branch] + more
+                self.add_bool_branch(remaining, true, false)
         elif not is_same_type(value.type, bool_rprimitive):
             value = self.primitive_op(bool_op, [value], value.line)
-        branch = Branch(value, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
-        self.add(branch)
-        return [branch]
+        self.add(Branch(value, true, false, Branch.BOOL_EXPR))
 
     def visit_slice_expr(self, expr: SliceExpr) -> Value:
         def get_arg(arg: Optional[Expression]) -> Value:
