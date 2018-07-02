@@ -13,8 +13,6 @@ It would be translated to something that conceptually looks like this:
    r3 = r2 + r1 :: int
    return r3
 """
-import random
-
 from typing import Dict, List, Tuple, Optional, Union, Sequence, Set
 
 from mypy.nodes import (
@@ -58,6 +56,7 @@ from mypyc.ops_dict import new_dict_op, dict_get_item_op
 from mypyc.ops_misc import (
     none_op, iter_op, next_op, no_err_occurred_op, py_getattr_op, py_setattr_op,
     py_call_op, py_method_call_op, fast_isinstance_op, bool_op, new_slice_op,
+    is_none_op,
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
@@ -302,8 +301,7 @@ class FuncInfo(object):
                  env_class_val: Value = INVALID_VALUE,
                  self_reg: Value = INVALID_VALUE,
                  is_nested: bool = False,
-                 contains_nested: bool = False,
-                 cached_symbols: Dict[SymbolNode, AssignmentTarget] = {}) -> None:
+                 contains_nested: bool = False) -> None:
         # TODO: add field for ret_type: RType = none_rprimitive
         self.callable_class = callable_class
         self.callable_class_val = callable_class_val
@@ -312,7 +310,6 @@ class FuncInfo(object):
         self.self_reg = self_reg
         self.is_nested = is_nested
         self.contains_nested = contains_nested
-        self.cached_symbols = cached_symbols
 
 
 class IRBuilder(NodeVisitor[Value]):
@@ -1364,16 +1361,19 @@ class IRBuilder(NodeVisitor[Value]):
         # TODO: Verify operand types.
         assert len(e.operators) == 1, 'more than 1 operator not supported'
         op = e.operators[0]
-        if op in ['is', 'is not']:
-            # Special case 'is' checks.
-            # TODO: check if right operand is None
+
+        rhs = e.operands[1]
+        negate = False
+        if (op in ['is', 'is not'] and isinstance(rhs, NameExpr) and rhs.node
+                and rhs.node.fullname() == 'builtins.None'):
+            # Special case 'is None' checks.
             left = self.accept(e.operands[0])
-            branch = Branch(left, INVALID_LABEL, INVALID_LABEL,
-                            Branch.IS_NONE)
+
+            target = self.add(PrimitiveOp([left], is_none_op, e.line))
             if op == 'is not':
-                branch.negated = True
+                negate = True
+
         else:
-            # General comparison -- evaluate both operands.
             left = self.accept(e.operands[0])
             right = self.accept(e.operands[1])
             # Generate a bool value and branch based on it.
@@ -1382,10 +1382,13 @@ class IRBuilder(NodeVisitor[Value]):
             else:
                 target = self.binary_op(left, right, op, e.line)
             target = self.coerce(target, bool_rprimitive, e.line)
-            branch = Branch(target, INVALID_LABEL, INVALID_LABEL,
-                            Branch.BOOL_EXPR)
             if op == 'not in':
-                branch.negated = True
+                negate = True
+
+        branch = Branch(target, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
+        branch.negated = negate
+        if op == 'not in':
+            branch.negated = True
         self.add(branch)
         return [branch]
 
@@ -1412,8 +1415,9 @@ class IRBuilder(NodeVisitor[Value]):
             zero = self.add(LoadInt(0))
             value = self.binary_op(length, zero, '!=', value.line)
         elif isinstance(value.type, ROptional):
-            branch = Branch(value, INVALID_LABEL, INVALID_LABEL, Branch.IS_NONE)
-            branch.negated = True
+            is_none = self.binary_op(value, self.add(PrimitiveOp([], none_op, value.line)),
+                                     'is not', value.line)
+            branch = Branch(is_none, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
             self.add(branch)
             value_type = value.type.value_type
             if isinstance(value_type, RInstance):
@@ -1668,9 +1672,6 @@ class IRBuilder(NodeVisitor[Value]):
 
         Returns the AssignmentTarget associated with the SymbolNode, or None if it cannot be found.
         """
-        if symbol in self.func_infos[-1].cached_symbols:
-            return self.func_infos[-1].cached_symbols[symbol]
-
         symbol_found = False
         index = len(self.environments) - 2
         while not symbol_found and index >= 1:

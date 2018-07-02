@@ -493,6 +493,16 @@ def contains(x: Any, y: Any) -> Any:
         return True
     else:
         return False
+def identity(x: Any, y: Any) -> Any:
+    if x is y:
+        return True
+    else:
+        return False
+def disidentity(x: Any, y: Any) -> Any:
+    if x is not y:
+        return True
+    else:
+        return False
 def slice1(x: Any) -> Any:
     return x[:]
 def slice2(x: Any, y: Any) -> Any:
@@ -542,6 +552,11 @@ assert slice2(a, 1) == [3, 5]
 assert slice3(a, -1) == [1, 3]
 assert slice4(a, 1, -1) == [3]
 assert slice5(a, 2, 0, -1) == [5, 3]
+o1, o2 = object(), object()
+assert identity(o1, o1)
+assert not identity(o1, o2)
+assert not disidentity(o1, o1)
+assert disidentity(o1, o2)
 
 [case testGenericMiscOps]
 from typing import Any
@@ -887,213 +902,6 @@ assert increment_attr(P()).x == 1
 assert increment_attr_o(O()).x == 2
 assert increment_all_indices([1, 2, 3]) == [2, 3, 4]
 assert increment_all_keys({'a':1, 'b':2, 'c':3}) == {'a':2, 'b':3, 'c':4}
-
-[case testNestedFunctions]
-from typing import Callable
-
-def a() -> Callable[[], object]:
-    def inner() -> object:
-        return None
-    return inner
-
-def b() -> Callable[[], Callable[[], str]]:
-    def first() -> Callable[[], str]:
-        def second() -> str:
-            return 'b.first.second: nested function'
-        return second
-    return first
-
-def c(num: float) -> Callable[[str], str]:
-    def inner(s: str) -> str:
-        return s + '!'
-    return inner
-
-def d(num: float) -> str:
-    def inner(s: str) -> str:
-        return s + '?'
-    a = inner('one')
-    b = inner('two')
-    return a
-
-def e() -> int:
-    return 0
-
-def f() -> int:
-    def inner() -> int:
-        return e()
-    return inner()
-
-def g() -> Callable[[], Callable[[], int]]:
-    def inner() -> Callable[[], int]:
-        return e
-    return inner
-
-def inner() -> str:
-    return 'inner: normal function'
-
-def first() -> str:
-    return 'first: normal function'
-
-def second() -> str:
-    return 'second: normal function'
-
-[file driver.py]
-from native import a, b, c, d, e, f, g, inner, first, second
-
-assert a()() == None
-assert b()()() == 'b.first.second: nested function'
-assert c(5.0)('c') == 'c!'
-assert d(4.0) == 'one?'
-assert e() == 0
-assert f() == 0
-assert g()()() == 0
-assert inner() == 'inner: normal function'
-assert first() == 'first: normal function'
-assert second() == 'second: normal function'
-
-[case testFreeVars]
-from typing import Callable
-def a(num: int) -> int:
-    def inner() -> int:
-        return num
-    return inner()
-
-def b() -> int:
-    num = 3
-    def inner() -> int:
-        return num
-    return inner()
-
-def c(num: int) -> int:
-    x = 1
-    y = 2
-    def inner() -> int:
-        nonlocal x
-        x = 3
-        return num + x + y
-    return inner()
-
-def d() -> int:
-    num = 3
-    def inner() -> int:
-        nonlocal num
-        num = 5
-        return num
-    return inner() + num
-
-def e() -> int:
-    num = 3
-    def inner() -> int:
-        num = 5
-        return num
-    return inner() + num
-
-def f() -> Callable[[], int]:
-    num = 1
-    def inner() -> int:
-        num += 1
-        return num
-    num += 1
-    return inner
-
-def g() -> int:
-    x = 1
-    def add_one() -> None:
-        x += 1
-    def add_two() -> None:
-        x += 2
-    add_one()
-    add_two()
-    return x
-
-[file driver.py]
-from native import a, b, c, d, e, f, g
-
-assert a(3) == 3
-assert b() == 3
-assert c(3) == 8
-assert d() == 10
-assert e() == 8
-assert f()() == 3
-assert g() == 4
-
-[case testSpecialNested]
-def a() -> int:
-    x = 1
-    def b() -> int:
-        nonlocal x
-        x += 1
-        def c() -> int:
-            return x
-        return c()
-    return b()
-
-[file driver.py]
-from native import a
-print(a())
-
-[out]
-2
-
-[case testNestedFunctionInsideIf]
-def f(flag: int) -> str:
-    if flag < 0:
-        def inner() -> str:
-            return 'f.inner: first definition'
-    elif flag > 0:
-        def inner() -> str:
-            return 'f.inner: second definition'
-    else:
-        def inner() -> str:
-            return 'f.inner: third definition'
-    return inner()
-
-[file driver.py]
-from native import f
-
-assert f(-1) == 'f.inner: first definition'
-assert f(1) == 'f.inner: second definition'
-assert f(0) == 'f.inner: third definition'
-
-[case testNestedFunctionInsideLoops]
-def f() -> int:
-    for i in range(5):
-        def inner(i: int) -> int:
-            return i
-        if i == 3:
-            return inner(i)
-    return 0
-
-def g() -> int:
-    i = 0
-    while i < 5:
-        def inner(i: int) -> int:
-            return i
-        if i == 3:
-            return inner(i)
-        i += 1
-    return 0
-
-[file driver.py]
-from native import f, g
-assert f() == 3
-assert g() == 3
-
-[case testNestedFunctionInsideClass]
-class A:
-    def __init__(self, x: int) -> None:
-        self.x = x
-
-    def outer(self, num: int) -> int:
-        y = 5
-        def inner() -> int:
-            return self.x + y + num
-        return inner()
-
-[file driver.py]
-from native import A
-
-assert A(3).outer(4) == 12
 
 [case testMultipleAssignment]
 from typing import Tuple, List, Any
