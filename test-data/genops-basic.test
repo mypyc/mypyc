@@ -1534,7 +1534,6 @@ L1:
     r3 = 0
     r4 = r2 != r3 :: int
     if r4 goto L2 else goto L3 :: bool
-    if x goto L2 else goto L3 :: bool
 L2:
     r5 = 1
     return r5
@@ -1552,7 +1551,6 @@ L0:
     r0 = None
     r1 = x is not r0
     if r1 goto L1 else goto L2 :: bool
-    if x goto L1 else goto L2 :: bool
 L1:
     r2 = 1
     return r2

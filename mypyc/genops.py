@@ -1403,6 +1403,7 @@ class IRBuilder(NodeVisitor[Value]):
                 branch.true = self.new_block()
                 remaining = self.coerce(value, value.type.value_type, value.line)
                 self.add_bool_branch(remaining, true, false)
+            return
         elif not is_same_type(value.type, bool_rprimitive):
             value = self.primitive_op(bool_op, [value], value.line)
         self.add(Branch(value, true, false, Branch.BOOL_EXPR))
