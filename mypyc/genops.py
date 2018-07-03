@@ -370,12 +370,15 @@ class IRBuilder(NodeVisitor[Value]):
             ir = self.mapper.type_to_ir[cls.info]
             self.classes.append(ir)
 
-        # Generate ops.
-        self.enter('<top level>')
         self.current_module_name = mypyfile.fullname()
+        self.enter('<top level>')
+
+        # Generate ops.
         for node in mypyfile.defs:
             node.accept(self)
-        self.add_func_end()
+        self.maybe_add_implicit_return()
+
+        # Generate special function representing module top level.
         blocks, env, ret_type = self.leave()
         sig = FuncSignature([], none_rprimitive)
         func_ir = FuncIR(TOP_LEVEL_NAME, None, self.module_name, sig, blocks, env)
@@ -543,8 +546,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.ret_types[-1] = sig.ret_type
 
         fdef.body.accept(self)
-
-        self.add_func_end()
+        self.maybe_add_implicit_return()
 
         blocks, env, ret_type = self.leave()
 
@@ -557,7 +559,7 @@ class IRBuilder(NodeVisitor[Value]):
 
         return func
 
-    def add_func_end(self) -> None:
+    def maybe_add_implicit_return(self) -> None:
         if (is_none_rprimitive(self.ret_types[-1]) or
                 is_object_rprimitive(self.ret_types[-1])):
             self.add_implicit_return()
@@ -649,7 +651,7 @@ class IRBuilder(NodeVisitor[Value]):
                     # function, then define a new local variable.
                     return self.environment.add_local_reg(lvalue.node, self.node_type(lvalue))
                 else:
-                    # Assignt to a previously defined variable.
+                    # Assign to a previously defined variable.
                     return self.environment.lookup(lvalue.node)
             elif lvalue.kind == GDEF:
                 globals_dict = self.load_globals_dict()
@@ -1714,7 +1716,7 @@ class IRBuilder(NodeVisitor[Value]):
 
             # Traverse through the environment classes and call GetAttr until the environment that
             # contains the symbol is reached.
-            func_index = index - 1
+            func_index = index - 1  # Adjust for no func_info for module top-level
             self.func_infos[func_index].env_class.attributes[symbol.name()] = rtype
             env = self.func_infos[-1].self_reg
             for i in range(func_index, len(self.func_infos)):
