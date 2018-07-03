@@ -423,15 +423,22 @@ class BasicBlock:
     as the final op in a block. Manually inserting error checking ops
     would be boring and error-prone.
 
+    BasicBlock's have an error_handler attribute that determines where
+    to jump if an error occurs. If none is specified, an error will
+    propagate up out of the function. This is compiled away by the
+    `exceptions` module.
+
     Block labels are used for pretty printing and emitting C code, and get
     filled in by those passes.
 
     Ops that may terminate the program aren't treated as exits.
+
     """
 
     def __init__(self, label: int = -1) -> None:
         self.label = label
         self.ops = []  # type: List[Op]
+        self.error_handler = None  # type: Optional[BasicBlock]
 
 
 ERR_NEVER = 0  # Never generates an exception
@@ -1437,11 +1444,21 @@ def format_blocks(blocks: List[BasicBlock], env: Environment) -> List[str]:
     for i, block in enumerate(blocks):
         block.label = i
 
+    handler_map = {}  # type: Dict[BasicBlock, List[BasicBlock]]
+    for b in blocks:
+        if b.error_handler:
+            handler_map.setdefault(b.error_handler, []).append(b)
+
     lines = []
     for i, block in enumerate(blocks):
         i == len(blocks) - 1
 
-        lines.append(env.format('%l:', block.label))
+        handler_msg = ''
+        if block in handler_map:
+            labels = sorted(env.format('%l', b.label) for b in handler_map[block])
+            handler_msg = ' (handler for {})'.format(', '.join(labels))
+
+        lines.append(env.format('%l:%s', block.label, handler_msg))
         ops = block.ops
         if (isinstance(ops[-1], Goto) and i + 1 < len(blocks) and
                 ops[-1].label == blocks[i + 1]):
