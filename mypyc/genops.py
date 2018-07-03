@@ -646,15 +646,15 @@ class IRBuilder(NodeVisitor[Value]):
                     # If the function neither is nested nor contains a nested function, then define a
                     # new local variable.
                     return self.environment.add_local_reg(lvalue.node, self.node_type(lvalue))
-                lvalue_reg = self.environment.lookup(lvalue.node)
+                else:
+                    # Assignt to a previously defined variable.
+                    return self.environment.lookup(lvalue.node)
             elif lvalue.kind == GDEF:
                 globals_dict = self.load_globals_dict()
                 name = self.load_static_unicode(lvalue.name)
                 return AssignmentTargetIndex(globals_dict, name)
             else:
                 assert False, lvalue.kind
-
-            return AssignmentTargetRegister(lvalue_reg)
         elif isinstance(lvalue, IndexExpr):
             # Indexed assignment x[y] = e
             base = self.accept(lvalue.base)
@@ -1712,9 +1712,10 @@ class IRBuilder(NodeVisitor[Value]):
 
             # Traverse through the environment classes and call GetAttr until the environment that
             # contains the symbol is reached.
-            self.func_infos[index].env_class.attributes[symbol.name()] = rtype
+            func_index = index - 1
+            self.func_infos[func_index].env_class.attributes[symbol.name()] = rtype
             env = self.func_infos[-1].self_reg
-            for i in range(index, len(self.func_infos)):
+            for i in range(func_index, len(self.func_infos)):
                 env = self.add(GetAttr(env, ENV_ATTR_NAME, symbol.line))
             return AssignmentTargetAttr(env, symbol.name())
 
@@ -1747,7 +1748,8 @@ class IRBuilder(NodeVisitor[Value]):
 
     def gen_func_ns(self) -> str:
         """Generates a namespace for a nested function using its outer function names."""
-        return '_'.join(env.name for env in self.environments if env.name)
+        return '_'.join(env.name for env in self.environments
+                        if env.name and env.name != '<top level>')
 
     def setup_callable_class(self, fdef: FuncDef, namespace: str) -> ClassIR:
         """Generates a callable class representing a nested function and sets up the 'self'
