@@ -13,7 +13,7 @@ from mypyc.emit import EmitterContext, Emitter, HeaderDeclaration
 from mypyc.emitfunc import generate_native_function, native_function_header
 from mypyc.emitclass import generate_class
 from mypyc.emitwrapper import generate_wrapper_function, wrapper_function_header
-from mypyc.ops import FuncIR, ClassIR, ModuleIR, is_empty_module_top_level
+from mypyc.ops import FuncIR, ClassIR, ModuleIR
 from mypyc.refcount import insert_ref_count_opcodes
 from mypyc.exceptions import insert_exception_handling
 
@@ -54,9 +54,9 @@ def compile_modules_to_c(sources: List[BuildSource], module_names: List[str], op
 
 
 def generate_function_declaration(fn: FuncIR, emitter: Emitter) -> None:
-    emitter.emit_lines(
-        '{};'.format(native_function_header(fn, emitter)),
-        '{};'.format(wrapper_function_header(fn, emitter.names)))
+    emitter.emit_line('{};'.format(native_function_header(fn, emitter)))
+    if fn.name != TOP_LEVEL_NAME:
+        emitter.emit_line('{};'.format(wrapper_function_header(fn, emitter.names)))
 
 
 def encode_as_c_string(s: str) -> Tuple[str, int]:
@@ -92,8 +92,6 @@ class ModuleGenerator:
 
         for module in module_irs:
             for fn in module.functions:
-                if is_empty_module_top_level(fn):
-                    continue
                 generate_function_declaration(fn, emitter)
 
         classes = []
@@ -112,13 +110,11 @@ class ModuleGenerator:
 
         for module_name, module in self.modules:
             for fn in module.functions:
-                if is_empty_module_top_level(fn):
-                    # Omit for simplicity (for now)
-                    continue
                 emitter.emit_line()
                 generate_native_function(fn, emitter, self.source_paths[module_name], module_name)
-                emitter.emit_line()
-                generate_wrapper_function(fn, emitter)
+                if fn.name != TOP_LEVEL_NAME:
+                    emitter.emit_line()
+                    generate_wrapper_function(fn, emitter)
 
         declarations = Emitter(self.context)
         declarations.emit_line('#include <Python.h>')
@@ -244,14 +240,17 @@ class ModuleGenerator:
         emitter.emit_line('}')
 
     def generate_top_level_call(self, module: ModuleIR, emitter: Emitter) -> None:
-        for fn in module.functions:
-            if fn.name == TOP_LEVEL_NAME and not is_empty_module_top_level(fn):
+        """Generate call to function representing module top level."""
+        # Optimization: we tend to put the top level last, so reverse iterate
+        for fn in reversed(module.functions):
+            if fn.name == TOP_LEVEL_NAME:
                 emitter.emit_lines(
                     'PyObject *result = {}();'.format(emitter.native_function_name(fn)),
                     'if (result == NULL)',
                     '    return NULL;',
                     'Py_DECREF(result);'
                 )
+                break
 
     def toposort_declarations(self) -> List[HeaderDeclaration]:
         """Topologically sort the declaration dict by dependencies.
