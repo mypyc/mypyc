@@ -967,13 +967,11 @@ class IRBuilder(NodeVisitor[Value]):
         return INVALID_VALUE
 
     def visit_unary_expr(self, expr: UnaryExpr) -> Value:
-        ereg = self.accept(expr.expr)
-        ops = unary_ops.get(expr.op, [])
-        target = self.matching_primitive_op(ops, [ereg], expr.line)
-        assert target, 'Unsupported unary operation: %s' % expr.op
-        return target
+        return self.unary_op(self.accept(expr.expr), expr.op, expr.line)
 
     def visit_op_expr(self, expr: OpExpr) -> Value:
+        if expr.op in ('and', 'or'):
+            return self.shortcircuit_expr(expr)
         return self.binary_op(self.accept(expr.left), self.accept(expr.right), expr.op, expr.line)
 
     def matching_primitive_op(self,
@@ -1015,6 +1013,15 @@ class IRBuilder(NodeVisitor[Value]):
         ops = binary_ops.get(expr_op, [])
         target = self.matching_primitive_op(ops, [lreg, rreg], line)
         assert target, 'Unsupported binary operation: %s' % expr_op
+        return target
+
+    def unary_op(self,
+                 lreg: Value,
+                 expr_op: str,
+                 line: int) -> Value:
+        ops = unary_ops.get(expr_op, [])
+        target = self.matching_primitive_op(ops, [lreg], line)
+        assert target, 'Unsupported unary operation: %s' % expr_op
         return target
 
     def visit_index_expr(self, expr: IndexExpr) -> Value:
@@ -1240,6 +1247,33 @@ class IRBuilder(NodeVisitor[Value]):
         target_type = self.type_to_rtype(expr.type)
         return self.coerce(src, target_type, expr.line)
 
+    def shortcircuit_expr(self, expr: OpExpr) -> Value:
+        expr_type = self.node_type(expr)
+        # Having actual Phi nodes would be really nice here!
+        target = self.alloc_temp(expr_type)
+        left_body, right_body, next = BasicBlock(), BasicBlock(), BasicBlock()
+        true_body, false_body = (
+            (right_body, left_body) if expr.op == 'and' else (left_body, right_body))
+
+        left_value = self.accept(expr.left)
+        branches = self.add_bool_branch(left_value)
+        self.set_branches(branches, True, true_body)
+        self.set_branches(branches, False, false_body)
+
+        self.activate_block(left_body)
+        left_coerced = self.coerce(left_value, expr_type, expr.line)
+        self.add(Assign(target, left_coerced))
+        self.add(Goto(next))
+
+        self.activate_block(right_body)
+        right_value = self.accept(expr.right)
+        right_coerced = self.coerce(right_value, expr_type, expr.line)
+        self.add(Assign(target, right_coerced))
+        self.add(Goto(next))
+
+        self.activate_block(next)
+        return target
+
     def visit_conditional_expr(self, expr: ConditionalExpr) -> Value:
         branches = self.process_conditional(expr.cond)
         expr_type = self.node_type(expr)
@@ -1318,9 +1352,7 @@ class IRBuilder(NodeVisitor[Value]):
     # Conditional expressions
 
     def process_conditional(self, e: Node) -> List[Branch]:
-        if isinstance(e, ComparisonExpr):
-            return self.process_comparison(e)
-        elif isinstance(e, OpExpr) and e.op in ['and', 'or']:
+        if isinstance(e, OpExpr) and e.op in ['and', 'or']:
             if e.op == 'and':
                 # Short circuit 'and' in a conditional context.
                 lbranches = self.process_conditional(e.left)
@@ -1345,40 +1377,29 @@ class IRBuilder(NodeVisitor[Value]):
             reg = self.accept(e)
             return self.add_bool_branch(reg)
 
-    def process_comparison(self, e: ComparisonExpr) -> List[Branch]:
-        # TODO: Verify operand types.
+    def visit_comparison_expr(self, e: ComparisonExpr) -> Value:
         assert len(e.operators) == 1, 'more than 1 operator not supported'
         op = e.operators[0]
+        negate = False
+        if op == 'is not':
+            op, negate = 'is', True
+        elif op == 'not in':
+            op, negate = 'in', True
 
         rhs = e.operands[1]
-        negate = False
-        if (op in ['is', 'is not'] and isinstance(rhs, NameExpr) and rhs.node
+        if (op == 'is' and isinstance(rhs, NameExpr) and rhs.node
                 and rhs.node.fullname() == 'builtins.None'):
             # Special case 'is None' checks.
             left = self.accept(e.operands[0])
-
             target = self.add(PrimitiveOp([left], is_none_op, e.line))
-            if op == 'is not':
-                negate = True
-
         else:
             left = self.accept(e.operands[0])
             right = self.accept(e.operands[1])
-            # Generate a bool value and branch based on it.
-            if op in ['in', 'not in']:
-                target = self.binary_op(left, right, 'in', e.line)
-            else:
-                target = self.binary_op(left, right, op, e.line)
-            target = self.coerce(target, bool_rprimitive, e.line)
-            if op == 'not in':
-                negate = True
+            target = self.binary_op(left, right, op, e.line)
 
-        branch = Branch(target, INVALID_LABEL, INVALID_LABEL, Branch.BOOL_EXPR)
-        branch.negated = negate
-        if op == 'not in':
-            branch.negated = True
-        self.add(branch)
-        return [branch]
+        if negate:
+            target = self.unary_op(target, 'not', e.line)
+        return target
 
     def set_branches(self, branches: List[Branch], condition: bool,
                      target: BasicBlock) -> None:
@@ -1462,9 +1483,6 @@ class IRBuilder(NodeVisitor[Value]):
         raise NotImplementedError
 
     def visit_bytes_expr(self, o: BytesExpr) -> Value:
-        raise NotImplementedError
-
-    def visit_comparison_expr(self, o: ComparisonExpr) -> Value:
         raise NotImplementedError
 
     def visit_complex_expr(self, o: ComplexExpr) -> Value:
@@ -1572,9 +1590,12 @@ class IRBuilder(NodeVisitor[Value]):
         self.blocks.append([])
         self.new_block()
 
+    def activate_block(self, block: BasicBlock) -> None:
+        self.blocks[-1].append(block)
+
     def new_block(self) -> BasicBlock:
         block = BasicBlock()
-        self.blocks[-1].append(block)
+        self.activate_block(block)
         return block
 
     def goto_new_block(self) -> BasicBlock:

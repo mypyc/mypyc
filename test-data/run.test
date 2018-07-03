@@ -503,6 +503,13 @@ def disidentity(x: Any, y: Any) -> Any:
         return True
     else:
         return False
+def not_eq_cond(a: Any, b: Any) -> bool:
+    if not (a == b):
+        return True
+    else:
+        return False
+def eq2(a: Any, b: Any) -> bool:
+    return a == b
 def slice1(x: Any) -> Any:
     return x[:]
 def slice2(x: Any, y: Any) -> Any:
@@ -557,6 +564,10 @@ assert identity(o1, o1)
 assert not identity(o1, o2)
 assert not disidentity(o1, o1)
 assert disidentity(o1, o2)
+assert eq2('xz', 'x' + 'z')
+assert not eq2('x', 'y')
+assert not not_eq_cond('xz', 'x' + 'z')
+assert not_eq_cond('x', 'y')
 
 [case testGenericMiscOps]
 from typing import Any
