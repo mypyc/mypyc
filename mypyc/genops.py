@@ -300,7 +300,8 @@ class FuncInfo(object):
                  env_class_val: Value = INVALID_VALUE,
                  self_reg: Value = INVALID_VALUE,
                  is_nested: bool = False,
-                 contains_nested: bool = False) -> None:
+                 contains_nested: bool = False,
+                 symbol_to_env: Dict[SymbolNode, Value] = {}) -> None:
         # Callable classes are ClassIR instances implementing the '__call__' method, used to
         # represent functions that are nested inside of other functions.
         self.callable_class = callable_class
@@ -315,6 +316,7 @@ class FuncInfo(object):
         self.self_reg = self_reg
         self.is_nested = is_nested
         self.contains_nested = contains_nested
+        self.symbol_to_env = symbol_to_env
         # TODO: add field for ret_type: RType = none_rprimitive
 
 
@@ -529,7 +531,7 @@ class IRBuilder(NodeVisitor[Value]):
         if func_info.is_nested:
             self.setup_callable_class(fdef, namespace)
 
-        self.add_args_to_environment(fdef.arguments, fdef.line, local=True)
+        self.load_environment_registers(fdef)
 
         if func_info.contains_nested:
             self.create_env_class(fdef, namespace)
@@ -1679,6 +1681,11 @@ class IRBuilder(NodeVisitor[Value]):
 
         Returns the AssignmentTarget associated with the SymbolNode, or None if it cannot be found.
         """
+        fn_info = self.func_infos[-1]
+
+        if symbol in fn_info.symbol_to_env:
+            return AssignmentTargetAttr(fn_info.symbol_to_env[symbol], symbol.name())
+
         symbol_found = False
         index = len(self.environments) - 2
         while not symbol_found and index >= 1:
@@ -1689,19 +1696,32 @@ class IRBuilder(NodeVisitor[Value]):
                 index -= 1
 
         if symbol_found:
-            # TODO: The below code will regenerate temporary references for the the same variables,
-            #       alone with the same environments for different variables. We should instead
-            #       only need to read the environment once per function.
+            # TODO: The below code will regenerate temporary references for the the same variables
+            #       by reloading them from the environment. We should only need to read a variable
+            #       once per function.
 
             # Traverse through the environment classes and call GetAttr until the environment that
             # contains the symbol is reached.
             self.func_infos[index].env_class.attributes[symbol.name()] = rtype
-            env = self.func_infos[-1].self_reg
+            env = fn_info.self_reg
             for i in range(index, len(self.func_infos)):
                 env = self.add(GetAttr(env, ENV_ATTR_NAME, symbol.line))
             return AssignmentTargetAttr(env, symbol.name())
 
         return None
+
+    def load_environment_registers(self, fdef: FuncDef) -> None:
+        self.add_args_to_environment(fdef.arguments, fdef.line, local=True)
+        fn_info = self.func_infos[-1]
+        if fn_info.is_nested:
+            # Pre-load all of the environment registers.
+            index = len(self.environments) - 2
+            env = fn_info.self_reg
+            while index >= 1:
+                env = self.add(GetAttr(env, ENV_ATTR_NAME, fdef.line))
+                for symbol in self.environments[index].symtable:
+                    self.func_infos[index].symbol_to_env[symbol] = env
+                index -= 1
 
     def add_args_to_environment(self, args: List[Argument], line: int, local: bool = True) -> None:
         if local:
@@ -1744,11 +1764,12 @@ class IRBuilder(NodeVisitor[Value]):
         Returns a newly constructed ClassIR representing the callable class for the nested
         function.
         """
+        fn_info = self.func_infos[-1]
         callable_class = self.gen_callable_class(fdef, namespace)
         self_target = self.environment.add_local_reg(Var('self'),
                                                      RInstance(callable_class),
                                                      is_arg=True)
-        self.func_infos[-1].self_reg = self.read_from_target(self_target, fdef.line)
+        fn_info.self_reg = self.read_from_target(self_target, fdef.line)
         return callable_class
 
     def gen_callable_class(self, fdef: FuncDef, namespace: str) -> ClassIR:
