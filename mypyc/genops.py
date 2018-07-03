@@ -635,16 +635,18 @@ class IRBuilder(NodeVisitor[Value]):
                             return target
 
                     if fn_info.contains_nested:
-                        # First, define a new variable in the current function's environment class.
-                        # Next, define a target that refers to the newly defined variable in that
-                        # environment class. Add the target to the table containing class environment
-                        # variables, as well as the current environment.
+                        # First, define a new variable in the current
+                        # function's environment class.  Next, define a target
+                        # that refers to the newly defined variable in that
+                        # environment class. Add the target to the table
+                        # containing class environment variables, as well as
+                        # the current environment.
                         fn_info.env_class.attributes[lvalue.node.name()] = self.node_type(lvalue)
                         target = AssignmentTargetAttr(fn_info.env_class_val, lvalue.node.name())
                         return self.environment.add_target(lvalue.node, target)
 
-                    # If the function neither is nested nor contains a nested function, then define a
-                    # new local variable.
+                    # If the function neither is nested nor contains a nested
+                    # function, then define a new local variable.
                     return self.environment.add_local_reg(lvalue.node, self.node_type(lvalue))
                 else:
                     # Assignt to a previously defined variable.
