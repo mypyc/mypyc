@@ -1430,6 +1430,52 @@ L3:
     r8 = cast(str, r7)
     return r8
 
+[case testNestedFunctionUnusedFreeVars]
+def f(num: int) -> None:
+    x = 1
+    y = 2
+    def g() -> None:
+        nonlocal y
+        y = 3
+    z = 3
+    
+[out]
+def g_f_obj.__call__(self):
+    self :: g_f_obj
+    r0 :: f__env
+    r1 :: int
+    r2 :: bool
+    r3 :: None
+L0:
+    r0 = self.__mypyc_env__
+    r1 = 3
+    r0.y = r1; r2 = is_error
+    r3 = None
+    return r3
+def f(num):
+    num :: int
+    r0 :: f__env
+    x, r1, r2 :: int
+    r3 :: bool
+    r4 :: g_f_obj
+    r5 :: bool
+    g :: object
+    z, r6 :: int
+    r7 :: None
+L0:
+    r0 = f__env()
+    r1 = 1
+    x = r1
+    r2 = 2
+    r0.y = r2; r3 = is_error
+    r4 = g_f_obj()
+    r4.__mypyc_env__ = r0; r5 = is_error
+    g = r4
+    r6 = 3
+    z = r6
+    r7 = None
+    return r7
+
 [case testObjectAsBoolean]
 from typing import List
 

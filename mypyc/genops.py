@@ -35,6 +35,7 @@ from mypy.types import (
     TypeType, FunctionLike,
 )
 from mypy.visitor import NodeVisitor
+from mypy.traverser import TraverserVisitor
 from mypy.subtypes import is_named_instance
 from mypy.checkmember import bind_self
 
@@ -89,7 +90,18 @@ def build_ir(modules: List[MypyFile],
     class_irs = []
 
     for module in modules:
-        builder = IRBuilder(types, mapper, module_names)
+        free_vars_traverser = FreeVarsVisitor()
+        module.accept(free_vars_traverser)
+        # print('free vars')
+        # for k, v in free_vars_traverser.free_vars.items():
+        #     print(k)
+        #     for i in v:
+        #         print(i)
+        # print('other thing')
+        # for k, v in free_vars_traverser.vars_to_func_defs.items():
+        #     print(k, v)
+
+        builder = IRBuilder(types, mapper, module_names, free_vars_traverser.free_vars)
         module.accept(builder)
         module_ir = ModuleIR(
             builder.imports,
@@ -301,12 +313,14 @@ def prepare_class_def(cdef: ClassDef, mapper: Mapper) -> None:
 class FuncInfo(object):
     """Contains information about functions as they are generated."""
     def __init__(self,
+                 fdef: FuncDef,
                  callable_class: ClassIR = INVALID_CLASS,
                  env_class: ClassIR = INVALID_CLASS,
                  env_class_val: Value = INVALID_VALUE,
                  self_reg: Value = INVALID_VALUE,
                  is_nested: bool = False,
                  contains_nested: bool = False) -> None:
+        self.fdef = fdef
         # Callable classes are ClassIR instances implementing the '__call__' method, used to
         # represent functions that are nested inside of other functions.
         self.callable_class = callable_class
@@ -324,11 +338,44 @@ class FuncInfo(object):
         # TODO: add field for ret_type: RType = none_rprimitive
 
 
+class FreeVarsVisitor(TraverserVisitor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.free_vars = {}  # type: Dict[FuncDef, Set[SymbolNode]]
+        self.vars_to_func_defs = {}  # type: Dict[SymbolNode, FuncDef]
+        self.func_defs = []  # type: List[FuncDef]
+
+    def visit_func_def(self, o: FuncDef) -> None:
+        self.func_defs.append(o)
+        self.visit_func(o)
+        self.func_defs.pop()
+
+    def visit_symbol_node(self, o: SymbolNode) -> None:
+        if not self.func_defs:
+            return
+
+        contains_fdef = o in self.vars_to_func_defs
+        maps_to_curr_fdef = self.vars_to_func_defs[o] == self.func_defs[-1]
+
+        if contains_fdef and not maps_to_curr_fdef:
+            fdef = self.vars_to_func_defs[o]
+            if fdef not in self.free_vars:
+                self.free_vars[fdef] = set()
+            self.free_vars[fdef].add(o)
+        else:
+            self.vars_to_func_defs[o] = self.func_defs[-1]
+
+    def visit_name_expr(self, o: NameExpr) -> None:
+        if isinstance(o.node, (Var, FuncDef)):
+            self.visit_symbol_node(o.node)
+
+
 class IRBuilder(NodeVisitor[Value]):
     def __init__(self,
                  types: Dict[Expression, Type],
                  mapper: Mapper,
-                 modules: List[str]) -> None:
+                 modules: List[str],
+                 free_vars: Dict[FuncDef, Set[SymbolNode]]) -> None:
         self.types = types
         self.environment = Environment()
         self.environments = [self.environment]
@@ -339,6 +386,8 @@ class IRBuilder(NodeVisitor[Value]):
         self.modules = set(modules)
         self.callable_class_names = set()  # type: Set[str]
 
+        self.free_vars = free_vars
+
         # This list operates similarly to a function call stack for nested functions. Whenever a
         # function definition begins to be generated, a FuncInfo instance is added to the stack,
         # and information about that function (e.g. whether it is nested, its environment class to
@@ -347,7 +396,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.func_infos = []  # type: List[FuncInfo]
 
         # This list operate as stack frames for loops. Each loop adds a new
-        # frame containing the continue and break targets for the loop.
+        # frame containing the cofntinue and break targets for the loop.
         self.loop_exits = []  # type: List[Tuple[BasicBlock, BasicBlock]]
 
         self.mapper = mapper
@@ -525,7 +574,7 @@ class IRBuilder(NodeVisitor[Value]):
         nested function, then we generate an environment class so that inner nested functions can
         access the environment of the given FuncDef.
         """
-        func_info = FuncInfo()
+        func_info = FuncInfo(fdef)
         self.func_infos.append(func_info)
 
         # If there is more than one environment in the environment stack, then we are visiting a
@@ -540,7 +589,7 @@ class IRBuilder(NodeVisitor[Value]):
         if func_info.is_nested:
             self.setup_callable_class(fdef, namespace)
 
-        self.add_args_to_environment(fdef.arguments, fdef.line, local=True)
+        self.add_args_to_environment(fdef, local=True)
 
         if func_info.contains_nested:
             self.create_env_class(fdef, namespace)
@@ -638,7 +687,8 @@ class IRBuilder(NodeVisitor[Value]):
                         if target:
                             return target
 
-                    if fn_info.contains_nested:
+                    if (fn_info.contains_nested and fn_info.fdef in self.free_vars and 
+                            lvalue.node in self.free_vars[fn_info.fdef]):
                         # First, define a new variable in the current
                         # function's environment class.  Next, define a target
                         # that refers to the newly defined variable in that
@@ -1691,16 +1741,22 @@ class IRBuilder(NodeVisitor[Value]):
 
         return None
 
-    def add_args_to_environment(self, args: List[Argument], line: int, local: bool = True) -> None:
+    def add_args_to_environment(self, fdef: FuncDef, local: bool = True) -> None:
         if local:
-            for arg in args:
+            for arg in fdef.arguments:
                 assert arg.variable.type, "Function argument missing type"
                 rtype = self.type_to_rtype(arg.variable.type)
                 self.environment.add_local_reg(arg.variable, rtype, is_arg=True)
         else:
             fn_info = self.func_infos[-1]
-            for arg in args:
+            for arg in fdef.arguments:
                 assert arg.variable.type, "Function argument missing type"
+
+                # If the variable is not a free variable, then we keep it in a local register.
+                # Otherwise, we load them into environment classes below.
+                if fdef not in self.free_vars or arg.variable not in self.free_vars[fdef]:
+                    continue
+
                 # First, define the variable name as an attribute of the environment class, and
                 # then construct a target for that attribute.
                 rtype = self.type_to_rtype(arg.variable.type)
@@ -1709,8 +1765,8 @@ class IRBuilder(NodeVisitor[Value]):
 
                 # Read the local definition of the variable, and set the corresponding attribute of
                 # the environment class' variable to be that value.
-                local_var = self.read_from_target(self.environment.lookup(arg.variable), line)
-                self.add(SetAttr(fn_info.env_class_val, arg.variable.name(), local_var, line))
+                local_var = self.read_from_target(self.environment.lookup(arg.variable), fdef.line)
+                self.add(SetAttr(fn_info.env_class_val, arg.variable.name(), local_var, fdef.line))
 
                 # Override the local definition of the variable to instead point at the variable in
                 # the environment class.
@@ -1830,7 +1886,7 @@ class IRBuilder(NodeVisitor[Value]):
         # Iterate through the function arguments and replace local definitions (using registers)
         # that were previously added to the environment with references to the function's
         # environment class.
-        self.add_args_to_environment(fdef.arguments, fdef.line, local=False)
+        self.add_args_to_environment(fdef, local=False)
 
     def gen_env_class(self, fdef: FuncDef, namespace: str) -> ClassIR:
         """Generates a class representing a function environment.
