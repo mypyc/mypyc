@@ -1018,34 +1018,6 @@ L0:
     r2 = cast(float, r1)
     return r2
 
-[case testBasicNestedFunction]
-from typing import Callable
-def a() -> Callable[[], object]:
-    def inner() -> object:
-        return None
-    return inner
-
-[out]
-def inner_a_obj.__call__(self):
-    self :: inner_a_obj
-    r0 :: a__env
-    r1 :: None
-L0:
-    r0 = self.__mypyc_env__
-    r1 = None
-    return r1
-def a():
-    r0 :: a__env
-    r1 :: inner_a_obj
-    r2 :: bool
-    inner :: object
-L0:
-    r0 = a__env()
-    r1 = inner_a_obj()
-    r1.__mypyc_env__ = r0; r2 = is_error
-    inner = r1
-    return inner
-
 [case testNestedFunctions]
 from typing import Callable
 
