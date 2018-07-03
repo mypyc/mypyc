@@ -2,7 +2,7 @@
 
 from typing import Optional, List
 
-from mypyc.common import REG_PREFIX, NATIVE_PREFIX, STATIC_PREFIX, TYPE_PREFIX
+from mypyc.common import REG_PREFIX, NATIVE_PREFIX, STATIC_PREFIX, TYPE_PREFIX, TOP_LEVEL_NAME
 from mypyc.emit import Emitter
 from mypyc.ops import (
     FuncIR, OpVisitor, Goto, Branch, Return, Assign, LoadInt, LoadErrorValue, GetAttr, SetAttr,
@@ -118,8 +118,8 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         if op.traceback_entry is not None:
             globals_static = self.emitter.static_name('globals', self.module_name)
             func_name = self.func_name
-            if func_name == '__top_level__':
-                func_name = '<module>'
+            if func_name == TOP_LEVEL_NAME:
+                func_name = '<module>'  # Like normal Python tracebacks
             self.emit_line('CPy_AddTraceback("%s", "%s", %d, %s);' % (self.source_path,
                                                                       func_name,
                                                                       op.line,

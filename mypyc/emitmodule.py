@@ -8,7 +8,7 @@ from mypy.errors import CompileError
 from mypy.options import Options
 
 from mypyc import genops
-from mypyc.common import PREFIX
+from mypyc.common import PREFIX, TOP_LEVEL_NAME
 from mypyc.emit import EmitterContext, Emitter, HeaderDeclaration
 from mypyc.emitfunc import generate_native_function, native_function_header
 from mypyc.emitclass import generate_class
@@ -139,7 +139,7 @@ class ModuleGenerator:
         module_prefix = emitter.names.private_name(module_name)
         emitter.emit_line('static PyMethodDef {}module_methods[] = {{'.format(module_prefix))
         for fn in module.functions:
-            if fn.class_name is not None or fn.name == '__top_level__':
+            if fn.class_name is not None or fn.name == TOP_LEVEL_NAME:
                 continue
             emitter.emit_line(
                 ('{{"{name}", (PyCFunction){prefix}{cname}, METH_VARARGS | METH_KEYWORDS, '
@@ -245,7 +245,7 @@ class ModuleGenerator:
 
     def generate_top_level_call(self, module: ModuleIR, emitter: Emitter) -> None:
         for fn in module.functions:
-            if fn.name == '__top_level__' and not is_empty_module_top_level(fn):
+            if fn.name == TOP_LEVEL_NAME and not is_empty_module_top_level(fn):
                 emitter.emit_lines(
                     'PyObject *result = {}();'.format(emitter.native_function_name(fn)),
                     'if (result == NULL)',

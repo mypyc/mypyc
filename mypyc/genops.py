@@ -37,7 +37,7 @@ from mypy.visitor import NodeVisitor
 from mypy.subtypes import is_named_instance
 from mypy.checkmember import bind_self
 
-from mypyc.common import ENV_ATTR_NAME, MAX_SHORT_INT
+from mypyc.common import ENV_ATTR_NAME, MAX_SHORT_INT, TOP_LEVEL_NAME
 from mypyc.ops import (
     BasicBlock, AssignmentTarget, AssignmentTargetRegister, AssignmentTargetIndex,
     AssignmentTargetAttr, AssignmentTargetTuple, Environment, Op, LoadInt, RType, Value, Register,
@@ -378,7 +378,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.add_func_end()
         blocks, env, ret_type = self.leave()
         sig = FuncSignature([], none_rprimitive)
-        func_ir = FuncIR('__top_level__', None, self.module_name, sig, blocks, env)
+        func_ir = FuncIR(TOP_LEVEL_NAME, None, self.module_name, sig, blocks, env)
         self.functions.append(func_ir)
 
         return INVALID_VALUE
