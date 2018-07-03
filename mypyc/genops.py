@@ -58,6 +58,7 @@ from mypyc.ops_misc import (
     py_call_op, py_method_call_op, fast_isinstance_op, bool_op, new_slice_op,
     is_none_op,
 )
+from mypyc.free_vars import FreeVarsVisitor
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
 
