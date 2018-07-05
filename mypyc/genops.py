@@ -1692,21 +1692,21 @@ class IRBuilder(NodeVisitor[Value]):
     def load_outer_env(self, base: Value, index: int, line: int) -> Value:
         """Loads the environment class for a given base into a register.
 
-        Additionally, iterates through all of the SymbolNodes in the symtable of the environment at
-        the given index, and maps those SymbolNodes to the register where the environment class was
-        loaded in a separate dictionary. This is done so that the register containing the
-        environment where any particular SymbolNode lives can be looked up easily.
+        Additionally, iterates through all of the SymbolNode and AssignmentTarget instances of the
+        environment at the given index's symtable, and adds those instances to the environment of
+        the current environment. This is done so that the current environment can access outer
+        environment variables without having to reload all of the environment registers.
 
         Returns the register where the environment class was loaded.
         """
         env = self.add(GetAttr(base, ENV_ATTR_NAME, line))
         assert isinstance(env.type, RInstance), '{} must be of type RInstance'.format(env)
 
-        # Iterate through all of the SymbolNode and AssignmentTarget instances in the symtable
         for symbol, target in self.environments[index].symtable.items():
             env.type.class_ir.attributes[symbol.name()] = target.type
             symbol_target = AssignmentTargetAttr(env, symbol.name())
             self.environment.add_target(symbol, symbol_target)
+
         return env
 
     def load_env_registers(self, fdef: FuncDef) -> None:
