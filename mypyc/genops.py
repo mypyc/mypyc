@@ -341,6 +341,8 @@ class IRBuilder(NodeVisitor[Value]):
         self.modules = set(modules)
         self.callable_class_names = set()  # type: Set[str]
 
+        self.lambda_counter = 0
+
         # This list operates similarly to a function call stack for nested functions. Whenever a
         # function definition begins to be generated, a FuncInfo instance is added to the stack,
         # and information about that function (e.g. whether it is nested, its environment class to
@@ -1476,6 +1478,13 @@ class IRBuilder(NodeVisitor[Value]):
 
         return INVALID_VALUE
 
+    def visit_lambda_expr(self, expr: LambdaExpr) -> Value:
+        name = '__mypyc_lambda_{}__'.format(self.lambda_counter)
+        fdef = FuncDef(name, expr.arguments, expr.body)
+        # fsig = FuncSignature(expr.arguments, expr.)
+        self.functions.append(self.gen_func_def(fdef, self.mapper.fdef_to_sig(fdef)))
+        return INVALID_VALUE
+
     def visit_pass_stmt(self, o: PassStmt) -> Value:
         return INVALID_VALUE
 
@@ -1526,9 +1535,6 @@ class IRBuilder(NodeVisitor[Value]):
         raise NotImplementedError
 
     def visit_generator_expr(self, o: GeneratorExpr) -> Value:
-        raise NotImplementedError
-
-    def visit_lambda_expr(self, o: LambdaExpr) -> Value:
         raise NotImplementedError
 
     def visit_list_comprehension(self, o: ListComprehension) -> Value:
