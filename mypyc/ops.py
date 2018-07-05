@@ -423,7 +423,7 @@ class BasicBlock:
     as the final op in a block. Manually inserting error checking ops
     would be boring and error-prone.
 
-    BasicBlock's have an error_handler attribute that determines where
+    BasicBlocks have an error_handler attribute that determines where
     to jump if an error occurs. If none is specified, an error will
     propagate up out of the function. This is compiled away by the
     `exceptions` module.
@@ -432,7 +432,6 @@ class BasicBlock:
     filled in by those passes.
 
     Ops that may terminate the program aren't treated as exits.
-
     """
 
     def __init__(self, label: int = -1) -> None:

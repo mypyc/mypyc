@@ -81,3 +81,71 @@ L5: (handler for L1, L2, L3, L4)
 L6:
     r13 = None
     return r13
+
+[case testTryExcept3]
+def g() -> None:
+    try:
+        print('a')
+        try:
+            object()
+        except:
+            print('b')
+    except:
+        print("weeee")
+[out]
+def g():
+    r0 :: str
+    r1 :: object
+    r2 :: str
+    r3, r4 :: object
+    r5 :: None
+    r6 :: object
+    r7 :: str
+    r8, r9 :: object
+    r10 :: bool
+    r11 :: str
+    r12 :: object
+    r13 :: str
+    r14, r15 :: object
+    r16 :: None
+    r17 :: bool
+    r18 :: str
+    r19 :: object
+    r20 :: str
+    r21, r22 :: object
+    r23, r24 :: None
+L0:
+L1:
+    r0 = unicode_0 :: static  ('a')
+    r1 = builtins.module :: static
+    r2 = unicode_1 :: static  ('print')
+    r3 = getattr r1, r2
+    r4 = py_call(r3, r0)
+    r5 = cast(None, r4)
+L2:
+    r6 = builtins.module :: static
+    r7 = unicode_2 :: static  ('object')
+    r8 = getattr r6, r7
+    r9 = py_call(r8)
+    goto L4
+L3: (handler for L2)
+    clear_exception(); r10 = 0
+    r11 = unicode_3 :: static  ('b')
+    r12 = builtins.module :: static
+    r13 = unicode_1 :: static  ('print')
+    r14 = getattr r12, r13
+    r15 = py_call(r14, r11)
+    r16 = cast(None, r15)
+L4:
+    goto L6
+L5: (handler for L1, L3, L4)
+    clear_exception(); r17 = 0
+    r18 = unicode_4 :: static  ('weeee')
+    r19 = builtins.module :: static
+    r20 = unicode_1 :: static  ('print')
+    r21 = getattr r19, r20
+    r22 = py_call(r21, r18)
+    r23 = cast(None, r22)
+L6:
+    r24 = None
+    return r24
