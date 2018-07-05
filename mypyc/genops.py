@@ -1689,7 +1689,7 @@ class IRBuilder(NodeVisitor[Value]):
     def box_expr(self, expr: Expression) -> Value:
         return self.box(self.accept(expr))
 
-    def load_outer_env(self, base: Value, index: int, line: int) -> Value:
+    def load_outer_env(self, base: Value, outer_env: Environment, line: int) -> Value:
         """Loads the environment class for a given base into a register.
 
         Additionally, iterates through all of the SymbolNode and AssignmentTarget instances of the
@@ -1702,7 +1702,7 @@ class IRBuilder(NodeVisitor[Value]):
         env = self.add(GetAttr(base, ENV_ATTR_NAME, line))
         assert isinstance(env.type, RInstance), '{} must be of type RInstance'.format(env)
 
-        for symbol, target in self.environments[index].symtable.items():
+        for symbol, target in outer_env.symtable.items():
             env.type.class_ir.attributes[symbol.name()] = target.type
             symbol_target = AssignmentTargetAttr(env, symbol.name())
             self.environment.add_target(symbol, symbol_target)
@@ -1720,14 +1720,20 @@ class IRBuilder(NodeVisitor[Value]):
 
         if self.fn_info.is_nested:
             index = len(self.environments) - 2
-            # The first outer environment gets saved in the FuncInfo's prev_env_reg field.
+
+            # Load the first outer environment. This one is special because it gets saved in the
+            # FuncInfo instance's prev_env_reg field.
             if index > 1:
+                outer_env = self.environments[index]
                 self.fn_info.prev_env_reg = self.load_outer_env(self.fn_info.self_reg,
-                                                                index, fdef.line)
+                                                                outer_env, fdef.line)
                 index -= 1
-            env = self.fn_info.prev_env_reg
+
+            # Load the remaining outer environments into registers.
+            env_reg = self.fn_info.prev_env_reg
             while index > 1:
-                env = self.load_outer_env(env, index, fdef.line)
+                outer_env = self.environments[index]
+                env_reg = self.load_outer_env(env_reg, outer_env, fdef.line)
                 index -= 1
 
     def add_args_to_env(self, args: List[Argument], line: int, local: bool = True) -> None:
