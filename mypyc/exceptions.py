@@ -13,9 +13,9 @@ from typing import Optional, List, Dict
 
 from mypyc.ops import (
     FuncIR, BasicBlock, LoadErrorValue, Return, Goto, Branch, ERR_NEVER, ERR_MAGIC,
-    ERR_FALSE, INVALID_VALUE, RegisterOp
+    ERR_FALSE, INVALID_VALUE, RegisterOp, PrimitiveOp,
 )
-
+from mypyc.ops_exc import reraise_exception_op
 
 def insert_exception_handling(ir: FuncIR) -> None:
     # Generate error block if any ops may raise an exception. If an op
@@ -86,7 +86,9 @@ def split_blocks_at_errors(blocks: List[BasicBlock],
                                 op=variant,
                                 line=op.line)
                 branch.negated = negated
-                branch.traceback_entry = (func, op.line)
+                # This is a gross hack to keep reraises out of the traceback.
+                if not (isinstance(op, PrimitiveOp) and op.desc is reraise_exception_op):
+                    branch.traceback_entry = (func, op.line)
                 partial_ops.add(branch)  # Only tweak true label of these
                 new_block.ops.append(branch)
                 if i0 == 0:
