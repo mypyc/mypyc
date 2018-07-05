@@ -90,18 +90,12 @@ def build_ir(modules: List[MypyFile],
     class_irs = []
 
     for module in modules:
-        free_vars_traverser = FreeVarsVisitor()
-        module.accept(free_vars_traverser)
-        # print('free vars')
-        # for k, v in free_vars_traverser.free_vars.items():
-        #     print(k)
-        #     for i in v:
-        #         print(i)
-        # print('other thing')
-        # for k, v in free_vars_traverser.vars_to_func_defs.items():
-        #     print(k, v)
+        # First pass to determine free symbols.
+        fsv = FreeSymbolsVisitor()
+        module.accept(fsv)
 
-        builder = IRBuilder(types, mapper, module_names, free_vars_traverser.free_vars)
+        # Second pass.
+        builder = IRBuilder(types, mapper, module_names, fsv.free_symbols)
         module.accept(builder)
         module_ir = ModuleIR(
             builder.imports,
@@ -340,36 +334,49 @@ class FuncInfo(object):
         # TODO: add field for ret_type: RType = none_rprimitive
 
 
-class FreeVarsVisitor(TraverserVisitor):
+class FreeSymbolsVisitor(TraverserVisitor):
+    """Class used to visit nested functions and determine free symbols."""
     def __init__(self) -> None:
         super().__init__()
-        self.free_vars = {}  # type: Dict[FuncDef, Set[SymbolNode]]
-        self.vars_to_func_defs = {}  # type: Dict[SymbolNode, FuncDef]
-        self.func_defs = []  # type: List[FuncDef]
+        self.free_symbols = {}  # type: Dict[FuncDef, Set[SymbolNode]]
+        self.symbols_to_fdefs = {}  # type: Dict[SymbolNode, FuncDef]
+        self.fdefs = []  # type: List[FuncDef]
 
-    def visit_func_def(self, o: FuncDef) -> None:
-        self.func_defs.append(o)
-        self.visit_func(o)
-        self.func_defs.pop()
+    def visit_func_def(self, fdef: FuncDef) -> None:
+        self.fdefs.append(fdef)
+        self.visit_func(fdef)
+        self.fdefs.pop()
 
-    def visit_symbol_node(self, o: SymbolNode) -> None:
-        if not self.func_defs:
+    def visit_var(self, var: Var) -> None:
+        self.visit_symbol_node(var)
+
+    def visit_symbol_node(self, symbol: SymbolNode) -> None:
+        if not self.fdefs:
+            # If the list of FuncDefs is empty, then we are not inside of a function and hence do
+            # not need to do anything regarding free variables.
             return
 
-        contains_fdef = o in self.vars_to_func_defs
-        maps_to_curr_fdef = self.vars_to_func_defs[o] == self.func_defs[-1]
-
-        if contains_fdef and not maps_to_curr_fdef:
-            fdef = self.vars_to_func_defs[o]
-            if fdef not in self.free_vars:
-                self.free_vars[fdef] = set()
-            self.free_vars[fdef].add(o)
+        if symbol in self.symbols_to_fdefs and self.symbols_to_fdefs[symbol] != self.fdefs[-1]:
+            # If the SymbolNode instance has already been visited before, and it was declared in a
+            # FuncDef outside of the current FuncDef that is being visted, then it is a free symbol
+            # because it is being visited again.
+            self.add_free_symbol(symbol)
         else:
-            self.vars_to_func_defs[o] = self.func_defs[-1]
+            # Otherwise, this is the first time the SymbolNode is being visited. We map the
+            # SymbolNode to the current FuncDef being visited to note where it was first visited.
+            self.symbols_to_fdefs[symbol] = self.fdefs[-1]
 
-    def visit_name_expr(self, o: NameExpr) -> None:
-        if isinstance(o.node, (Var, FuncDef)):
-            self.visit_symbol_node(o.node)
+    def visit_name_expr(self, expr: NameExpr) -> None:
+        if isinstance(expr.node, (Var, FuncDef)):
+            self.visit_symbol_node(expr.node)
+
+    def add_free_symbol(self, symbol: SymbolNode) -> None:
+        # Get the FuncDef instance where the free symbol was first declared, and map that FuncDef
+        # to the SymbolNode representing the free symbol.
+        fdef = self.symbols_to_fdefs[symbol]
+        if fdef not in self.free_symbols:
+            self.free_symbols[fdef] = set()
+        self.free_symbols[fdef].add(symbol)
 
 
 class IRBuilder(NodeVisitor[Value]):
@@ -377,7 +384,7 @@ class IRBuilder(NodeVisitor[Value]):
                  types: Dict[Expression, Type],
                  mapper: Mapper,
                  modules: List[str],
-                 free_vars: Dict[FuncDef, Set[SymbolNode]]) -> None:
+                 free_symbols: Dict[FuncDef, Set[SymbolNode]]) -> None:
         self.types = types
         self.environment = Environment()
         self.environments = [self.environment]
@@ -388,7 +395,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.modules = set(modules)
         self.callable_class_names = set()  # type: Set[str]
 
-        self.free_vars = free_vars
+        self.free_symbols = free_symbols
 
         # This list operates similarly to a function call stack for nested functions. Whenever a
         # function definition begins to be generated, a FuncInfo instance is added to the stack,
@@ -398,7 +405,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.func_infos = []  # type: List[FuncInfo]
 
         # This list operate as stack frames for loops. Each loop adds a new
-        # frame containing the cofntinue and break targets for the loop.
+        # frame containing the continue and break targets for the loop.
         self.loop_exits = []  # type: List[Tuple[BasicBlock, BasicBlock]]
         # Stack of except handler entry blocks
         self.error_handlers = [None]  # type: List[Optional[BasicBlock]]
@@ -691,8 +698,8 @@ class IRBuilder(NodeVisitor[Value]):
                         if target:
                             return target
 
-                    if (fn_info.contains_nested and fn_info.fdef in self.free_vars and 
-                            lvalue.node in self.free_vars[fn_info.fdef]):
+                    if (fn_info.contains_nested and fn_info.fdef in self.free_symbols and
+                            lvalue.node in self.free_symbols[fn_info.fdef]):
                         # First, define a new variable in the current
                         # function's environment class.  Next, define a target
                         # that refers to the newly defined variable in that
@@ -1780,9 +1787,9 @@ class IRBuilder(NodeVisitor[Value]):
             for arg in fdef.arguments:
                 assert arg.variable.type, "Function argument missing type"
 
-                # If the variable is not a free variable, then we keep it in a local register.
+                # If the variable is not a free symbol, then we keep it in a local register.
                 # Otherwise, we load them into environment classes below.
-                if fdef not in self.free_vars or arg.variable not in self.free_vars[fdef]:
+                if fdef not in self.free_symbols or arg.variable not in self.free_symbols[fdef]:
                     continue
 
                 # First, define the variable name as an attribute of the environment class, and
