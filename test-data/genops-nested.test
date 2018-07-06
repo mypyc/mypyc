@@ -419,7 +419,7 @@ def f(x: int, y: int) -> None:
 def __mypyc_lambda_0___f_obj.__call__(self, a, b):
     self :: __mypyc_lambda_0___f_obj
     a, b :: object
-    r0 :: <INVALID_CLASS>
+    r0 :: f__env
     r1 :: object
 L0:
     r0 = self.__mypyc_env__
@@ -427,18 +427,19 @@ L0:
     return r1
 def f(x, y):
     x, y :: int
+    r0 :: f__env
     s :: object
-    r0 :: __mypyc_lambda_0___f_obj
-    r1 :: bool
-    __mypyc_lambda_0__, r2, r3, r4 :: object
-    r5 :: None
+    r1 :: __mypyc_lambda_0___f_obj
+    r2 :: bool
+    r3, r4, r5 :: object
+    r6 :: None
 L0:
-    r0 = __mypyc_lambda_0___f_obj()
-    r0.__mypyc_env__ = <INVALID_VALUE>; r1 = is_error
-    __mypyc_lambda_0__ = r0
-    s = __mypyc_lambda_0__
-    r2 = box(int, x)
-    r3 = box(int, y)
-    r4 = py_call(s, r2, r3)
-    r5 = cast(None, r4)
-    return r5
+    r0 = f__env()
+    r1 = __mypyc_lambda_0___f_obj()
+    r1.__mypyc_env__ = r0; r2 = is_error
+    s = r1
+    r3 = box(int, x)
+    r4 = box(int, y)
+    r5 = py_call(s, r3, r4)
+    r6 = cast(None, r5)
+    return r6
