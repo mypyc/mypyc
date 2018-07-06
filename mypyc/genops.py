@@ -311,6 +311,7 @@ class FuncInfo(object):
                  callable_class: ClassIR = INVALID_CLASS,
                  env_class: ClassIR = INVALID_CLASS,
                  self_reg: Value = INVALID_VALUE,
+                 callable_reg: Value = INVALID_VALUE,
                  env_reg: Value = INVALID_VALUE,
                  prev_env_reg: Value = INVALID_VALUE,
                  is_nested: bool = False,
@@ -324,6 +325,7 @@ class FuncInfo(object):
         self.env_class = env_class
         # The register associated with the 'self' instance for function classes.
         self.self_reg = self_reg
+        self.callable_reg = callable_reg
         # Environment class registers are the local registers associated with instances of an
         # environment class, used for getting and setting attributes. env_reg is the register
         # associated with the current environment, and prev_env_reg is the self.__mypyc_env__ field
@@ -442,7 +444,7 @@ class IRBuilder(NodeVisitor[Value]):
         ir = self.mapper.type_to_ir[cdef.info]
         for name, node in sorted(cdef.info.names.items(), key=lambda x: x[0]):
             if isinstance(node.node, FuncDef):
-                func = self.gen_func_def(node.node, ir.method_sig(node.node.name()), cdef.name)
+                func = self.gen_func_def(node.node, ir.method_sig(node.node.name()), cdef.name).ir
                 self.functions.append(func)
                 ir.methods[func.name] = func
 
@@ -567,7 +569,7 @@ class IRBuilder(NodeVisitor[Value]):
         return False
 
     def gen_func_def(self, fdef: FuncDef, sig: FuncSignature,
-                     class_name: Optional[str] = None) -> FuncIR:
+                     class_name: Optional[str] = None) -> FuncInfo:
         """Generates and returns the FuncIR for a given FuncDef.
 
         If the given FuncDef is a nested function, then we generate a callable class representing
@@ -575,6 +577,8 @@ class IRBuilder(NodeVisitor[Value]):
         nested function, then we generate an environment class so that inner nested functions can
         access the environment of the given FuncDef.
         """
+        print('GENERATING FUNC FOR {}'.format(fdef.name()))
+
         self.fn_info = FuncInfo()
         self.fn_infos.append(self.fn_info)
 
@@ -606,14 +610,14 @@ class IRBuilder(NodeVisitor[Value]):
         blocks, env, ret_type = self.leave()
 
         if self.fn_info.is_nested:
-            func = self.finalize_callable_class(fdef, blocks, sig, env)
+            self.fn_info.ir = self.finalize_callable_class(fdef, blocks, sig, env)
         else:
-            func = FuncIR(fdef.name(), class_name, self.module_name, sig, blocks, env)
+            self.fn_info.ir = FuncIR(fdef.name(), class_name, self.module_name, sig, blocks, env)
 
-        self.fn_infos.pop()
+        fn_info = self.fn_infos.pop()
         self.fn_info = self.fn_infos[-1]
 
-        return func
+        return fn_info
 
     def maybe_add_implicit_return(self) -> None:
         if (is_none_rprimitive(self.ret_types[-1]) or
@@ -623,7 +627,7 @@ class IRBuilder(NodeVisitor[Value]):
             self.add_implicit_unreachable()
 
     def visit_func_def(self, fdef: FuncDef) -> Value:
-        self.functions.append(self.gen_func_def(fdef, self.mapper.fdef_to_sig(fdef)))
+        self.functions.append(self.gen_func_def(fdef, self.mapper.fdef_to_sig(fdef)).ir)
         return INVALID_VALUE
 
     def add_implicit_return(self) -> None:
@@ -1576,11 +1580,22 @@ class IRBuilder(NodeVisitor[Value]):
         return INVALID_VALUE
 
     def visit_lambda_expr(self, expr: LambdaExpr) -> Value:
+        typ = self.types[expr]
+        assert isinstance(typ, CallableType)
+
+        runtime_args = []
+        for arg, arg_type in zip(expr.arguments, typ.arg_types):
+            arg.variable.type = arg_type
+            runtime_args.append(RuntimeArg(arg.variable.name(), self.type_to_rtype(arg_type)))
+        ret_type = self.type_to_rtype(typ.ret_type)
+
         name = '__mypyc_lambda_{}__'.format(self.lambda_counter)
         fdef = FuncDef(name, expr.arguments, expr.body)
-        # fsig = FuncSignature(expr.arguments, expr.)
-        self.functions.append(self.gen_func_def(fdef, self.mapper.fdef_to_sig(fdef)))
-        return INVALID_VALUE
+        fsig = FuncSignature(runtime_args, ret_type)
+
+        fn_info = self.gen_func_def(fdef, fsig)
+        self.functions.append(fn_info.ir)
+        return fn_info.callable_reg
 
     def visit_pass_stmt(self, o: PassStmt) -> Value:
         return INVALID_VALUE
@@ -1959,7 +1974,8 @@ class IRBuilder(NodeVisitor[Value]):
             func_target = self.environment.add_local_reg(fdef, object_rprimitive)
 
         self.assign_to_target(func_target, func_reg, fdef.line)
-        return self.read_from_target(func_target, fdef.line)
+        self.fn_info.callable_reg = self.read_from_target(func_target, fdef.line)
+        return self.fn_info.callable_reg
 
     def setup_env_class(self, fdef: FuncDef, namespace: str) -> ClassIR:
         """Generates a class representing a function environment.
