@@ -17,6 +17,7 @@ from mypyc.ops import (
 )
 from mypyc.ops_exc import reraise_exception_op
 
+
 def insert_exception_handling(ir: FuncIR) -> None:
     # Generate error block if any ops may raise an exception. If an op
     # fails without its own error handler, we'll branch to this
