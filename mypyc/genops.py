@@ -1536,7 +1536,6 @@ class IRBuilder(NodeVisitor[Value]):
         def gen_return(self, builder: 'IRBuilder', value: Value) -> None:
             self.outer.gen_return(builder, value)
 
-
     def visit_try_stmt(self, t: TryStmt) -> Value:
         assert len(t.handlers) == 1 and t.types[0] is None and t.vars[0] is None, (
             "Only bare except supported")
