@@ -4,20 +4,27 @@ from mypy.nodes import FuncDef, FuncItem, LambdaExpr, NameExpr, SymbolNode, Var
 from mypy.traverser import TraverserVisitor
 
 
-class FreeSymbolsVisitor(TraverserVisitor):
+class FreeVariablesVisitor(TraverserVisitor):
     """Class used to visit nested functions and determine free symbols."""
     def __init__(self) -> None:
         super().__init__()
-        self.free_symbols = {}  # type: Dict[FuncItem, Set[SymbolNode]]
+        # Mapping from FuncItem instances to sets of variables. The FuncItem instances are where
+        # these variables were first declared, and these variables are free in any functions that
+        # are nested within the FuncItem from which they are mapped.
+        self.free_variables = {}  # type: Dict[FuncItem, Set[SymbolNode]]
+        # Intermediate data structure used to map SymbolNode instances to the FuncDef in which they
+        # were first visited.
         self.symbols_to_fitems = {}  # type: Dict[SymbolNode, FuncItem]
+        # Stack representing the function call stack.
         self.fitems = []  # type: List[FuncItem]
+
         self.encapsulating_fitems = set()  # type: Set[FuncItem]
         self.nested_fitems = set()  # type: Set[FuncItem]
 
     def visit_func_def(self, fdef: FuncDef) -> None:
-        # If there were already functions defined in the function stack, then note the previous
-        # FuncDef has containing a nested function and the current FuncDef as being a nested
-        # function.
+        # If there were already functions or lambda expressions defined in the function stack, then
+        # note the previous FuncItem has containing a nested function and the current FuncDef as
+        # being a nested function.
         if self.fitems:
             self.encapsulating_fitems.add(self.fitems[-1])
             self.nested_fitems.add(fdef)
@@ -39,13 +46,16 @@ class FreeSymbolsVisitor(TraverserVisitor):
             # If the SymbolNode instance has already been visited before, and it was declared in a
             # FuncDef outside of the current FuncDef that is being visted, then it is a free symbol
             # because it is being visited again.
-            self.add_free_symbol(symbol)
+            self.add_free_variable(symbol)
         else:
             # Otherwise, this is the first time the SymbolNode is being visited. We map the
             # SymbolNode to the current FuncDef being visited to note where it was first visited.
             self.symbols_to_fitems[symbol] = self.fitems[-1]
 
     def visit_lambda_expr(self, expr: LambdaExpr) -> None:
+        # If there were already functions or lambda expressions defined in the function stack, then
+        # note the previous FuncItem has containing a nested function and the current LambdaExpr as
+        # being a nested function.
         if self.fitems:
             self.encapsulating_fitems.add(self.fitems[-1])
             self.nested_fitems.add(expr)
@@ -58,10 +68,8 @@ class FreeSymbolsVisitor(TraverserVisitor):
         if isinstance(expr.node, (Var, FuncDef)):
             self.visit_symbol_node(expr.node)
 
-    def add_free_symbol(self, symbol: SymbolNode) -> None:
-        # Get the FuncDef instance where the free symbol was first declared, and map that FuncDef
+    def add_free_variable(self, symbol: SymbolNode) -> None:
+        # Get the FuncItem instance where the free symbol was first declared, and map that FuncItem
         # to the SymbolNode representing the free symbol.
-        fdef = self.symbols_to_fitems[symbol]
-        if fdef not in self.free_symbols:
-            self.free_symbols[fdef] = set()
-        self.free_symbols[fdef].add(symbol)
+        fitem = self.symbols_to_fitems[symbol]
+        self.free_variables.setdefault(fitem, set()).add(symbol)

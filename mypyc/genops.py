@@ -40,7 +40,7 @@ from mypy.subtypes import is_named_instance
 from mypy.checkmember import bind_self
 
 from mypyc.common import ENV_ATTR_NAME, MAX_SHORT_INT, TOP_LEVEL_NAME
-from mypyc.freesymbols import FreeSymbolsVisitor
+from mypyc.freesymbols import FreeVariablesVisitor
 from mypyc.ops import (
     BasicBlock, AssignmentTarget, AssignmentTargetRegister, AssignmentTargetIndex,
     AssignmentTargetAttr, AssignmentTargetTuple, Environment, Op, LoadInt, RType, Value, Register,
@@ -96,11 +96,11 @@ def build_ir(modules: List[MypyFile],
 
     for module in modules:
         # First pass to determine free symbols.
-        fsv = FreeSymbolsVisitor()
-        module.accept(fsv)
+        fvv = FreeVariablesVisitor()
+        module.accept(fvv)
 
         # Second pass.
-        builder = IRBuilder(types, mapper, module_names, fsv)
+        builder = IRBuilder(types, mapper, module_names, fvv)
         module.accept(builder)
         module_ir = ModuleIR(
             builder.imports,
@@ -325,8 +325,8 @@ class FuncInfo(object):
         # generated for functions that contain nested functions.
         self.env_class = INVALID_CLASS
         # The register associated with the 'self' instance for function classes.
-        self.callable_reg = INVALID_VALUE  # type: Value
         self.self_reg = INVALID_VALUE  # type: Value
+        self.callable_reg = INVALID_VALUE  # type: Value
         # Environment class registers are the local registers associated with instances of an
         # environment class, used for getting and setting attributes. env_reg is the register
         # associated with the current environment, and prev_env_reg is the self.__mypyc_env__ field
@@ -378,7 +378,7 @@ class IRBuilder(NodeVisitor[Value]):
                  types: Dict[Expression, Type],
                  mapper: Mapper,
                  modules: List[str],
-                 fsv: FreeSymbolsVisitor) -> None:
+                 fvv: FreeVariablesVisitor) -> None:
         self.types = types
         self.environment = Environment()
         self.environments = [self.environment]
@@ -391,9 +391,9 @@ class IRBuilder(NodeVisitor[Value]):
 
         self.lambda_counter = 0
 
-        self.free_symbols = fsv.free_symbols
-        self.encapsulating_fitems = fsv.encapsulating_fitems
-        self.nested_fitems = fsv.nested_fitems
+        self.free_variables = fvv.free_variables
+        self.encapsulating_fitems = fvv.encapsulating_fitems
+        self.nested_fitems = fvv.nested_fitems
 
         # This list operates similarly to a function call stack for nested functions. Whenever a
         # function definition begins to be generated, a FuncInfo instance is added to the stack,
@@ -688,7 +688,7 @@ class IRBuilder(NodeVisitor[Value]):
                     # Next, define a target that refers to the newly defined variable in that
                     # environment class. Add the target to the table containing class environment
                     # variables, as well as the current environment.
-                    if self.fn_info.contains_nested and self.is_free_symbol(symbol):
+                    if self.fn_info.contains_nested and self.is_free_variable(symbol):
                         self.fn_info.env_class.attributes[symbol.name()] = self.node_type(lvalue)
                         target = AssignmentTargetAttr(self.fn_info.env_reg, symbol.name())
                         return self.environment.add_target(symbol, target)
@@ -890,11 +890,6 @@ class IRBuilder(NodeVisitor[Value]):
             # TODO: Check argument counts and kinds; check the lvalue
             end = s.expr.args[0]
             end_reg = self.accept(end)
-
-            # TODO: Currently, if the for-statement contains nested functions, we add the indices
-            #       of what we're iterating to the environment class. We shouldn't do this, since
-            #       these indices are used internally to traverse the data structure and not
-            #       actually seen by the user. That is, they should be stored in registers instead.
 
             # Initialize loop index to 0.
             index_target = self.assign(s.index, IntExpr(0))
@@ -1115,9 +1110,9 @@ class IRBuilder(NodeVisitor[Value]):
     def is_native_module_ref_expr(self, expr: RefExpr) -> bool:
         return self.is_native_ref_expr(expr) and expr.kind == GDEF
 
-    def is_free_symbol(self, symbol: SymbolNode) -> bool:
-        return (self.fn_info.fitem in self.free_symbols and
-                symbol in self.free_symbols[self.fn_info.fitem])
+    def is_free_variable(self, symbol: SymbolNode) -> bool:
+        fitem = self.fn_info.fitem
+        return fitem in self.free_variables and symbol in self.free_variables[fitem]
 
     def visit_name_expr(self, expr: NameExpr) -> Value:
         assert expr.node, "RefExpr not resolved"
@@ -1865,18 +1860,19 @@ class IRBuilder(NodeVisitor[Value]):
                 index -= 1
 
     def add_args_to_env(self, local: bool = True) -> None:
+        fitem = self.fn_info.fitem
         if local:
-            for arg in self.fn_info.fitem.arguments:
+            for arg in fitem.arguments:
                 assert arg.variable.type, "Function argument missing type"
                 rtype = self.type_to_rtype(arg.variable.type)
                 self.environment.add_local_reg(arg.variable, rtype, is_arg=True)
         else:
-            for arg in self.fn_info.fitem.arguments:
+            for arg in fitem.arguments:
                 assert arg.variable.type, "Function argument missing type"
 
                 # If the variable is not a free symbol, then we keep it in a local register.
                 # Otherwise, we load them into environment classes below.
-                if not self.is_free_symbol(arg.variable):
+                if not self.is_free_variable(arg.variable):
                     continue
 
                 # First, define the variable name as an attribute of the environment class, and
@@ -1887,10 +1883,8 @@ class IRBuilder(NodeVisitor[Value]):
 
                 # Read the local definition of the variable, and set the corresponding attribute of
                 # the environment class' variable to be that value.
-                local_var = self.read_from_target(self.environment.lookup(arg.variable),
-                                                  self.fn_info.fitem.line)
-                self.add(SetAttr(self.fn_info.env_reg, arg.variable.name(), local_var,
-                                 self.fn_info.fitem.line))
+                var = self.read_from_target(self.environment.lookup(arg.variable), fitem.line)
+                self.add(SetAttr(self.fn_info.env_reg, arg.variable.name(), var, fitem.line))
 
                 # Override the local definition of the variable to instead point at the variable in
                 # the environment class.
@@ -1976,34 +1970,35 @@ class IRBuilder(NodeVisitor[Value]):
 
     def instantiate_callable_class(self) -> Value:
         """Assigns a callable class to a register named after the given function definition."""
+        fitem = self.fn_info.fitem
+
         fullname = '{}.{}'.format(self.module_name, self.fn_info.callable_class.name)
         func_reg = self.add(Call(RInstance(self.fn_info.callable_class), fullname, [],
-                            self.fn_info.fitem.line))
+                                 fitem.line))
 
         # Set the callable class' environment attribute to point at the environment class
         # defined in the callable class' immediate outer scope.
-        self.add(SetAttr(func_reg, ENV_ATTR_NAME, self.fn_infos[-2].env_reg,
-                         self.fn_info.fitem.line))
+        self.add(SetAttr(func_reg, ENV_ATTR_NAME, self.fn_infos[-2].env_reg, fitem.line))
 
         # If we have a lambda expression, then just return the register where it is stored.
-        if isinstance(self.fn_info.fitem, LambdaExpr):
+        if isinstance(fitem, LambdaExpr):
             self.fn_info.callable_reg = func_reg
             return self.fn_info.callable_reg
 
         # If it is not a lambda expression, then it must be a function definition.
-        assert isinstance(self.fn_info.fitem, FuncDef)
-        if self.fn_info.fitem.original_def:
+        assert isinstance(fitem, FuncDef)
+        if fitem.original_def:
             # Get the target associated with the previously defined FuncDef.
-            func_target = self.environment.lookup(self.fn_info.fitem.original_def)
+            func_target = self.environment.lookup(fitem.original_def)
         else:
             # The return type is 'object' instead of an RInstance of the callable class because
             # differently defined functions with the same name and signature in conditional blocks
             # will generate different callable classes, so the callable class that gets
             # instantiated must be generic.
-            func_target = self.environment.add_local_reg(self.fn_info.fitem, object_rprimitive)
+            func_target = self.environment.add_local_reg(fitem, object_rprimitive)
 
-        self.assign_to_target(func_target, func_reg, self.fn_info.fitem.line)
-        self.fn_info.callable_reg = self.read_from_target(func_target, self.fn_info.fitem.line)
+        self.assign_to_target(func_target, func_reg, fitem.line)
+        self.fn_info.callable_reg = self.read_from_target(func_target, fitem.line)
         return self.fn_info.callable_reg
 
     def setup_env_class(self) -> ClassIR:
