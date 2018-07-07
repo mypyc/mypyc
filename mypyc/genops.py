@@ -14,6 +14,7 @@ It would be translated to something that conceptually looks like this:
    return r3
 """
 from typing import Dict, List, Tuple, Optional, Union, Sequence, Set
+from abc import abstractmethod
 
 from mypy.nodes import (
     Node, MypyFile, SymbolNode, Statement, FuncItem, FuncDef, ReturnStmt, AssignmentStmt, OpExpr,
@@ -56,9 +57,13 @@ from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, nam
 from mypyc.ops_list import list_len_op, list_get_item_op, list_set_item_op, new_list_op
 from mypyc.ops_dict import new_dict_op, dict_get_item_op
 from mypyc.ops_misc import (
-    none_op, iter_op, next_op, no_err_occurred_op, py_getattr_op, py_setattr_op,
+    none_op, iter_op, next_op, py_getattr_op, py_setattr_op,
     py_call_op, py_method_call_op, fast_isinstance_op, bool_op, new_slice_op,
-    is_none_op, type_op, raise_exception_op, clear_exception_op,
+    is_none_op, type_op,
+)
+from mypyc.ops_exc import (
+    no_err_occurred_op, raise_exception_op, reraise_exception_op, clear_exception_op,
+    error_catch_op, clear_exc_info_op,
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
@@ -333,6 +338,38 @@ class FuncInfo(object):
         # TODO: add field for ret_type: RType = none_rprimitive
 
 
+class NonlocalControl:
+    """Represents a stack frame of constructs that modify nonlocal control flow.
+
+    The nonlocal control flow constructs are break, continue, and
+    return, and their behavior is modified by a number of other
+    constructs.  The most obvious is loop, which override where break
+    and continue jump to, but also `except` (which needs to clear
+    exc_info when left) and (eventually) finally blocks (which need to
+    ensure that the finally block is always executed when leaving the
+    try/except blocks).
+    """
+    @abstractmethod
+    def gen_break(self, builder: 'IRBuilder') -> None: pass
+
+    @abstractmethod
+    def gen_continue(self, builder: 'IRBuilder') -> None: pass
+
+    @abstractmethod
+    def gen_return(self, builder: 'IRBuilder', value: Value) -> None: pass
+
+
+class BaseNonlocalControl(NonlocalControl):
+    def gen_break(self, builder: 'IRBuilder') -> None:
+        assert False, "break outside of loop"
+
+    def gen_continue(self, builder: 'IRBuilder') -> None:
+        assert False, "continue outside of loop"
+
+    def gen_return(self, builder: 'IRBuilder', value: Value) -> None:
+        builder.add(Return(value))
+
+
 class IRBuilder(NodeVisitor[Value]):
     def __init__(self,
                  types: Dict[Expression, Type],
@@ -359,9 +396,9 @@ class IRBuilder(NodeVisitor[Value]):
         self.fn_info = FuncInfo(INVALID_FUNC_DEF, '')
         self.fn_infos = [self.fn_info]  # type: List[FuncInfo]
 
-        # This list operate as stack frames for loops. Each loop adds a new
-        # frame containing the continue and break targets for the loop.
-        self.loop_exits = []  # type: List[Tuple[BasicBlock, BasicBlock]]
+        # This list operates as a stack of constructs that modify the
+        # behavior of nonlocal control flow constructs.
+        self.nonlocal_control = []  # type: List[NonlocalControl]
         # Stack of except handler entry blocks
         self.error_handlers = [None]  # type: List[Optional[BasicBlock]]
 
@@ -614,7 +651,7 @@ class IRBuilder(NodeVisitor[Value]):
             retval = self.coerce(retval, self.ret_types[-1], stmt.line)
         else:
             retval = self.add(PrimitiveOp([], none_op, line=-1))
-        self.add(Return(retval))
+        self.nonlocal_control[-1].gen_return(self, retval)
         return INVALID_VALUE
 
     def visit_assignment_stmt(self, stmt: AssignmentStmt) -> Value:
@@ -800,11 +837,30 @@ class IRBuilder(NodeVisitor[Value]):
         if not self.blocks[-1][-1].ops or not isinstance(self.blocks[-1][-1].ops[-1], Return):
             self.add(Goto(target))
 
+    class LoopNonlocalControl(NonlocalControl):
+        def __init__(self, outer: NonlocalControl,
+                     continue_block: BasicBlock, break_block: BasicBlock) -> None:
+            self.outer = outer
+            self.continue_block = continue_block
+            self.break_block = break_block
+
+        def gen_break(self, builder: 'IRBuilder') -> None:
+            builder.add(Goto(self.break_block))
+            builder.new_block()
+
+        def gen_continue(self, builder: 'IRBuilder') -> None:
+            builder.add(Goto(self.continue_block))
+            builder.new_block()
+
+        def gen_return(self, builder: 'IRBuilder', value: Value) -> None:
+            self.outer.gen_return(builder, value)
+
     def push_loop_stack(self, continue_block: BasicBlock, break_block: BasicBlock) -> None:
-        self.loop_exits.append((continue_block, break_block))
+        self.nonlocal_control.append(
+            IRBuilder.LoopNonlocalControl(self.nonlocal_control[-1], continue_block, break_block))
 
     def pop_loop_stack(self) -> None:
-        self.loop_exits.pop()
+        self.nonlocal_control.pop()
 
     def visit_while_stmt(self, s: WhileStmt) -> Value:
         body, next, top = BasicBlock(), BasicBlock(), BasicBlock()
@@ -954,13 +1010,11 @@ class IRBuilder(NodeVisitor[Value]):
             return INVALID_VALUE
 
     def visit_break_stmt(self, node: BreakStmt) -> Value:
-        self.add(Goto(self.loop_exits[-1][1]))
-        self.new_block()
+        self.nonlocal_control[-1].gen_break(self)
         return INVALID_VALUE
 
     def visit_continue_stmt(self, node: ContinueStmt) -> Value:
-        self.add(Goto(self.loop_exits[-1][0]))
-        self.new_block()
+        self.nonlocal_control[-1].gen_continue(self)
         return INVALID_VALUE
 
     def visit_unary_expr(self, expr: UnaryExpr) -> Value:
@@ -1088,7 +1142,7 @@ class IRBuilder(NodeVisitor[Value]):
 
     def visit_member_expr(self, expr: MemberExpr) -> Value:
         if self.is_module_member_expr(expr):
-            return self.load_static_module_attr(expr)
+            return self.load_module_attr(expr)
         else:
             obj = self.accept(expr.expr)
             if isinstance(obj.type, RInstance):
@@ -1435,6 +1489,11 @@ class IRBuilder(NodeVisitor[Value]):
         return self.primitive_op(new_slice_op, args, expr.line)
 
     def visit_raise_stmt(self, s: RaiseStmt) -> Value:
+        if s.expr is None:
+            self.primitive_op(reraise_exception_op, [], s.line)
+            self.add(Unreachable())
+            return INVALID_VALUE
+
         assert s.expr is not None, "re-raise not implemented yet"
         assert s.from_expr is None, "from_expr not implemented"
 
@@ -1456,6 +1515,31 @@ class IRBuilder(NodeVisitor[Value]):
         self.add(Unreachable())
         return INVALID_VALUE
 
+    class ExceptNonlocalControl(NonlocalControl):
+        """Nonlocal control for except blocks.
+
+        Just makes sure that sys.exc_info always gets cleared when we leave.
+        This is super annoying.
+        """
+        def __init__(self, outer: NonlocalControl, line: int) -> None:
+            self.outer = outer
+            self.line = line
+
+        def gen_cleanup(self, builder: 'IRBuilder') -> None:
+            # TODO: skip generating the clear if we just generated one
+            builder.primitive_op(clear_exc_info_op, [], self.line)
+
+        def gen_break(self, builder: 'IRBuilder') -> None:
+            self.gen_cleanup(builder)
+            self.outer.gen_break(builder)
+
+        def gen_continue(self, builder: 'IRBuilder') -> None:
+            self.gen_cleanup(builder)
+            self.outer.gen_continue(builder)
+
+        def gen_return(self, builder: 'IRBuilder', value: Value) -> None:
+            self.outer.gen_return(builder, value)
+
     def visit_try_stmt(self, t: TryStmt) -> Value:
         assert len(t.handlers) == 1 and t.types[0] is None and t.vars[0] is None, (
             "Only bare except supported")
@@ -1464,16 +1548,24 @@ class IRBuilder(NodeVisitor[Value]):
 
         except_entry, exit_block = BasicBlock(), BasicBlock()
 
+        # Compile the try block with an error handler
         self.error_handlers.append(except_entry)
         self.goto_and_activate(BasicBlock())
         self.accept(t.body)
         self.add(Goto(exit_block))
         self.error_handlers.pop()
 
+        # Compile the except block with the nonlocal control flow overridden to clear exc_info
         self.activate_block(except_entry)
         except_body = t.handlers[0]
-        self.primitive_op(clear_exception_op, [], except_body.line)
+        self.primitive_op(error_catch_op, [], except_body.line)  # TODO: use this value
+
+        self.nonlocal_control.append(
+            IRBuilder.ExceptNonlocalControl(self.nonlocal_control[-1], except_body.line))
         self.accept(except_body)
+        self.nonlocal_control.pop()
+
+        self.primitive_op(clear_exc_info_op, [], except_body.line)
         self.add(Goto(exit_block))
 
         self.activate_block(exit_block)
@@ -1485,6 +1577,28 @@ class IRBuilder(NodeVisitor[Value]):
 
     def visit_global_decl(self, o: GlobalDecl) -> Value:
         # Pure declaration -- no runtime effect
+        return INVALID_VALUE
+
+    def visit_assert_stmt(self, a: AssertStmt) -> Value:
+        cond = self.accept(a.expr)
+        ok_block, error_block = BasicBlock(), BasicBlock()
+        self.add_bool_branch(cond, ok_block, error_block)
+        self.activate_block(error_block)
+        if a.msg is None:
+            # Special case (for simpler generated code)
+            self.add(RaiseStandardError(RaiseStandardError.ASSERTION_ERROR, None, a.line))
+        elif isinstance(a.msg, StrExpr):
+            # Another special case
+            self.add(RaiseStandardError(RaiseStandardError.ASSERTION_ERROR, a.msg.value,
+                                        a.line))
+        else:
+            # The general case -- explicitly construct an exception instance
+            message = self.accept(a.msg)
+            exc_type = self.load_module_attr_by_fullname('builtins.AssertionError', a.line)
+            exc = self.primitive_op(py_call_op, [exc_type, message], a.line)
+            self.primitive_op(raise_exception_op, [exc_type, exc], a.line)
+        self.add(Unreachable())
+        self.activate_block(ok_block)
         return INVALID_VALUE
 
     def visit_cast_expr(self, o: CastExpr) -> Value:
@@ -1500,9 +1614,6 @@ class IRBuilder(NodeVisitor[Value]):
         raise NotImplementedError
 
     def visit_backquote_expr(self, o: BackquoteExpr) -> Value:
-        raise NotImplementedError
-
-    def visit_assert_stmt(self, o: AssertStmt) -> Value:
         raise NotImplementedError
 
     def visit_bytes_expr(self, o: BytesExpr) -> Value:
@@ -1602,6 +1713,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.environments.append(self.environment)
         self.ret_types.append(none_rprimitive)
         self.error_handlers.append(None)
+        self.nonlocal_control.append(BaseNonlocalControl())
         self.blocks.append([])
         self.new_block()
 
@@ -1628,6 +1740,7 @@ class IRBuilder(NodeVisitor[Value]):
         env = self.environments.pop()
         ret_type = self.ret_types.pop()
         self.error_handlers.pop()
+        self.nonlocal_control.pop()
         self.environment = self.environments[-1]
         return blocks, env, ret_type
 
@@ -1925,7 +2038,7 @@ class IRBuilder(NodeVisitor[Value]):
         """
         # If the global is from 'builtins', turn it into a module attr load instead
         if self.is_builtin_ref_expr(expr):
-            return self.load_static_module_attr(expr)
+            return self.load_module_attr(expr)
         if self.is_native_module_ref_expr(expr) and isinstance(expr.node, TypeInfo):
             assert expr.fullname is not None
             return self.load_native_type_object(expr.fullname)
@@ -1955,12 +2068,14 @@ class IRBuilder(NodeVisitor[Value]):
         static_symbol = self.mapper.literal_static_name(value)
         return self.add(LoadStatic(str_rprimitive, static_symbol, ann=value))
 
-    def load_static_module_attr(self, expr: RefExpr) -> Value:
+    def load_module_attr(self, expr: RefExpr) -> Value:
         assert expr.node, "RefExpr not resolved"
-        module = '.'.join(expr.node.fullname().split('.')[:-1])
-        name = expr.node.fullname().split('.')[-1]
+        return self.load_module_attr_by_fullname(expr.node.fullname(), expr.line)
+
+    def load_module_attr_by_fullname(self, fullname: str, line: int) -> Value:
+        module, _, name = fullname.rpartition('.')
         left = self.add(LoadStatic(object_rprimitive, 'module', module))
-        return self.py_get_attr(left, name, expr.line)
+        return self.py_get_attr(left, name, line)
 
     def load_native_type_object(self, fullname: str) -> Value:
         module, name = fullname.rsplit('.', 1)

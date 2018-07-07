@@ -193,6 +193,9 @@ class RTuple(RType):
         return hash((self.name, self.types))
 
 
+exc_rtuple = RTuple([object_rprimitive, object_rprimitive, object_rprimitive])
+
+
 class RInstance(RType):
     """Instance of user-defined class (compiled to C extension class)."""
 
@@ -1123,6 +1126,7 @@ class RaiseStandardError(RegisterOp):
     error_kind = ERR_FALSE
 
     VALUE_ERROR = 'ValueError'
+    ASSERTION_ERROR = 'AssertionError'
 
     def __init__(self, class_name: str, message: Optional[str], line: int) -> None:
         super().__init__(line)
