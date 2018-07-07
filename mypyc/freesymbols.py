@@ -4,12 +4,18 @@ from mypy.nodes import FuncDef, NameExpr, SymbolNode, Var
 from mypy.traverser import TraverserVisitor
 
 
-class FreeSymbolsVisitor(TraverserVisitor):
+class FreeVariablesVisitor(TraverserVisitor):
     """Class used to visit nested functions and determine free symbols."""
     def __init__(self) -> None:
         super().__init__()
-        self.free_symbols = {}  # type: Dict[FuncDef, Set[SymbolNode]]
+        # Mapping from FuncDef instances to sets of variables. The FuncDef instances are where
+        # these variables were first declared, and these variables are free in any functions that
+        # are nested within the FuncDef from which they are mapped.
+        self.free_variables = {}  # type: Dict[FuncDef, Set[SymbolNode]]
+        # Intermediate data structure used to map SymbolNode instances to the FuncDef in which they
+        # were first visited.
         self.symbols_to_fdefs = {}  # type: Dict[SymbolNode, FuncDef]
+        # Stack representing the function call stack.
         self.fdefs = []  # type: List[FuncDef]
 
     def visit_func_def(self, fdef: FuncDef) -> None:
@@ -30,7 +36,7 @@ class FreeSymbolsVisitor(TraverserVisitor):
             # If the SymbolNode instance has already been visited before, and it was declared in a
             # FuncDef outside of the current FuncDef that is being visted, then it is a free symbol
             # because it is being visited again.
-            self.add_free_symbol(symbol)
+            self.add_free_variable(symbol)
         else:
             # Otherwise, this is the first time the SymbolNode is being visited. We map the
             # SymbolNode to the current FuncDef being visited to note where it was first visited.
@@ -40,10 +46,8 @@ class FreeSymbolsVisitor(TraverserVisitor):
         if isinstance(expr.node, (Var, FuncDef)):
             self.visit_symbol_node(expr.node)
 
-    def add_free_symbol(self, symbol: SymbolNode) -> None:
+    def add_free_variable(self, symbol: SymbolNode) -> None:
         # Get the FuncDef instance where the free symbol was first declared, and map that FuncDef
         # to the SymbolNode representing the free symbol.
         fdef = self.symbols_to_fdefs[symbol]
-        if fdef not in self.free_symbols:
-            self.free_symbols[fdef] = set()
-        self.free_symbols[fdef].add(symbol)
+        self.free_variables.setdefault(fdef, set()).add(symbol)

@@ -39,7 +39,7 @@ from mypy.subtypes import is_named_instance
 from mypy.checkmember import bind_self
 
 from mypyc.common import ENV_ATTR_NAME, MAX_SHORT_INT, TOP_LEVEL_NAME
-from mypyc.freesymbols import FreeSymbolsVisitor
+from mypyc.freesymbols import FreeVariablesVisitor
 from mypyc.ops import (
     BasicBlock, AssignmentTarget, AssignmentTargetRegister, AssignmentTargetIndex,
     AssignmentTargetAttr, AssignmentTargetTuple, Environment, Op, LoadInt, RType, Value, Register,
@@ -91,11 +91,11 @@ def build_ir(modules: List[MypyFile],
 
     for module in modules:
         # First pass to determine free symbols.
-        fsv = FreeSymbolsVisitor()
-        module.accept(fsv)
+        fvv = FreeVariablesVisitor()
+        module.accept(fvv)
 
         # Second pass.
-        builder = IRBuilder(types, mapper, module_names, fsv.free_symbols)
+        builder = IRBuilder(types, mapper, module_names, fvv.free_variables)
         module.accept(builder)
         module_ir = ModuleIR(
             builder.imports,
@@ -337,7 +337,7 @@ class IRBuilder(NodeVisitor[Value]):
                  types: Dict[Expression, Type],
                  mapper: Mapper,
                  modules: List[str],
-                 free_symbols: Dict[FuncDef, Set[SymbolNode]]) -> None:
+                 free_variables: Dict[FuncDef, Set[SymbolNode]]) -> None:
         self.types = types
         self.environment = Environment()
         self.environments = [self.environment]
@@ -348,7 +348,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.modules = set(modules)
         self.callable_class_names = set()  # type: Set[str]
 
-        self.free_symbols = free_symbols
+        self.free_variables = free_variables
 
         # This list operates similarly to a function call stack for nested functions. Whenever a
         # function definition begins to be generated, a FuncInfo instance is added to the stack,
@@ -655,7 +655,7 @@ class IRBuilder(NodeVisitor[Value]):
                     # Next, define a target that refers to the newly defined variable in that
                     # environment class. Add the target to the table containing class environment
                     # variables, as well as the current environment.
-                    if self.fn_info.contains_nested and self.is_free_symbol(symbol):
+                    if self.fn_info.contains_nested and self.is_free_variable(symbol):
                         self.fn_info.env_class.attributes[symbol.name()] = self.node_type(lvalue)
                         target = AssignmentTargetAttr(self.fn_info.env_reg, symbol.name())
                         return self.environment.add_target(symbol, target)
@@ -1065,8 +1065,9 @@ class IRBuilder(NodeVisitor[Value]):
     def is_native_module_ref_expr(self, expr: RefExpr) -> bool:
         return self.is_native_ref_expr(expr) and expr.kind == GDEF
 
-    def is_free_symbol(self, s: SymbolNode) -> bool:
-        return self.fn_info.fdef in self.free_symbols and s in self.free_symbols[self.fn_info.fdef]
+    def is_free_variable(self, symbol: SymbolNode) -> bool:
+        return (self.fn_info.fdef in self.free_variables and
+                symbol in self.free_variables[self.fn_info.fdef])
 
     def visit_name_expr(self, expr: NameExpr) -> Value:
         assert expr.node, "RefExpr not resolved"
@@ -1752,7 +1753,7 @@ class IRBuilder(NodeVisitor[Value]):
 
                 # If the variable is not a free symbol, then we keep it in a local register.
                 # Otherwise, we load them into environment classes below.
-                if fdef not in self.free_symbols or arg.variable not in self.free_symbols[fdef]:
+                if not self.is_free_variable(arg.variable):
                     continue
 
                 # First, define the variable name as an attribute of the environment class, and
