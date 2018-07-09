@@ -7,6 +7,7 @@ Usage:
     $ python3 -c 'import foo'  # Uses compiled 'foo'
 """
 
+import os
 import os.path
 import sys
 
@@ -78,6 +79,7 @@ def main() -> None:
             except BuildError as err:
                 handle_build_error(err, None)
             shutil.copy(native_lib_path, so_path)
+        os.remove(common_path)
     else:
         module = module_names[0]
         c_path = '%s.c' % module
