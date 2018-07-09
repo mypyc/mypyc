@@ -25,13 +25,13 @@ from mypyc import buildc
 
 def main() -> None:
     sources, options = process_options(sys.argv[1:])
-    options.show_traceback = True
     if options.python_version[0] == 2:
         sys.exit('Python 2 not supported')
     if not options.strict_optional:
         sys.exit('Disabling strict optional checking not supported')
+    options.show_traceback = True
     # Needed to get types for all AST nodes
-    options.dump_deps = True
+    options.export_types = True
     # TODO: Support incremental checking
     options.incremental = False
 
