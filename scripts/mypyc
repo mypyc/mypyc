@@ -10,13 +10,14 @@ Usage:
 import os
 import os.path
 import sys
+import tempfile
 
 base_path = os.path.join(os.path.dirname(__file__), '..')
 
 sys.path.extend([os.path.join(base_path, 'external/mypy'), base_path])
 
 import shutil
-from typing import List, Optional
+from typing import List, Optional, IO
 
 from mypy.errors import CompileError
 from mypy.options import Options
@@ -36,6 +37,39 @@ def handle_build_error(err: BuildError, c_path: Optional[str]) -> None:
     else:
         extra = ''
     sys.exit('Internal error: C compilation failed' + extra)
+
+
+def build_using_shared_lib(fobj: IO[str], ctext: str, module_names: List[str]) -> None:
+    common_path = fobj.name
+    fobj.write(ctext)
+    fobj.flush()
+    try:
+        shared_lib = build_shared_lib_for_modules(common_path)
+    except BuildError as err:
+        handle_build_error(err, common_path)
+
+    for module in module_names:
+        so_path = '%s.so' % module
+        try:
+            native_lib_path = build_c_extension_shim(module, shared_lib)
+        except BuildError as err:
+            handle_build_error(err, None)
+        shutil.copy(native_lib_path, so_path)
+
+
+def build_single_module(fobj: IO[str], ctext: str, module: str) -> None:
+    c_path = fobj.name
+    so_path = '%s.so' % module
+
+    with open(c_path, 'w') as f:
+        f.write(ctext)
+
+    try:
+        native_lib_path = build_c_extension(c_path, module, preserve_setup=True)
+    except BuildError as err:
+        handle_build_error(err, c_path)
+
+    shutil.copy(native_lib_path, so_path)
 
 
 def main() -> None:
@@ -63,37 +97,14 @@ def main() -> None:
         sys.exit(1)
 
     use_shared_lib = len(module_names) > 1
-    if use_shared_lib:
-        common_path = '__shared_stuff.c'
-        with open(common_path, 'w') as f:
-            f.write(ctext)
-        try:
-            shared_lib = build_shared_lib_for_modules(common_path)
-        except BuildError as err:
-            handle_build_error(err, common_path)
-
-        for module in module_names:
-            so_path = '%s.so' % module
-            try:
-                native_lib_path = build_c_extension_shim(module, shared_lib)
-            except BuildError as err:
-                handle_build_error(err, None)
-            shutil.copy(native_lib_path, so_path)
-        os.remove(common_path)
-    else:
-        module = module_names[0]
-        c_path = '%s.c' % module
-        so_path = '%s.so' % module
-
-        with open(c_path, 'w') as f:
-            f.write(ctext)
-
-        try:
-            native_lib_path = build_c_extension(c_path, module, preserve_setup=True)
-        except BuildError as err:
-            handle_build_error(err, c_path)
-
-        shutil.copy(native_lib_path, so_path)
+    with tempfile.NamedTemporaryFile(mode='w+',
+                                     prefix='mypyc-tmp-',
+                                     suffix='.c',
+                                     dir='.') as fobj:
+        if use_shared_lib:
+            build_using_shared_lib(fobj, ctext, module_names)
+        else:
+            build_single_module(fobj, ctext, module_names[0])
 
 
 if __name__ == '__main__':
