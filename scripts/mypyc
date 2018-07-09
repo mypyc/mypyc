@@ -12,7 +12,7 @@ import sys
 sys.path.extend(['external/mypy', '.'])
 
 import shutil
-from typing import List
+from typing import List, Optional
 
 from mypy.errors import CompileError
 from mypy.options import Options
@@ -20,7 +20,18 @@ from mypy.main import process_options
 from mypy import build
 
 from mypyc import emitmodule
-from mypyc import buildc
+from mypyc.buildc import (
+    BuildError, build_shared_lib_for_modules, build_c_extension_shim, build_c_extension
+)
+
+
+def handle_build_error(err: BuildError, c_path: Optional[str]) -> None:
+    print(err.output.decode('utf8'))
+    if c_path is not None:
+        extra = ' (%s)' % c_path
+    else:
+        extra = ''
+    sys.exit('Internal error: C compilation failed' + extra)
 
 
 def main() -> None:
@@ -35,8 +46,6 @@ def main() -> None:
     # TODO: Support incremental checking
     options.incremental = False
 
-    assert len(sources) == 1
-
     module_names = [source.module for source in sources]
 
     try:
@@ -49,16 +58,37 @@ def main() -> None:
             print(line)
         sys.exit(1)
 
-    for source in sources:
-        module = source.module
+    use_shared_lib = len(module_names) > 1
+    if use_shared_lib:
+        common_path = '__shared_stuff.c'
+        with open(common_path, 'w') as f:
+            f.write(ctext)
+        try:
+            shared_lib = build_shared_lib_for_modules(common_path)
+        except BuildError as err:
+            handle_build_error(err, common_path)
+
+        for module in module_names:
+            so_path = '%s.so' % module
+            try:
+                native_lib_path = build_c_extension_shim(module, shared_lib)
+            except BuildError as err:
+                handle_build_error(err, None)
+            shutil.copy(native_lib_path, so_path)
+    else:
+        module = module_names[0]
         c_path = '%s.c' % module
         so_path = '%s.so' % module
+
         with open(c_path, 'w') as f:
             f.write(ctext)
 
-        for mod in module_names:
-            native_lib_path = buildc.build_c_extension(c_path, mod, preserve_setup=True)
-            shutil.copy(native_lib_path, so_path)
+        try:
+            native_lib_path = build_c_extension(c_path, module, preserve_setup=True)
+        except BuildError as err:
+            handle_build_error(err, c_path)
+
+        shutil.copy(native_lib_path, so_path)
 
 
 if __name__ == '__main__':
