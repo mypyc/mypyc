@@ -116,6 +116,6 @@ def run_setup_py_build(setup_path: str, module_name: str) -> str:
         subprocess.check_output(['python', setup_path, 'build'], stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as err:
         raise BuildError(err.output)
-    so_path = glob.glob('build/*/%s*.so' % module_name)
-    assert len(so_path) == 1
+    so_path = glob.glob('build/*/%s.*.so' % module_name)
+    assert len(so_path) == 1, so_path
     return so_path[0]
