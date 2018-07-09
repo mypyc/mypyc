@@ -7,9 +7,12 @@ Usage:
     $ python3 -c 'import foo'  # Uses compiled 'foo'
 """
 
+import os.path
 import sys
 
-sys.path.extend(['external/mypy', '.'])
+base_path = os.path.join(os.path.dirname(__file__), '..')
+
+sys.path.extend([os.path.join(base_path, 'external/mypy'), base_path])
 
 import shutil
 from typing import List, Optional
