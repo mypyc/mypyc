@@ -44,7 +44,7 @@ def build_using_shared_lib(fobj: IO[str], ctext: str, module_names: List[str]) -
     fobj.write(ctext)
     fobj.flush()
     try:
-        shared_lib = build_shared_lib_for_modules(common_path)
+        shared_lib = build_shared_lib_for_modules(common_path, module_names)
     except BuildError as err:
         handle_build_error(err, common_path)
 

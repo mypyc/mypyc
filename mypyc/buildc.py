@@ -1,6 +1,7 @@
 """Build C extension module from C source."""
 
 import glob
+import hashlib
 import os
 import shutil
 import subprocess
@@ -43,19 +44,30 @@ PyInit_{modname}(void)
 
 
 def build_c_extension_shim(module_name: str, shared_lib: str) -> str:
+    assert shared_lib.startswith('lib') and shared_lib.endswith('.so')
+    libname = shared_lib[3:-3]
     tempdir = tempfile.mkdtemp()
     cpath = os.path.join(tempdir, '%s.c' % module_name)
     with open(cpath, 'w') as f:
         f.write(shim_template.format(modname=module_name))
     try:
-        setup_path = make_setup_py(cpath, tempdir, libraries=repr('stuff'), library_dirs=repr('.'))
+        setup_path = make_setup_py(cpath,
+                                   tempdir,
+                                   libraries=repr(libname),
+                                   library_dirs=repr('.'))
         return run_setup_py_build(setup_path, module_name)
     finally:
         shutil.rmtree(tempdir)
 
 
-def build_shared_lib_for_modules(cpath: str) -> str:
-    out_file = 'libstuff.so'
+def shared_lib_name(modules: List[str]) -> str:
+    h = hashlib.sha1()
+    h.update(','.join(modules).encode())
+    return 'libmypyc_%s.so' % h.hexdigest()[:20]
+
+
+def build_shared_lib_for_modules(cpath: str, modules: List[str]) -> str:
+    out_file = shared_lib_name(modules)
     name = os.path.splitext(os.path.basename(cpath))[0]
     lib_path = build_c_extension(cpath, name, preserve_setup = True)
     shutil.copy(lib_path, out_file)
