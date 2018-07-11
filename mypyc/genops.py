@@ -327,7 +327,6 @@ class FuncInfo(object):
         self.env_class = INVALID_CLASS
         # The register associated with the 'self' instance for function classes.
         self.self_reg = INVALID_VALUE  # type: Value
-        self.callable_reg = INVALID_VALUE  # type: Value
         # Environment class registers are the local registers associated with instances of an
         # environment class, used for getting and setting attributes. env_reg is the register
         # associated with the current environment, and prev_env_reg is the self.__mypyc_env__ field
@@ -614,12 +613,13 @@ class IRBuilder(NodeVisitor[Value]):
         blocks, env, ret_type, fn_info = self.leave()
 
         if fn_info.is_nested:
-            func = self.add_call_to_callable_class(blocks, sig, env, fn_info)
-            self.instantiate_callable_class(fn_info)
+            func_ir = self.add_call_to_callable_class(blocks, sig, env, fn_info)
+            func_reg = self.instantiate_callable_class(fn_info)
         else:
-            func = FuncIR(fn_info.name, class_name, self.module_name, sig, blocks, env)
+            func_ir = FuncIR(fn_info.name, class_name, self.module_name, sig, blocks, env)
+            func_reg = INVALID_VALUE
 
-        return (func, fn_info.callable_reg)
+        return (func_ir, func_reg)
 
     def maybe_add_implicit_return(self) -> None:
         if (is_none_rprimitive(self.ret_types[-1]) or
@@ -1593,10 +1593,10 @@ class IRBuilder(NodeVisitor[Value]):
         fsig = FuncSignature(runtime_args, ret_type)
 
         fname = '__mypyc_lambda_{}__'.format(self.lambda_counter)
-        func_ir, callable_reg = self.gen_func_def(expr, fname, fsig)
+        func_ir, func_reg = self.gen_func_def(expr, fname, fsig)
 
         self.functions.append(func_ir)
-        return callable_reg
+        return func_reg
 
     def visit_pass_stmt(self, o: PassStmt) -> Value:
         return INVALID_VALUE
@@ -1983,8 +1983,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.add(SetAttr(func_reg, ENV_ATTR_NAME, self.fn_info.env_reg, fitem.line))
 
         if isinstance(fitem, LambdaExpr):
-            fn_info.callable_reg = func_reg
-            return fn_info.callable_reg
+            return func_reg
 
         # If it is not a lambda expression, then it must be a function definition.
         assert isinstance(fitem, FuncDef)
@@ -1999,8 +1998,7 @@ class IRBuilder(NodeVisitor[Value]):
             func_target = self.environment.add_local_reg(fitem, object_rprimitive)
 
         self.assign_to_target(func_target, func_reg, fitem.line)
-        fn_info.callable_reg = self.read_from_target(func_target, fitem.line)
-        return fn_info.callable_reg
+        return func_reg
 
     def setup_env_class(self) -> ClassIR:
         """Generates a class representing a function environment.
