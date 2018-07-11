@@ -589,18 +589,18 @@ class IRBuilder(NodeVisitor[Value]):
 
         The classes generated would look something like the following.
 
-                    points to      +-------+
-            +--------------------> | a_env |
-            |                      +-------+
-            |                          ^
-            |                          | points to
-        +-------+     generates    +-------+
-        | b_obj |   ----------->   | b_env |
-        +-------+                  +-------+
-                                       ^
-                                       |
-        +-------+     points to        |
-        | c_obj |   -------------------+
+                    has pointer to        +-------+
+            +-------------------------->  | a_env |
+            |                             +-------+
+            |                                 ^
+            |                                 | has pointer to
+        +-------+     associated with     +-------+
+        | b_obj |   ------------------->  | b_env |
+        +-------+                         +-------+
+                                              ^
+                                              |
+        +-------+         has pointer to      |
+        | c_obj |   --------------------------+
         +-------+
         """
         self.enter(FuncInfo(fdef, fdef.name(), self.gen_func_ns()))
