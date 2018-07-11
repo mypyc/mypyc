@@ -722,6 +722,29 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.fn_info.is_nested = fitem in self.nested_fitems
         self.fn_info.contains_nested = fitem in self.encapsulating_fitems
 
+        if self.fn_info.is_generator:
+
+            if self.fn_info.is_nested:
+                self.setup_callable_class()
+
+            self.setup_env_class()
+            self.setup_generator_class()
+            self.load_env_registers()
+            self.finalize_env_class()
+            self.instantiate_generator_class()
+            self.add(Return(self.fn_info.generator_reg))
+            blocks, env, ret_type, fn_info = self.leave()
+
+            if fn_info.is_nested:
+                func_ir = self.add_call_to_callable_class(blocks, sig, env, fn_info)
+                func_reg = self.instantiate_callable_class(fn_info)
+            else:
+                func_ir = FuncIR(fn_info.name, class_name, self.module_name, sig, blocks, env)
+                func_reg = INVALID_VALUE
+
+            self.functions.append(func_ir)
+            self.enter(fn_info)
+
         if self.fn_info.is_nested:
             self.setup_callable_class()
         if self.fn_info.contains_nested:
@@ -740,7 +763,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         blocks, env, ret_type, fn_info = self.leave()
 
-        if fn_info.is_nested:
+        if fn_info.is_generator:
+            func_ir = self.add_next_to_generator_class(blocks, sig, env, fn_info)
+            func_reg = INVALID_VALUE
+        elif fn_info.is_nested:
             func_ir = self.add_call_to_callable_class(blocks, sig, env, fn_info)
             func_reg = self.instantiate_callable_class(fn_info)  # type: Optional[Value]
         else:
@@ -2690,6 +2716,42 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                              self.fn_info.fitem.line))
 
         return self.fn_info.env_reg
+
+    def setup_generator_class(self) -> ClassIR:
+        name = '{}_{}_gen'.format(self.fn_info.name, self.fn_info.ns)
+
+        generator_class = ClassIR(name, self.module_name)
+        generator_class.attributes[ENV_ATTR_NAME] = RInstance(self.fn_info.env_class)
+        generator_class.mro = [generator_class]
+
+        self.classes.append(generator_class)
+        self.fn_info.generator_class = generator_class
+        return generator_class
+
+    def add_next_to_generator_class(self,
+                                    blocks: List[BasicBlock],
+                                    sig: FuncSignature,
+                                    env: Environment,
+                                    fn_info: FuncInfo) -> None:
+        sig = FuncSignature((RuntimeArg('self', object_rprimitive),) + sig.args, sig.ret_type)
+        next_fn = FuncIR('__next__', fn_info.generator_class.name, self.module_name, sig, blocks,
+                         env)
+        fn_info.generator_class.methods['__next__'] = next_fn
+        return next_fn
+
+    def instantiate_generator_class(self) -> Value:
+        fitem = self.fn_info.fitem
+
+        fullname = '{}.{}'.format(self.module_name, self.fn_info.generator_class.name)
+        self.fn_info.generator_reg = self.add(Call(RInstance(self.fn_info.generator_class),
+                                                   fullname, [], fitem.line))
+
+        # Set the generator class' environment attribute to point at the environment class
+        # defined in the current scope.
+        self.add(SetAttr(self.fn_info.generator_reg, ENV_ATTR_NAME, self.fn_info.env_reg,
+                         fitem.line))
+
+        return self.fn_info.generator_reg
 
     def is_builtin_ref_expr(self, expr: RefExpr) -> bool:
         assert expr.node, "RefExpr not resolved"

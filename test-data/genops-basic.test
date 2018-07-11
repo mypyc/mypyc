@@ -1041,6 +1041,11 @@ def call_python_method_with_keyword_args(xs: List[int], first: int, second: int)
     xs.insert(x=second, i=1)
     return xs
 
+def outer() -> None:
+    def inner_yield() -> Generator:
+        yield 1
+    return None
+
 [out]
 def call_python_function_with_keyword_arg(x):
     x :: str
