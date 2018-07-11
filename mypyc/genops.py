@@ -337,7 +337,6 @@ class FuncInfo(object):
         # function.
         self.is_nested = False
         self.contains_nested = False
-        self.ir = None  # type: Optional[FuncIR]
         # TODO: add field for ret_type: RType = none_rprimitive
 
 
@@ -392,8 +391,8 @@ class IRBuilder(NodeVisitor[Value]):
         self.lambda_counter = 0
 
         self.free_variables = fvv.free_variables
-        self.encapsulating_fitems = fvv.encapsulating_fitems
-        self.nested_fitems = fvv.nested_fitems
+        self.encapsulating_fitems = fvv.encapsulating_funcs
+        self.nested_fitems = fvv.nested_funcs
 
         # This list operates similarly to a function call stack for nested functions. Whenever a
         # function definition begins to be generated, a FuncInfo instance is added to the stack,
@@ -448,24 +447,25 @@ class IRBuilder(NodeVisitor[Value]):
         return INVALID_VALUE
 
     def visit_class_def(self, cdef: ClassDef) -> Value:
-        ir = self.mapper.type_to_ir[cdef.info]
+        class_ir = self.mapper.type_to_ir[cdef.info]
         for name, node in sorted(cdef.info.names.items(), key=lambda x: x[0]):
             if isinstance(node.node, FuncDef):
-                fn_info = self.gen_func_def(node.node, ir.method_sig(node.node.name()), cdef.name)
+                fdef = node.node
+                func_ir, _ = self.gen_func_def(fdef, fdef.name(), class_ir.method_sig(fdef.name()),
+                                               cdef.name)
 
-                assert isinstance(fn_info.ir, FuncIR)
-                self.functions.append(fn_info.ir)
-                ir.methods[fn_info.name] = fn_info.ir
+                self.functions.append(func_ir)
+                class_ir.methods[fdef.name()] = func_ir
 
                 # If this overrides a parent class method with a different type, we need
                 # to generate a glue method to mediate between them.
-                for cls in ir.mro[1:]:
+                for cls in class_ir.mro[1:]:
                     if (name in cls.method_types and name != '__init__'
-                            and not is_same_method_signature(ir.method_types[name],
+                            and not is_same_method_signature(class_ir.method_types[name],
                                                              cls.method_types[name])):
-                        f = self.gen_glue_method(cls.method_types[name], fn_info.ir, ir, cls,
-                                                 node.node.line)
-                        ir.glue_methods[(cls, name)] = f
+                        f = self.gen_glue_method(cls.method_types[name], func_ir, class_ir, cls,
+                                                 fdef.line)
+                        class_ir.glue_methods[(cls, name)] = f
                         self.functions.append(f)
 
         return INVALID_VALUE
@@ -556,8 +556,8 @@ class IRBuilder(NodeVisitor[Value]):
                       cls.name, self.module_name,
                       FuncSignature(rt_args, ret_type), blocks, env)
 
-    def gen_func_def(self, fitem: FuncItem, sig: FuncSignature,
-                     class_name: Optional[str] = None) -> FuncInfo:
+    def gen_func_def(self, fitem: FuncItem, name: str, sig: FuncSignature,
+                     class_name: Optional[str] = None) -> Tuple[FuncIR, Value]:
         """Generates and returns the FuncIR for a given FuncDef.
 
         If the given FuncItem is a nested function, then we generate a callable class representing
@@ -565,13 +565,6 @@ class IRBuilder(NodeVisitor[Value]):
         nested function, then we generate an environment class so that inner nested functions can
         access the environment of the given FuncItem.
         """
-        if isinstance(fitem, LambdaExpr):
-            name = '__mypyc_lambda_{}__'.format(self.lambda_counter)
-        elif isinstance(fitem, FuncDef):
-            name = fitem.name()
-        else:
-            assert False, 'Must be of type LambdaExpr or FuncDef'
-
         self.fn_info = FuncInfo(fitem, name, self.gen_func_ns())
         self.fn_infos.append(self.fn_info)
 
@@ -598,16 +591,15 @@ class IRBuilder(NodeVisitor[Value]):
         self.maybe_add_implicit_return()
 
         blocks, env, ret_type = self.leave()
-
-        if self.fn_info.is_nested:
-            self.fn_info.ir = self.finalize_callable_class(blocks, sig, env)
-        else:
-            self.fn_info.ir = FuncIR(self.fn_info.name, class_name, self.module_name, sig, blocks,
-                                     env)
-
         fn_info = self.fn_infos.pop()
         self.fn_info = self.fn_infos[-1]
-        return fn_info
+
+        if fn_info.is_nested:
+            func_ir = self.finalize_callable_class(blocks, sig, env)
+        else:
+            func_ir = FuncIR(fn_info.name, class_name, self.module_name, sig, blocks, env)
+
+        return (func_ir, fn_info.callable_reg)
 
     def maybe_add_implicit_return(self) -> None:
         if (is_none_rprimitive(self.ret_types[-1]) or
@@ -617,9 +609,8 @@ class IRBuilder(NodeVisitor[Value]):
             self.add_implicit_unreachable()
 
     def visit_func_def(self, fdef: FuncDef) -> Value:
-        fn_info = self.gen_func_def(fdef, self.mapper.fdef_to_sig(fdef))
-        assert isinstance(fn_info.ir, FuncIR)
-        self.functions.append(fn_info.ir)
+        func_ir, _ = self.gen_func_def(fdef, fdef.name(), self.mapper.fdef_to_sig(fdef))
+        self.functions.append(func_ir)
         return INVALID_VALUE
 
     def add_implicit_return(self) -> None:
@@ -1581,11 +1572,11 @@ class IRBuilder(NodeVisitor[Value]):
 
         fsig = FuncSignature(runtime_args, ret_type)
 
-        fn_info = self.gen_func_def(expr, fsig)
+        fname = '__mypyc_lambda_{}__'.format(self.lambda_counter)
+        func_ir, callable_reg = self.gen_func_def(expr, fname, fsig)
 
-        assert isinstance(fn_info.ir, FuncIR)
-        self.functions.append(fn_info.ir)
-        return fn_info.callable_reg
+        self.functions.append(func_ir)
+        return callable_reg
 
     def visit_pass_stmt(self, o: PassStmt) -> Value:
         return INVALID_VALUE
