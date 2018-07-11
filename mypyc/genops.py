@@ -629,7 +629,22 @@ class IRBuilder(NodeVisitor[Value]):
             self.add_implicit_unreachable()
 
     def visit_func_def(self, fdef: FuncDef) -> Value:
-        func_ir, _ = self.gen_func_def(fdef, fdef.name(), self.mapper.fdef_to_sig(fdef))
+        func_ir, func_reg = self.gen_func_def(fdef, fdef.name(), self.mapper.fdef_to_sig(fdef))
+
+        # If the function that was visited was a nested function, then either look it up in our
+        # current environment or define it if it was not already defined.
+        if self.fn_info.contains_nested:
+            if fdef.original_def:
+                # Get the target associated with the previously defined FuncDef.
+                func_target = self.environment.lookup(fdef.original_def)
+            else:
+                # The return type is 'object' instead of an RInstance of the callable class because
+                # differently defined functions with the same name and signature in conditional
+                # blocks will generate different callable classes, so the callable class that gets
+                # instantiated must be generic.
+                func_target = self.environment.add_local_reg(fdef, object_rprimitive)
+            self.assign_to_target(func_target, func_reg, fdef.line)
+
         self.functions.append(func_ir)
         return INVALID_VALUE
 
@@ -1981,23 +1996,6 @@ class IRBuilder(NodeVisitor[Value]):
         # Set the callable class' environment attribute to point at the environment class
         # defined in the callable class' immediate outer scope.
         self.add(SetAttr(func_reg, ENV_ATTR_NAME, self.fn_info.env_reg, fitem.line))
-
-        if isinstance(fitem, LambdaExpr):
-            return func_reg
-
-        # If it is not a lambda expression, then it must be a function definition.
-        assert isinstance(fitem, FuncDef)
-        if fitem.original_def:
-            # Get the target associated with the previously defined FuncDef.
-            func_target = self.environment.lookup(fitem.original_def)
-        else:
-            # The return type is 'object' instead of an RInstance of the callable class because
-            # differently defined functions with the same name and signature in conditional blocks
-            # will generate different callable classes, so the callable class that gets
-            # instantiated must be generic.
-            func_target = self.environment.add_local_reg(fitem, object_rprimitive)
-
-        self.assign_to_target(func_target, func_reg, fitem.line)
         return func_reg
 
     def setup_env_class(self) -> ClassIR:
