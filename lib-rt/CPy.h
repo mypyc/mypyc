@@ -538,14 +538,43 @@ static void CPy_AddTraceback(const char *filename, const char *funcname, int lin
     Py_DECREF(frame_obj);
 }
 
+// mypyc is not very good at dealing with refcount management of
+// pointers that might be NULL. As a workaround for this, the
+// exception APIs that might want to return NULL pointers instead
+// return properly refcounted pointers to this dummy object.
+struct ExcDummyStruct { PyObject_HEAD };
+static struct ExcDummyStruct _CPy_ExcDummyStruct = { PyObject_HEAD_INIT(&PyBaseObject_Type) };
+static PyObject *_CPy_ExcDummy = (PyObject *)&_CPy_ExcDummyStruct;
+
+static inline void _CPy_ToDummy(PyObject **p) {
+    if (*p == NULL) {
+        Py_INCREF(_CPy_ExcDummy);
+        *p = _CPy_ExcDummy;
+    }
+}
+
+static inline PyObject *_CPy_FromDummy(PyObject *p) {
+    if (p == _CPy_ExcDummy) return NULL;
+    Py_INCREF(p);
+    return p;
+}
+
 static void CPy_CatchError(PyObject **p_type, PyObject **p_value, PyObject **p_traceback) {
-    PyErr_Fetch(p_type, p_value, p_traceback);
-    // SetExcInfo steals references, so incref them
-    Py_XINCREF(*p_type);
-    Py_XINCREF(*p_value);
-    Py_XINCREF(*p_traceback);
+    PyErr_GetExcInfo(p_type, p_value, p_traceback);
+    _CPy_ToDummy(p_type);
+    _CPy_ToDummy(p_value);
+    _CPy_ToDummy(p_traceback);
+
+    PyObject *type, *value, *traceback;
+    PyErr_Fetch(&type, &value, &traceback);
+    /* Could we avoid always normalizing? */
+    PyErr_NormalizeException(&type, &value, &traceback);
+    PyErr_SetExcInfo(type, value, traceback);
     PyErr_Clear();
-    PyErr_SetExcInfo(*p_type, *p_value, *p_traceback);
+}
+
+static void CPy_RestoreExcInfo(PyObject *type, PyObject *value, PyObject *traceback) {
+    PyErr_SetExcInfo(_CPy_FromDummy(type), _CPy_FromDummy(value), _CPy_FromDummy(traceback));
 }
 
 static void CPy_Reraise(void) {
@@ -554,6 +583,15 @@ static void CPy_Reraise(void) {
     PyErr_Restore(p_type, p_value, p_traceback);
 }
 
+static bool CPy_ExceptionMatches(PyObject *type) {
+    return PyErr_GivenExceptionMatches(PyThreadState_GET()->exc_type, type);
+}
+
+static PyObject *CPy_GetExcValue(void) {
+	PyObject *exc = PyThreadState_GET()->exc_value;
+	Py_INCREF(exc);
+	return exc;
+}
 
 #ifdef __cplusplus
 }

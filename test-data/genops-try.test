@@ -14,14 +14,16 @@ def g():
     r6 :: object
     r7 :: str
     r8, r9 :: object
-    r10, r11 :: None
+    r10 :: None
+    r11 :: bool
+    r12 :: None
 L0:
 L1:
     r0 = builtins.module :: static
     r1 = unicode_0 :: static  ('object')
     r2 = getattr r0, r1
     r3 = py_call(r2)
-    goto L3
+    goto L4
 L2: (handler for L1)
     r4 = err_catch
     r5 = unicode_1 :: static  ('weeee')
@@ -30,10 +32,12 @@ L2: (handler for L1)
     r8 = getattr r6, r7
     r9 = py_call(r8, r5)
     r10 = cast(None, r9)
-    clear_exc_info
-L3:
-    r11 = None
-    return r11
+L3: (handler for L2)
+    restore_exc_info r4
+    r11 = no_err_occurred
+L4:
+    r12 = None
+    return r12
 
 [case testTryExcept2]
 def g(b: bool) -> None:
@@ -56,7 +60,9 @@ def g(b):
     r8 :: object
     r9 :: str
     r10, r11 :: object
-    r12, r13 :: None
+    r12 :: None
+    r13 :: bool
+    r14 :: None
 L0:
 L1:
     if b goto L2 else goto L3 :: bool
@@ -70,7 +76,7 @@ L3:
     r4 = unicode_1 :: static  ('hi')
     r5 = str r4 :: object
 L4:
-    goto L6
+    goto L7
 L5: (handler for L1, L2, L3, L4)
     r6 = err_catch
     r7 = unicode_2 :: static  ('weeee')
@@ -79,10 +85,12 @@ L5: (handler for L1, L2, L3, L4)
     r10 = getattr r8, r9
     r11 = py_call(r10, r7)
     r12 = cast(None, r11)
-    clear_exc_info
-L6:
-    r13 = None
-    return r13
+L6: (handler for L5)
+    restore_exc_info r6
+    r13 = no_err_occurred
+L7:
+    r14 = None
+    return r14
 
 [case testTryExcept3]
 def g() -> None:
@@ -110,12 +118,15 @@ def g():
     r13 :: str
     r14, r15 :: object
     r16 :: None
-    r17 :: tuple[object, object, object]
-    r18 :: str
-    r19 :: object
-    r20 :: str
-    r21, r22 :: object
-    r23, r24 :: None
+    r17 :: bool
+    r18 :: tuple[object, object, object]
+    r19 :: str
+    r20 :: object
+    r21 :: str
+    r22, r23 :: object
+    r24 :: None
+    r25 :: bool
+    r26 :: None
 L0:
 L1:
     r0 = unicode_0 :: static  ('a')
@@ -129,7 +140,7 @@ L2:
     r7 = unicode_2 :: static  ('object')
     r8 = getattr r6, r7
     r9 = py_call(r8)
-    goto L4
+    goto L5
 L3: (handler for L2)
     r10 = err_catch
     r11 = unicode_3 :: static  ('b')
@@ -138,18 +149,95 @@ L3: (handler for L2)
     r14 = getattr r12, r13
     r15 = py_call(r14, r11)
     r16 = cast(None, r15)
-    clear_exc_info
+L4: (handler for L3)
+    restore_exc_info r10
+    r17 = no_err_occurred
+L5:
+    goto L8
+L6: (handler for L1, L4, L5)
+    r18 = err_catch
+    r19 = unicode_4 :: static  ('weeee')
+    r20 = builtins.module :: static
+    r21 = unicode_1 :: static  ('print')
+    r22 = getattr r20, r21
+    r23 = py_call(r22, r19)
+    r24 = cast(None, r23)
+L7: (handler for L6)
+    restore_exc_info r18
+    r25 = no_err_occurred
+L8:
+    r26 = None
+    return r26
+
+[case testTryExcept4]
+def g() -> None:
+    try:
+        pass
+    except KeyError:
+        print("weeee")
+    except IndexError:
+        print("yo")
+[out]
+def g():
+    r0 :: tuple[object, object, object]
+    r1 :: object
+    r2 :: str
+    r3 :: object
+    r4 :: bool
+    r5 :: str
+    r6 :: object
+    r7 :: str
+    r8, r9 :: object
+    r10 :: None
+    r11 :: object
+    r12 :: str
+    r13 :: object
+    r14 :: bool
+    r15 :: str
+    r16 :: object
+    r17 :: str
+    r18, r19 :: object
+    r20 :: None
+    r21, r22 :: bool
+    r23 :: None
+L0:
+L1:
+    goto L8
+L2: (handler for L1)
+    r0 = err_catch
+    r1 = builtins.module :: static
+    r2 = unicode_0 :: static  ('KeyError')
+    r3 = getattr r1, r2
+    r4 = exc_matches r3
+    if r4 goto L3 else goto L4 :: bool
+L3:
+    r5 = unicode_1 :: static  ('weeee')
+    r6 = builtins.module :: static
+    r7 = unicode_2 :: static  ('print')
+    r8 = getattr r6, r7
+    r9 = py_call(r8, r5)
+    r10 = cast(None, r9)
+    goto L7
 L4:
-    goto L6
-L5: (handler for L1, L3, L4)
-    r17 = err_catch
-    r18 = unicode_4 :: static  ('weeee')
-    r19 = builtins.module :: static
-    r20 = unicode_1 :: static  ('print')
-    r21 = getattr r19, r20
-    r22 = py_call(r21, r18)
-    r23 = cast(None, r22)
-    clear_exc_info
+    r11 = builtins.module :: static
+    r12 = unicode_3 :: static  ('IndexError')
+    r13 = getattr r11, r12
+    r14 = exc_matches r13
+    if r14 goto L5 else goto L6 :: bool
+L5:
+    r15 = unicode_4 :: static  ('yo')
+    r16 = builtins.module :: static
+    r17 = unicode_2 :: static  ('print')
+    r18 = getattr r16, r17
+    r19 = py_call(r18, r15)
+    r20 = cast(None, r19)
+    goto L7
 L6:
-    r24 = None
-    return r24
+    reraise_exc; r21 = 0
+    unreachable
+L7: (handler for L2, L3, L4, L5, L6)
+    restore_exc_info r0
+    r22 = no_err_occurred
+L8:
+    r23 = None
+    return r23
