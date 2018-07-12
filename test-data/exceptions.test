@@ -187,3 +187,82 @@ L12:
 L13:
     dec_ref r10
     goto L7
+
+[case testTryFinally2Asdf]
+def a() -> str:
+    try:
+        print()
+        return 'hi'
+    finally:
+        pass
+[out]
+L0:
+L1:
+    r1 = builtins.module :: static
+    r2 = unicode_0 :: static  ('print')
+    r3 = getattr r1, r2
+    if is_error(r3) goto L7 (error at a:3) else goto L2
+L2:
+    r4 = py_call(r3)
+    dec_ref r3
+    if is_error(r4) goto L7 (error at a:3) else goto L3
+L3:
+    r5 = cast(None, r4)
+    if is_error(r5) goto L7 (error at a:3) else goto L21
+L4:
+    r6 = unicode_1 :: static  ('hi')
+    inc_ref r6
+    r0 = r6
+    goto L6
+L5:
+    r8 = <error> :: str
+    r0 = r8
+L6:
+    r9 = <error> :: tuple[object, object, object]
+    r7 = r9
+    goto L8
+L7:
+    r10 = <error> :: str
+    r0 = r10
+    r11 = error_catch
+    r7 = r11
+L8:
+    if is_error(r7) goto L11 else goto L9
+L9:
+    reraise_exc; r12 = 0
+    if not r12 goto L14 else goto L22 :: bool
+L10:
+    unreachable
+L11:
+    if is_error(r0) goto L13 else goto L12
+L12:
+    return r0
+L13:
+    goto L19
+L14:
+    if is_error(r0) goto L15 else goto L23
+L15:
+    if is_error(r7) goto L17 else goto L16
+L16:
+    restore_exc_info r7
+    dec_ref r7
+L17:
+    r13 = no_err_occurred
+    if not r13 goto L20 else goto L18 :: bool
+L18:
+    unreachable
+L19:
+    unreachable
+L20:
+    r14 = <error> :: str
+    return r14
+L21:
+    dec_ref r5
+    goto L4
+L22:
+    dec_ref r0
+    dec_ref r7
+    goto L10
+L23:
+    dec_ref r0
+    goto L15
