@@ -81,6 +81,7 @@ def include_dir() -> str:
 # TODO: Make compiler arguments platform-specific.
 setup_format = """\
 from distutils.core import setup, Extension
+from distutils import sysconfig
 import sys
 
 module = Extension('{package_name}',
@@ -90,13 +91,18 @@ module = Extension('{package_name}',
                    libraries=[{libraries}],
                    library_dirs=[{library_dirs}])
 
-# Force the creation of dynamic libraries instead of bundles so that
+vars = sysconfig.get_config_vars()
+
+# On OS X, Force the creation of dynamic libraries instead of bundles so that
 # we can link against multi-module shared libraries.
 # From https://stackoverflow.com/a/32765319
 if sys.platform == 'darwin':
-    from distutils import sysconfig
-    vars = sysconfig.get_config_vars()
     vars['LDSHARED'] = vars['LDSHARED'].replace('-bundle', '-dynamiclib')
+
+# And on Linux, set the rpath to $ORIGIN so they will look for the shared
+# library in the directory that they live in.
+elif sys.platform == 'linux':
+    vars['LDSHARED'] += ' -Wl,-rpath,"$ORIGIN"'
 
 setup(name='{package_name}',
       version='1.0',
