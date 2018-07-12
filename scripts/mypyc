@@ -71,7 +71,7 @@ def build_single_module(fobj: IO[str], ctext: str, module: str) -> None:
         f.write(ctext)
 
     try:
-        native_lib_path = build_c_extension(c_path, module, preserve_setup=True)
+        native_lib_path = build_c_extension(c_path, module)
     except BuildError as err:
         handle_build_error(err, c_path)
 
