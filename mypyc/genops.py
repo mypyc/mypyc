@@ -13,8 +13,10 @@ It would be translated to something that conceptually looks like this:
    r3 = r2 + r1 :: int
    return r3
 """
-from typing import Dict, List, Tuple, Optional, Union, Sequence, Set
+from typing import Dict, List, Tuple, Optional, Union, Sequence, Set, NoReturn
 from abc import abstractmethod
+import sys
+import traceback
 
 from mypy.nodes import (
     Node, MypyFile, SymbolNode, Statement, FuncItem, FuncDef, ReturnStmt, AssignmentStmt, OpExpr,
@@ -49,6 +51,7 @@ from mypyc.ops import (
     MethodCall, INVALID_VALUE, INVALID_CLASS, INVALID_FUNC_DEF, int_rprimitive, float_rprimitive,
     bool_rprimitive, list_rprimitive, is_list_rprimitive, dict_rprimitive, str_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, PrimitiveOp,
+    ControlOp,
     ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap, FuncSignature,
     VTableAttr, VTableMethod, VTableEntries,
     NAMESPACE_TYPE, RaiseStandardError,
@@ -101,7 +104,7 @@ def build_ir(modules: List[MypyFile],
         module.accept(fvv)
 
         # Second pass.
-        builder = IRBuilder(types, mapper, module_names, fvv.free_variables)
+        builder = IRBuilder(types, mapper, module_names, fvv)
         module.accept(builder)
         module_ir = ModuleIR(
             builder.imports,
@@ -288,6 +291,9 @@ def prepare_class_def(cdef: ClassDef, mapper: Mapper) -> None:
             ir.method_types[name] = mapper.fdef_to_sig(node.node)
 
     # Set up the parent class
+    assert all(base.type in mapper.type_to_ir for base in info.bases
+               if base.type.fullname() != 'builtins.object'), (
+        "Can't subclass cpython types")
     bases = [mapper.type_to_ir[base.type] for base in info.bases
              if base.type.fullname() != 'builtins.object']
     assert all(c.is_trait for c in bases[1:]), "Non trait bases must be first"
@@ -297,7 +303,6 @@ def prepare_class_def(cdef: ClassDef, mapper: Mapper) -> None:
     base_mro = []
     for cls in info.mro:
         if cls.fullname() == 'builtins.object': continue
-        assert cls in mapper.type_to_ir, "Can't subclass cpython types"
         base_ir = mapper.type_to_ir[cls]
         if not base_ir.is_trait:
             base_mro.append(base_ir)
@@ -314,8 +319,10 @@ def prepare_class_def(cdef: ClassDef, mapper: Mapper) -> None:
 
 class FuncInfo(object):
     """Contains information about functions as they are generated."""
-    def __init__(self, fdef: FuncDef, namespace: str) -> None:
-        self.fdef = fdef
+    def __init__(self, fitem: FuncItem = INVALID_FUNC_DEF, name: str = '',
+                 namespace: str = '') -> None:
+        self.fitem = fitem
+        self.name = name
         self.ns = namespace
         # Callable classes are ClassIR instances implementing the '__call__' method, used to
         # represent functions that are nested inside of other functions.
@@ -397,7 +404,7 @@ class IRBuilder(NodeVisitor[Value]):
                  types: Dict[Expression, Type],
                  mapper: Mapper,
                  modules: List[str],
-                 free_variables: Dict[FuncDef, Set[SymbolNode]]) -> None:
+                 fvv: FreeVariablesVisitor) -> None:
         self.types = types
         self.environment = Environment()
         self.environments = [self.environment]
@@ -408,14 +415,18 @@ class IRBuilder(NodeVisitor[Value]):
         self.modules = set(modules)
         self.callable_class_names = set()  # type: Set[str]
 
-        self.free_variables = free_variables
+        self.lambda_counter = 0
+
+        self.free_variables = fvv.free_variables
+        self.encapsulating_fitems = fvv.encapsulating_funcs
+        self.nested_fitems = fvv.nested_funcs
 
         # This list operates similarly to a function call stack for nested functions. Whenever a
         # function definition begins to be generated, a FuncInfo instance is added to the stack,
         # and information about that function (e.g. whether it is nested, its environment class to
         # be generated) is stored in that FuncInfo instance. When the function is done being
         # generated, its corresponding FuncInfo is popped off the stack.
-        self.fn_info = FuncInfo(INVALID_FUNC_DEF, '')
+        self.fn_info = FuncInfo(INVALID_FUNC_DEF, '', '')
         self.fn_infos = [self.fn_info]  # type: List[FuncInfo]
 
         # This list operates as a stack of constructs that modify the
@@ -429,14 +440,13 @@ class IRBuilder(NodeVisitor[Value]):
         self.from_imports = {}  # type: Dict[str, List[Tuple[str, str]]]
         self.imports = []  # type: List[str]
 
-        self.current_module_name = None  # type: Optional[str]
-
     def visit_mypy_file(self, mypyfile: MypyFile) -> Value:
         if mypyfile.fullname() in ('typing', 'abc'):
             # These module are special; their contents are currently all
             # built-in primitives.
             return INVALID_VALUE
 
+        self.module_path = mypyfile.path
         self.module_name = mypyfile.fullname()
 
         classes = [node for node in mypyfile.defs if isinstance(node, ClassDef)]
@@ -446,16 +456,15 @@ class IRBuilder(NodeVisitor[Value]):
             ir = self.mapper.type_to_ir[cls.info]
             self.classes.append(ir)
 
-        self.current_module_name = mypyfile.fullname()
-        self.enter('<top level>')
+        self.enter(FuncInfo(name='<top level>'))
 
         # Generate ops.
         for node in mypyfile.defs:
-            node.accept(self)
+            self.accept(node)
         self.maybe_add_implicit_return()
 
         # Generate special function representing module top level.
-        blocks, env, ret_type = self.leave()
+        blocks, env, ret_type, _ = self.leave()
         sig = FuncSignature([], none_rprimitive)
         func_ir = FuncIR(TOP_LEVEL_NAME, None, self.module_name, sig, blocks, env)
         self.functions.append(func_ir)
@@ -463,22 +472,25 @@ class IRBuilder(NodeVisitor[Value]):
         return INVALID_VALUE
 
     def visit_class_def(self, cdef: ClassDef) -> Value:
-        ir = self.mapper.type_to_ir[cdef.info]
+        class_ir = self.mapper.type_to_ir[cdef.info]
         for name, node in sorted(cdef.info.names.items(), key=lambda x: x[0]):
             if isinstance(node.node, FuncDef):
-                func = self.gen_func_def(node.node, ir.method_sig(node.node.name()), cdef.name)
-                self.functions.append(func)
-                ir.methods[func.name] = func
+                fdef = node.node
+                func_ir, _ = self.gen_func_def(fdef, fdef.name(), class_ir.method_sig(fdef.name()),
+                                               cdef.name)
+
+                self.functions.append(func_ir)
+                class_ir.methods[fdef.name()] = func_ir
 
                 # If this overrides a parent class method with a different type, we need
                 # to generate a glue method to mediate between them.
-                for cls in ir.mro[1:]:
+                for cls in class_ir.mro[1:]:
                     if (name in cls.method_types and name != '__init__'
-                            and not is_same_method_signature(ir.method_types[name],
+                            and not is_same_method_signature(class_ir.method_types[name],
                                                              cls.method_types[name])):
-                        f = self.gen_glue_method(cls.method_types[name], func, ir, cls,
-                                                 node.node.line)
-                        ir.glue_methods[(cls, name)] = f
+                        f = self.gen_glue_method(cls.method_types[name], func_ir, class_ir, cls,
+                                                 fdef.line)
+                        class_ir.glue_methods[(cls, name)] = f
                         self.functions.append(f)
 
         return INVALID_VALUE
@@ -544,7 +556,7 @@ class IRBuilder(NodeVisitor[Value]):
         different versions by coercing the arguments and return
         values.
         """
-        self.enter()
+        self.enter(FuncInfo())
 
         rt_args = (RuntimeArg(sig.args[0].name, RInstance(cls)),) + sig.args[1:]
 
@@ -564,50 +576,52 @@ class IRBuilder(NodeVisitor[Value]):
         retval = self.coerce(retval, sig.ret_type, line)
         self.add(Return(retval))
 
-        blocks, env, ret_type = self.leave()
+        blocks, env, ret_type, _ = self.leave()
         return FuncIR(target.name + '__' + base.name + '_glue',
                       cls.name, self.module_name,
                       FuncSignature(rt_args, ret_type), blocks, env)
 
-    def contains_func_def(self, stmt: Statement) -> bool:
-        """Traverses a Statement recursively using DFS and checks if it or any nested statements
-        contain a FuncDef.
-        """
-        if isinstance(stmt, (FuncItem, ForStmt, WhileStmt)):
-            if (any(isinstance(s, FuncDef) for s in stmt.body.body) or
-                    any(self.contains_func_def(s) for s in stmt.body.body)):
-                return True
-
-        if isinstance(stmt, IfStmt):
-            for block in stmt.body:
-                if (any(isinstance(s, FuncDef) for s in block.body) or
-                        any(self.contains_func_def(s) for s in block.body)):
-                    return True
-            if stmt.else_body:
-                if (any(isinstance(s, FuncDef) for s in stmt.else_body.body) or
-                        any(self.contains_func_def(s) for s in stmt.else_body.body)):
-                    return True
-
-        return False
-
-    def gen_func_def(self, fdef: FuncDef, sig: FuncSignature,
-                     class_name: Optional[str] = None) -> FuncIR:
+    def gen_func_def(self, fitem: FuncItem, name: str, sig: FuncSignature,
+                     class_name: Optional[str] = None) -> Tuple[FuncIR, Value]:
         """Generates and returns the FuncIR for a given FuncDef.
 
-        If the given FuncDef is a nested function, then we generate a callable class representing
-        the function and use that instead of the actual function. if the given FuncDef contains a
+        If the given FuncItem is a nested function, then we generate a callable class representing
+        the function and use that instead of the actual function. if the given FuncItem contains a
         nested function, then we generate an environment class so that inner nested functions can
         access the environment of the given FuncDef.
+
+        Consider the following nested function.
+        def a() -> None:
+            def b() -> None:
+                def c() -> None:
+                    return None
+                return None
+            return None
+
+        The classes generated would look something like the following.
+
+                    has pointer to        +-------+
+            +-------------------------->  | a_env |
+            |                             +-------+
+            |                                 ^
+            |                                 | has pointer to
+        +-------+     associated with     +-------+
+        | b_obj |   ------------------->  | b_env |
+        +-------+                         +-------+
+                                              ^
+                                              |
+        +-------+         has pointer to      |
+        | c_obj |   --------------------------+
+        +-------+
         """
-        self.fn_info = FuncInfo(fdef, self.gen_func_ns())
-        self.fn_infos.append(self.fn_info)
+        assert all(arg.initializer is None for arg in fitem.arguments), (
+            "Default args unimplemented")
 
-        # If there is more than one environment in the environment stack, then we are visiting a
-        # non-global function (the top-most environment is for the module top level).
-        self.fn_info.is_nested = len(self.environments) > 2
-        self.fn_info.contains_nested = self.contains_func_def(fdef)
+        self.enter(FuncInfo(fitem, name, self.gen_func_ns()))
 
-        self.enter(fdef.name())
+        # The top-most environment is for the module top level.
+        self.fn_info.is_nested = fitem in self.nested_fitems
+        self.fn_info.contains_nested = fitem in self.encapsulating_fitems
 
         if self.fn_info.is_nested:
             self.setup_callable_class()
@@ -621,20 +635,19 @@ class IRBuilder(NodeVisitor[Value]):
 
         self.ret_types[-1] = sig.ret_type
 
-        fdef.body.accept(self)
+        self.accept(fitem.body)
         self.maybe_add_implicit_return()
 
-        blocks, env, ret_type = self.leave()
+        blocks, env, ret_type, fn_info = self.leave()
 
-        if self.fn_info.is_nested:
-            func = self.finalize_callable_class(blocks, sig, env)
+        if fn_info.is_nested:
+            func_ir = self.add_call_to_callable_class(blocks, sig, env, fn_info)
+            func_reg = self.instantiate_callable_class(fn_info)
         else:
-            func = FuncIR(fdef.name(), class_name, self.module_name, sig, blocks, env)
+            func_ir = FuncIR(fn_info.name, class_name, self.module_name, sig, blocks, env)
+            func_reg = INVALID_VALUE
 
-        self.fn_infos.pop()
-        self.fn_info = self.fn_infos[-1]
-
-        return func
+        return (func_ir, func_reg)
 
     def maybe_add_implicit_return(self) -> None:
         if (is_none_rprimitive(self.ret_types[-1]) or
@@ -644,23 +657,39 @@ class IRBuilder(NodeVisitor[Value]):
             self.add_implicit_unreachable()
 
     def visit_func_def(self, fdef: FuncDef) -> Value:
-        self.functions.append(self.gen_func_def(fdef, self.mapper.fdef_to_sig(fdef)))
+        func_ir, func_reg = self.gen_func_def(fdef, fdef.name(), self.mapper.fdef_to_sig(fdef))
+
+        # If the function that was visited was a nested function, then either look it up in our
+        # current environment or define it if it was not already defined.
+        if self.fn_info.contains_nested:
+            if fdef.original_def:
+                # Get the target associated with the previously defined FuncDef.
+                func_target = self.environment.lookup(fdef.original_def)
+            else:
+                # The return type is 'object' instead of an RInstance of the callable class because
+                # differently defined functions with the same name and signature in conditional
+                # blocks will generate different callable classes, so the callable class that gets
+                # instantiated must be generic.
+                func_target = self.environment.add_local_reg(fdef, object_rprimitive)
+            self.assign_to_target(func_target, func_reg, fdef.line)
+
+        self.functions.append(func_ir)
         return INVALID_VALUE
 
     def add_implicit_return(self) -> None:
         block = self.blocks[-1][-1]
-        if not block.ops or not isinstance(block.ops[-1], Return):
+        if not block.ops or not isinstance(block.ops[-1], ControlOp):
             retval = self.add(PrimitiveOp([], none_op, line=-1))
             self.add(Return(retval))
 
     def add_implicit_unreachable(self) -> None:
         block = self.blocks[-1][-1]
-        if not block.ops or not isinstance(block.ops[-1], Return):
+        if not block.ops or not isinstance(block.ops[-1], ControlOp):
             self.add(Unreachable())
 
     def visit_block(self, block: Block) -> Value:
         for stmt in block.body:
-            stmt.accept(self)
+            self.accept(stmt)
         return INVALID_VALUE
 
     def visit_expression_stmt(self, stmt: ExpressionStmt) -> Value:
@@ -846,17 +875,17 @@ class IRBuilder(NodeVisitor[Value]):
 
         self.process_conditional(stmt.expr[0], if_body, else_body)
         self.activate_block(if_body)
-        stmt.body[0].accept(self)
+        self.accept(stmt.body[0])
         self.add_leave(next)
         if stmt.else_body:
             self.activate_block(else_body)
-            stmt.else_body.accept(self)
+            self.accept(stmt.else_body)
             self.add_leave(next)
         self.activate_block(next)
         return INVALID_VALUE
 
     def add_leave(self, target: BasicBlock) -> None:
-        if not self.blocks[-1][-1].ops or not isinstance(self.blocks[-1][-1].ops[-1], Return):
+        if not self.blocks[-1][-1].ops or not isinstance(self.blocks[-1][-1].ops[-1], ControlOp):
             self.add(Goto(target))
 
     class LoopNonlocalControl(NonlocalControl):
@@ -894,7 +923,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.process_conditional(s.expr, body, next)
 
         self.activate_block(body)
-        s.body.accept(self)
+        self.accept(s.body)
         # Add branch to the top at the end of the body.
         self.add(Goto(top))
 
@@ -927,7 +956,7 @@ class IRBuilder(NodeVisitor[Value]):
             self.add_bool_branch(comparison, body, next)
 
             self.activate_block(body)
-            s.body.accept(self)
+            self.accept(s.body)
 
             self.goto_and_activate(end_block)
 
@@ -977,7 +1006,7 @@ class IRBuilder(NodeVisitor[Value]):
             self.assign_to_target(lvalue,
                                   self.unbox_or_cast(value_box, target_type, s.line), s.line)
 
-            s.body.accept(self)
+            self.accept(s.body)
 
             self.goto_and_activate(end_block)
             self.add(Assign(index_reg, self.binary_op(index_reg, one_reg, '+', s.line)))
@@ -1017,7 +1046,7 @@ class IRBuilder(NodeVisitor[Value]):
             # the body, goto the label that calls the iterator's __next__ function again.
             self.activate_block(body_block)
             self.assign_to_target(lvalue, next_reg, s.line)
-            s.body.accept(self)
+            self.accept(s.body)
             self.add(Goto(next_block))
 
             # Create a new block for when the loop is finished. Set the branch to go here if the
@@ -1136,8 +1165,8 @@ class IRBuilder(NodeVisitor[Value]):
         return self.is_native_ref_expr(expr) and expr.kind == GDEF
 
     def is_free_variable(self, symbol: SymbolNode) -> bool:
-        fdef = self.fn_info.fdef
-        return fdef in self.free_variables and symbol in self.free_variables[fdef]
+        fitem = self.fn_info.fitem
+        return fitem in self.free_variables and symbol in self.free_variables[fitem]
 
     def visit_name_expr(self, expr: NameExpr) -> Value:
         assert expr.node, "RefExpr not resolved"
@@ -1200,6 +1229,9 @@ class IRBuilder(NodeVisitor[Value]):
         callee = expr.callee
         if isinstance(callee, IndexExpr) and isinstance(callee.analyzed, TypeApplication):
             callee = callee.analyzed.expr  # Unwrap type application
+
+        assert all(kind == ARG_POS for kind in expr.arg_kinds), (
+            "Only positional arguments implemented")
 
         if isinstance(callee, MemberExpr):
             if self.is_native_ref_expr(callee):
@@ -1488,7 +1520,9 @@ class IRBuilder(NodeVisitor[Value]):
             else:
                 # Optional[X] where X may be falsey and requires a check
                 branch.true = self.new_block()
-                remaining = self.coerce(value, value.type.value_type, value.line)
+                # unbox_or_cast instead of coerce because we want the
+                # type to change even if it is a subtype.
+                remaining = self.unbox_or_cast(value, value.type.value_type, value.line)
                 self.add_bool_branch(remaining, true, false)
             return
         elif not is_same_type(value.type, bool_rprimitive):
@@ -1563,7 +1597,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.error_handlers.append(except_entry)
         self.goto_and_activate(BasicBlock())
         self.accept(t.body)
-        self.add(Goto(else_block))
+        self.add_leave(else_block)
         self.error_handlers.pop()
 
         # The error handler catches the error and then checks it
@@ -1590,7 +1624,7 @@ class IRBuilder(NodeVisitor[Value]):
                 self.assign_to_target(
                     target, self.primitive_op(get_exc_value_op, [], var.line), var.line)
             self.accept(body)
-            self.add(Goto(cleanup_block))
+            self.add_leave(cleanup_block)
             if next_block:
                 self.activate_block(next_block)
 
@@ -1620,6 +1654,24 @@ class IRBuilder(NodeVisitor[Value]):
         self.activate_block(exit_block)
 
         return INVALID_VALUE
+
+    def visit_lambda_expr(self, expr: LambdaExpr) -> Value:
+        typ = self.types[expr]
+        assert isinstance(typ, CallableType)
+
+        runtime_args = []
+        for arg, arg_type in zip(expr.arguments, typ.arg_types):
+            arg.variable.type = arg_type
+            runtime_args.append(RuntimeArg(arg.variable.name(), self.type_to_rtype(arg_type)))
+        ret_type = self.type_to_rtype(typ.ret_type)
+
+        fsig = FuncSignature(runtime_args, ret_type)
+
+        fname = '__mypyc_lambda_{}__'.format(self.lambda_counter)
+        func_ir, func_reg = self.gen_func_def(expr, fname, fsig)
+
+        self.functions.append(func_ir)
+        return func_reg
 
     def visit_pass_stmt(self, o: PassStmt) -> Value:
         return INVALID_VALUE
@@ -1692,9 +1744,6 @@ class IRBuilder(NodeVisitor[Value]):
     def visit_generator_expr(self, o: GeneratorExpr) -> Value:
         raise NotImplementedError
 
-    def visit_lambda_expr(self, o: LambdaExpr) -> Value:
-        raise NotImplementedError
-
     def visit_list_comprehension(self, o: ListComprehension) -> Value:
         raise NotImplementedError
 
@@ -1757,9 +1806,11 @@ class IRBuilder(NodeVisitor[Value]):
 
     # Helpers
 
-    def enter(self, name: Optional[str] = None) -> None:
-        self.environment = Environment(name)
+    def enter(self, fn_info: FuncInfo) -> None:
+        self.environment = Environment(fn_info.name)
         self.environments.append(self.environment)
+        self.fn_info = fn_info
+        self.fn_infos.append(self.fn_info)
         self.ret_types.append(none_rprimitive)
         self.error_handlers.append(None)
         self.nonlocal_control.append(BaseNonlocalControl())
@@ -1784,16 +1835,22 @@ class IRBuilder(NodeVisitor[Value]):
         self.goto_and_activate(block)
         return block
 
-    def leave(self) -> Tuple[List[BasicBlock], Environment, RType]:
+    def leave(self) -> Tuple[List[BasicBlock], Environment, RType, FuncInfo]:
         blocks = self.blocks.pop()
         env = self.environments.pop()
         ret_type = self.ret_types.pop()
+        fn_info = self.fn_infos.pop()
         self.error_handlers.pop()
         self.nonlocal_control.pop()
         self.environment = self.environments[-1]
-        return blocks, env, ret_type
+        self.fn_info = self.fn_infos[-1]
+        return blocks, env, ret_type, fn_info
 
     def add(self, op: Op) -> Value:
+        if self.blocks[-1][-1].ops:
+            assert not isinstance(self.blocks[-1][-1].ops[-1], ControlOp), (
+                "Can't add to finished block")
+
         self.blocks[-1][-1].ops.append(op)
         if isinstance(op, RegisterOp):
             self.environment.add_op(op)
@@ -1815,12 +1872,21 @@ class IRBuilder(NodeVisitor[Value]):
             return desc.arg_types[-1]
         return desc.arg_types[n]
 
+    def crash_report(self, line: int) -> NoReturn:
+        traceback.print_exc()
+        print("{}:{}: mypyc crashed here".format(self.module_path, line))
+        sys.exit(2)
+        assert False
+
     def accept(self, node: Node) -> Value:
-        res = node.accept(self)
-        if isinstance(node, Expression):
-            assert res != INVALID_VALUE
-            res = self.coerce(res, self.node_type(node), node.line)
-        return res
+        try:
+            res = node.accept(self)
+            if isinstance(node, Expression):
+                assert res != INVALID_VALUE
+                res = self.coerce(res, self.node_type(node), node.line)
+            return res
+        except Exception:
+            self.crash_report(node.line)
 
     def alloc_temp(self, type: RType) -> Register:
         return self.environment.add_temp(type)
@@ -1860,7 +1926,7 @@ class IRBuilder(NodeVisitor[Value]):
 
         Returns the register where the environment class was loaded.
         """
-        env = self.add(GetAttr(base, ENV_ATTR_NAME, self.fn_info.fdef.line))
+        env = self.add(GetAttr(base, ENV_ATTR_NAME, self.fn_info.fitem.line))
         assert isinstance(env.type, RInstance), '{} must be of type RInstance'.format(env)
 
         for symbol, target in outer_env.symtable.items():
@@ -1897,14 +1963,14 @@ class IRBuilder(NodeVisitor[Value]):
                 index -= 1
 
     def add_args_to_env(self, local: bool = True) -> None:
-        fdef = self.fn_info.fdef
+        fitem = self.fn_info.fitem
         if local:
-            for arg in fdef.arguments:
+            for arg in fitem.arguments:
                 assert arg.variable.type, "Function argument missing type"
                 rtype = self.type_to_rtype(arg.variable.type)
                 self.environment.add_local_reg(arg.variable, rtype, is_arg=True)
         else:
-            for arg in fdef.arguments:
+            for arg in fitem.arguments:
                 assert arg.variable.type, "Function argument missing type"
 
                 # If the variable is not a free symbol, then we keep it in a local register.
@@ -1920,8 +1986,8 @@ class IRBuilder(NodeVisitor[Value]):
 
                 # Read the local definition of the variable, and set the corresponding attribute of
                 # the environment class' variable to be that value.
-                local_var = self.read_from_target(self.environment.lookup(arg.variable), fdef.line)
-                self.add(SetAttr(self.fn_info.env_reg, arg.variable.name(), local_var, fdef.line))
+                var = self.read_from_target(self.environment.lookup(arg.variable), fitem.line)
+                self.add(SetAttr(self.fn_info.env_reg, arg.variable.name(), var, fitem.line))
 
                 # Override the local definition of the variable to instead point at the variable in
                 # the environment class.
@@ -1936,59 +2002,51 @@ class IRBuilder(NodeVisitor[Value]):
         """Generates a callable class representing a nested function and sets up the 'self'
         variable for that class.
 
-        Calls the gen_callable_class function to generate the callable class, and then adds a
-        'self' variable to the environment, because nested functions become the '__call__' class
-        method of the generated callable class. Note that the generated class is not yet functional
-        because here we do not define the '__call__' method.
+        This takes the most recently visited function and returns a ClassIR to represent that
+        function. Each callable class contains an environment attribute with points to another
+        ClassIR representing the environment class where some of its variables can be accessed.
+        Note that its '__call__' method is not yet implemented, and is implemented in the
+        add_call_to_callable_class function.
 
         Returns a newly constructed ClassIR representing the callable class for the nested
         function.
         """
-        callable_class = self.gen_callable_class()
-        self_target = self.environment.add_local_reg(Var('self'),
-                                                     RInstance(callable_class),
-                                                     is_arg=True)
-        self.fn_info.self_reg = self.read_from_target(self_target, self.fn_info.fdef.line)
-        return callable_class
 
-    def gen_callable_class(self) -> ClassIR:
-        """Generates a callable class representing a nested function.
-
-        This takes a FuncDef and its associated namespace and returns a ClassIR to represent the
-        function. Each callable class contains an environment attribute with points to another
-        ClassIR representing the environment class where some of its variables can be accessed.
-        Note that its '__call__' method is not yet implemented, and is implemented in the
-        add_call_to_callable_class function. The name of the class is generated using the names of
-        the functions that enclose the given nested function.
-
-        Returns a newly constructed FuncIR associated with the given FuncDef.
-        """
-        name = '{}_{}_obj'.format(self.fn_info.fdef.name(), self.fn_info.ns)
+        # Check to see that the name has not already been taken. If so, rename the class. We allow
+        # multiple uses of the same function name because this is valid in if-else blocks. Example:
+        #     if True:
+        #         def foo():
+        #             return True
+        #     else:
+        #         def foo():
+        #             return False
+        name = '{}_{}_obj'.format(self.fn_info.name, self.fn_info.ns)
         count = 0
         while name in self.callable_class_names:
             name += '_' + str(count)
         self.callable_class_names.add(name)
 
+        # Define the actual callable class ClassIR, and set its environment to point at the
+        # previously defined environment class.
         callable_class = ClassIR(name, self.module_name)
         callable_class.attributes[ENV_ATTR_NAME] = RInstance(self.fn_infos[-2].env_class)
         callable_class.mro = [callable_class]
         self.fn_info.callable_class = callable_class
         self.classes.append(callable_class)
+
+        # Add a 'self' variable to the callable class' environment, and store that variable in a
+        # register to be accessed later.
+        self_target = self.environment.add_local_reg(Var('self'),
+                                                     RInstance(callable_class),
+                                                     is_arg=True)
+        self.fn_info.self_reg = self.read_from_target(self_target, self.fn_info.fitem.line)
         return callable_class
 
-    def finalize_callable_class(self,
-                                blocks: List[BasicBlock],
-                                sig: FuncSignature,
-                                env: Environment) -> FuncIR:
-        func = self.gen_func_for_callable_class(blocks, sig, env)
-        self.add_call_to_callable_class(func)
-        self.instantiate_callable_class()
-        return func
-
-    def gen_func_for_callable_class(self,
-                                    blocks: List[BasicBlock],
-                                    sig: FuncSignature,
-                                    env: Environment) -> FuncIR:
+    def add_call_to_callable_class(self,
+                                   blocks: List[BasicBlock],
+                                   sig: FuncSignature,
+                                   env: Environment,
+                                   fn_info: FuncInfo) -> FuncIR:
         """Generates a '__call__' method for a callable class representing a nested function.
 
         This takes the blocks, signature, and environment associated with a function definition and
@@ -1996,38 +2054,22 @@ class IRBuilder(NodeVisitor[Value]):
         function. Note that a 'self' parameter is added to its list of arguments, as the nested
         function becomes a class method.
         """
-        callable_class = self.fn_info.callable_class
         sig = FuncSignature((RuntimeArg('self', object_rprimitive),) + sig.args, sig.ret_type)
-        return FuncIR('__call__', callable_class.name, self.module_name, sig, blocks, env)
+        call = FuncIR('__call__', fn_info.callable_class.name, self.module_name, sig, blocks, env)
+        fn_info.callable_class.methods['__call__'] = call
+        return call
 
-    def add_call_to_callable_class(self, call_fn: FuncIR) -> None:
-        """Sets the '__call__' method for a callable class to a given FuncIR."""
-        callable_class = self.fn_info.callable_class
-        callable_class.methods['__call__'] = call_fn
-
-    def instantiate_callable_class(self) -> Value:
+    def instantiate_callable_class(self, fn_info: FuncInfo) -> Value:
         """Assigns a callable class to a register named after the given function definition."""
-        fdef = self.fn_info.fdef
+        fitem = fn_info.fitem
 
-        fullname = '{}.{}'.format(self.module_name, self.fn_info.callable_class.name)
-        func_reg = self.add(Call(RInstance(self.fn_info.callable_class), fullname, [], fdef.line))
+        fullname = '{}.{}'.format(self.module_name, fn_info.callable_class.name)
+        func_reg = self.add(Call(RInstance(fn_info.callable_class), fullname, [], fitem.line))
 
         # Set the callable class' environment attribute to point at the environment class
         # defined in the callable class' immediate outer scope.
-        self.add(SetAttr(func_reg, ENV_ATTR_NAME, self.fn_infos[-2].env_reg, fdef.line))
-
-        if fdef.original_def:
-            # Get the target associated with the previously defined FuncDef.
-            func_target = self.environment.lookup(fdef.original_def)
-        else:
-            # The return type is 'object' instead of an RInstance of the callable class because
-            # differently defined functions with the same name and signature in conditional blocks
-            # will generate different callable classes, so the callable class that gets
-            # instantiated must be generic.
-            func_target = self.environment.add_local_reg(fdef, object_rprimitive)
-
-        self.assign_to_target(func_target, func_reg, fdef.line)
-        return self.read_from_target(func_target, fdef.line)
+        self.add(SetAttr(func_reg, ENV_ATTR_NAME, self.fn_info.env_reg, fitem.line))
+        return func_reg
 
     def setup_env_class(self) -> ClassIR:
         """Generates a class representing a function environment.
@@ -2041,7 +2083,7 @@ class IRBuilder(NodeVisitor[Value]):
 
         Returns a ClassIR representing an environment for a function containing a nested function.
         """
-        env_class = ClassIR('{}_{}_env'.format(self.fn_info.fdef.name(), self.fn_info.ns),
+        env_class = ClassIR('{}_{}_env'.format(self.fn_info.name, self.fn_info.ns),
                             self.module_name)
         env_class.attributes['self'] = RInstance(env_class)
         if self.fn_info.is_nested:
@@ -2067,11 +2109,11 @@ class IRBuilder(NodeVisitor[Value]):
         """Assigns an environment class to a register named after the given function definition."""
         fullname = '{}.{}'.format(self.module_name, self.fn_info.env_class.name)
         self.fn_info.env_reg = self.add(Call(RInstance(self.fn_info.env_class), fullname, [],
-                                             self.fn_info.fdef.line))
+                                             self.fn_info.fitem.line))
 
         if self.fn_info.is_nested:
             self.add(SetAttr(self.fn_info.env_reg, ENV_ATTR_NAME, self.fn_info.prev_env_reg,
-                             self.fn_info.fdef.line))
+                             self.fn_info.fitem.line))
 
         return self.fn_info.env_reg
 
