@@ -1221,24 +1221,19 @@ class IRBuilder(NodeVisitor[Value]):
         """Translate a non-method call."""
         assert isinstance(callee, RefExpr)  # TODO: Allow arbitrary callees
 
+        # Gen the args
+        args = [self.accept(arg) for arg in expr.args]
+
         # Don't rely on the inferred callee type, since it may have type
         # variable substitutions that aren't valid at runtime (due to type
         # erasure). Instead pick the declared signature of the native function
         # as the true signature.
         signature = self.get_native_signature(callee)
         if signature is not None:
-            # Normalize keyword arguments to positional args.
-            arg_exprs = keyword_args_to_positional(expr.args,
-                                                   expr.arg_kinds,
-                                                   expr.arg_names,
-                                                   signature)
-        else:
-            arg_exprs = expr.args
+            # Normalize keyword args to positionals.
+            args = keyword_args_to_positional(args, expr.arg_kinds, expr.arg_names, signature)
 
-        # Gen the args
         fullname = callee.fullname
-        args = [self.accept(arg) for arg in arg_exprs]
-
         if fullname == 'builtins.len' and len(expr.args) == 1 and expr.arg_kinds == [ARG_POS]:
             expr_rtype = args[0].type
             if isinstance(expr_rtype, RTuple):
@@ -2162,10 +2157,10 @@ class IRBuilder(NodeVisitor[Value]):
         return src
 
 
-def keyword_args_to_positional(args: List[Expression],
+def keyword_args_to_positional(args: List[Value],
                                arg_kinds: List[int],
                                arg_names: List[Optional[str]],
-                               signature: CallableType) -> List[Expression]:
+                               signature: CallableType) -> List[Value]:
     # NOTE: This doesn't support default argument values, *args or **kwargs.
     formal_to_actual = map_actuals_to_formals(arg_kinds,
                                               arg_names,
