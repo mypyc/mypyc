@@ -1321,22 +1321,29 @@ class IRBuilder(NodeVisitor[Value]):
                 # Look up the declared signature of the method, since the
                 # inferred signature can have type variable substitutions which
                 # aren't valid at runtime due to type erasure.
-                typ = self.types[callee.expr]
-                assert isinstance(typ, Instance)
-                method = typ.type.get(callee.name)
-                if method and isinstance(method.node, FuncDef) and isinstance(method.node.type,
-                                                                              CallableType):
-                    sig = method.node.type
+                signature = self.get_native_method_signature(callee)
+                if signature:
+                    args = keyword_args_to_positional(args, expr.arg_kinds, expr.arg_names,
+                                                      signature)
                     arg_types = [self.type_to_rtype(arg_type)
-                                 for arg_type in sig.arg_types[1:]]
+                                 for arg_type in signature.arg_types]
                     arg_regs = self.coerce_native_call_args(args, arg_types, expr.line)
-                    target_type = self.type_to_rtype(sig.ret_type)
+                    target_type = self.type_to_rtype(signature.ret_type)
                     return self.add(MethodCall(target_type, obj, callee.name,
                                                arg_regs, expr.line))
 
             # Fall back to Python method call
             method_name = self.load_static_unicode(callee.name)
             return self.py_method_call(obj, method_name, args, expr.line)
+
+    def get_native_method_signature(self, callee: MemberExpr) -> Optional[CallableType]:
+        typ = self.types[callee.expr]
+        if isinstance(typ, Instance):
+            method = typ.type.get(callee.name)
+            if method and isinstance(method.node, FuncDef) and isinstance(method.node.type,
+                                                                          CallableType):
+                return bind_self(method.node.type)
+        return None
 
     def translate_cast_expr(self, expr: CastExpr) -> Value:
         src = self.accept(expr.expr)

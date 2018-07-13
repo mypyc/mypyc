@@ -1330,3 +1330,37 @@ L0:
     r5 = f(r3, r4)
     r6 = None
     return r6
+
+[case testMethodCallWithKeywordArgs]
+class A:
+    def f(self, x: int, y: str) -> None: pass
+
+def g(a: A) -> None:
+    a.f(y='a', x=0)
+    a.f(1, y='b')
+[out]
+def A.f(self, x, y):
+    self :: A
+    x :: int
+    y :: str
+    r0 :: None
+L0:
+    r0 = None
+    return r0
+def g(a):
+    a :: A
+    r0 :: str
+    r1 :: int
+    r2 :: None
+    r3 :: int
+    r4 :: str
+    r5, r6 :: None
+L0:
+    r0 = unicode_0 :: static  ('a')
+    r1 = 0
+    r2 = a.f(r1, r0)
+    r3 = 1
+    r4 = unicode_1 :: static  ('b')
+    r5 = a.f(r3, r4)
+    r6 = None
+    return r6
