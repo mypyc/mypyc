@@ -23,23 +23,24 @@ from mypy.nodes import (
     IntExpr, NameExpr, LDEF, Var, IfStmt, UnaryExpr, ComparisonExpr, WhileStmt, Argument, CallExpr,
     IndexExpr, Block, Expression, ListExpr, ExpressionStmt, MemberExpr, ForStmt, RefExpr, Lvalue,
     BreakStmt, ContinueStmt, ConditionalExpr, OperatorAssignmentStmt, TupleExpr, ClassDef,
-    TypeInfo, Import, ImportFrom, ImportAll, DictExpr, StrExpr, CastExpr, TempNode, ARG_POS,
+    TypeInfo, Import, ImportFrom, ImportAll, DictExpr, StrExpr, CastExpr, TempNode,
     MODULE_REF, PassStmt, PromoteExpr, AwaitExpr, BackquoteExpr, AssertStmt, BytesExpr,
     ComplexExpr, Decorator, DelStmt, DictionaryComprehension, EllipsisExpr, EnumCallExpr, ExecStmt,
     FloatExpr, GeneratorExpr, GlobalDecl, LambdaExpr, ListComprehension, SetComprehension,
     NamedTupleExpr, NewTypeExpr, NonlocalDecl, OverloadedFuncDef, PrintStmt, RaiseStmt,
     RevealExpr, SetExpr, SliceExpr, StarExpr, SuperExpr, TryStmt, TypeAliasExpr,
     TypeApplication, TypeVarExpr, TypedDictExpr, UnicodeExpr, WithStmt, YieldFromExpr, YieldExpr,
-    GDEF
+    GDEF, ARG_POS, ARG_NAMED
 )
 import mypy.nodes
 from mypy.types import (
     Type, Instance, CallableType, NoneTyp, TupleType, UnionType, AnyType, TypeVarType, PartialType,
-    TypeType, FunctionLike, Overloaded
+    TypeType, FunctionLike, Overloaded, TypeOfAny
 )
 from mypy.visitor import NodeVisitor
 from mypy.subtypes import is_named_instance
 from mypy.checkmember import bind_self
+from mypy.checkexpr import map_actuals_to_formals
 
 from mypyc.common import ENV_ATTR_NAME, MAX_SHORT_INT, TOP_LEVEL_NAME
 from mypyc.freevariables import FreeVariablesVisitor
@@ -1208,15 +1209,11 @@ class IRBuilder(NodeVisitor[Value]):
         if isinstance(callee, IndexExpr) and isinstance(callee.analyzed, TypeApplication):
             callee = callee.analyzed.expr  # Unwrap type application
 
-        assert all(kind == ARG_POS for kind in expr.arg_kinds), (
-            "Only positional arguments implemented")
+        assert all(kind in (ARG_POS, ARG_NAMED) for kind in expr.arg_kinds), (
+            "Only positional and keyword arguments implemented")
 
         if isinstance(callee, MemberExpr):
-            if self.is_native_ref_expr(callee):
-                # Call to module-level function or such
-                return self.translate_call(expr, callee)
-            else:
-                return self.translate_method_call(expr, callee)
+            return self.translate_method_call(expr, callee)
         else:
             return self.translate_call(expr, callee)
 
@@ -1224,9 +1221,23 @@ class IRBuilder(NodeVisitor[Value]):
         """Translate a non-method call."""
         assert isinstance(callee, RefExpr)  # TODO: Allow arbitrary callees
 
+        # Don't rely on the inferred callee type, since it may have type
+        # variable substitutions that aren't valid at runtime (due to type
+        # erasure). Instead pick the declared signature of the native function
+        # as the true signature.
+        signature = self.get_native_signature(callee)
+        if signature is not None:
+            # Normalize keyword arguments to positional args.
+            arg_exprs = keyword_args_to_positional(expr.args,
+                                                   expr.arg_kinds,
+                                                   expr.arg_names,
+                                                   signature)
+        else:
+            arg_exprs = expr.args
+
         # Gen the args
         fullname = callee.fullname
-        args = [self.accept(arg) for arg in expr.args]
+        args = [self.accept(arg) for arg in arg_exprs]
 
         if fullname == 'builtins.len' and len(expr.args) == 1 and expr.arg_kinds == [ARG_POS]:
             expr_rtype = args[0].type
@@ -1250,11 +1261,7 @@ class IRBuilder(NodeVisitor[Value]):
                 return target
 
         fn = callee.fullname
-        # Try to generate a native call. Don't rely on the inferred callee
-        # type, since it may have type variable substitutions that aren't
-        # valid at runtime (due to type erasure). Instead pick the declared
-        # signature of the native function as the true signature.
-        signature = self.get_native_signature(callee)
+        # Try to generate a native call.
         if signature and fn:
             # Native call
             arg_types = [self.type_to_rtype(arg_type) for arg_type in signature.arg_types]
@@ -1290,8 +1297,15 @@ class IRBuilder(NodeVisitor[Value]):
         return signature
 
     def translate_method_call(self, expr: CallExpr, callee: MemberExpr) -> Value:
-        if self.is_module_member_expr(callee):
-            # Fall back to a PyCall for module calls
+        """Generate IR for an arbitrary call of form e.m(...).
+
+        This can also deal with calls to module-level functions.
+        """
+        if self.is_native_ref_expr(callee):
+            # Call to module-level native function or such
+            return self.translate_call(expr, callee)
+        elif self.is_module_member_expr(callee):
+            # Fall back to a PyCall for non-native module calls
             function = self.accept(callee)
             args = [self.accept(arg) for arg in expr.args]
             return self.py_call(function, args, expr.line)
@@ -2146,3 +2160,17 @@ class IRBuilder(NodeVisitor[Value]):
                 or not is_subtype(src.type, target_type)):
             return self.unbox_or_cast(src, target_type, line)
         return src
+
+
+def keyword_args_to_positional(args: List[Expression],
+                               arg_kinds: List[int],
+                               arg_names: List[Optional[str]],
+                               signature: CallableType) -> List[Expression]:
+    # NOTE: This doesn't support default argument values, *args or **kwargs.
+    formal_to_actual = map_actuals_to_formals(arg_kinds,
+                                              arg_names,
+                                              signature.arg_kinds,
+                                              signature.arg_names,
+                                              lambda n: AnyType(TypeOfAny.special_form))
+    assert all(len(lst) == 1 for lst in formal_to_actual)
+    return [args[formal_to_actual[i][0]] for i in range(len(args))]

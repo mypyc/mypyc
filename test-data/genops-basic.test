@@ -1299,3 +1299,34 @@ L0:
     r5 = py_call(r2, r4)
     r6 = cast(str, r5)
     return r6
+
+[case testCallWithKeywordArgs]
+def f(x: int, y: str) -> None: pass
+
+def g() -> None:
+    f(y='a', x=0)
+    f(1, y='b')
+[out]
+def f(x, y):
+    x :: int
+    y :: str
+    r0 :: None
+L0:
+    r0 = None
+    return r0
+def g():
+    r0 :: int
+    r1 :: str
+    r2 :: None
+    r3 :: int
+    r4 :: str
+    r5, r6 :: None
+L0:
+    r0 = 0
+    r1 = unicode_0 :: static  ('a')
+    r2 = f(r0, r1)
+    r3 = 1
+    r4 = unicode_1 :: static  ('b')
+    r5 = f(r3, r4)
+    r6 = None
+    return r6
