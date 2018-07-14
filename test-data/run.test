@@ -569,6 +569,11 @@ Traceback (most recent call last):
     [0][1]
 IndexError: list index out of range
 == k ==
+Traceback (most recent call last):
+  File "tmp/py/native.py", line 57, in k
+    r(1)
+  File "tmp/py/native.py", line 17, in r
+    raise Exception('hi')
 Exception: hi
 
 During handling of the above exception, another exception occurred:

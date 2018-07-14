@@ -576,6 +576,9 @@ static void CPy_CatchError(PyObject **p_type, PyObject **p_value, PyObject **p_t
     PyErr_Fetch(&type, &value, &traceback);
     /* Could we avoid always normalizing? */
     PyErr_NormalizeException(&type, &value, &traceback);
+    if (traceback != NULL) {
+        PyException_SetTraceback(value, traceback);
+    }
     PyErr_SetExcInfo(type, value, traceback);
     PyErr_Clear();
 }
@@ -595,9 +598,9 @@ static bool CPy_ExceptionMatches(PyObject *type) {
 }
 
 static PyObject *CPy_GetExcValue(void) {
-	PyObject *exc = PyThreadState_GET()->exc_value;
-	Py_INCREF(exc);
-	return exc;
+    PyObject *exc = PyThreadState_GET()->exc_value;
+    Py_INCREF(exc);
+    return exc;
 }
 
 #ifdef __cplusplus
