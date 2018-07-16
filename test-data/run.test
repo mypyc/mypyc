@@ -515,6 +515,16 @@ def k() -> None:
     except:
         r(0)
 
+def l() -> None:
+    try:
+        r(0)
+    except IndexError:
+        try:
+            r(2)
+        except KeyError as e:
+            print("key! --", e)
+
+
 [file wrapsys.py]
 # This is a gross hack around some limitations of the test system/mypyc.
 from typing import Any
@@ -525,7 +535,7 @@ def exc_info() -> Any:
 [file driver.py]
 import traceback
 import sys
-from native import g, f, h, i, j, k
+from native import g, f, h, i, j, k, l
 print("== i ==")
 try:
     i()
@@ -557,6 +567,9 @@ try:
     j(1)
 except:
     print("out!")
+
+print("== l ==")
+l()
 [out]
 == i ==
 <class 'IndexError'>
@@ -602,6 +615,8 @@ lookup!
 lookup!
 attr! -- 'object' object has no attribute 'lol'
 out!
+== l ==
+key! -- 0
 
 [case testGenericEquality]
 def eq(a: object, b: object) -> bool:

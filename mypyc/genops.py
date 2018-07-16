@@ -67,7 +67,7 @@ from mypyc.ops_misc import (
     is_none_op, type_op,
 )
 from mypyc.ops_exc import (
-    no_err_occurred_op, raise_exception_op, reraise_exception_op, clear_exception_op,
+    no_err_occurred_op, raise_exception_op, reraise_exception_op,
     error_catch_op, restore_exc_info_op, exc_matches_op, get_exc_value_op,
 )
 from mypyc.subtype import is_subtype
@@ -1620,6 +1620,8 @@ class IRBuilder(NodeVisitor[Value]):
         # against the except clauses. We compile the error handler
         # itself with an error handler so that it can properly restore
         # the *old* exc_info if an exception occurs.
+        # The exception chaining will be done automatically when the
+        # exception is raised, based on the exception in exc_info.
         self.error_handlers.append(cleanup_block)
         self.activate_block(except_entry)
         old_exc = self.primitive_op(error_catch_op, [], t.line)

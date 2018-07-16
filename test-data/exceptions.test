@@ -155,7 +155,7 @@ L2:
 L3:
     goto L10
 L4:
-    r4 = err_catch
+    r4 = error_catch
     r5 = unicode_1 :: static  ('weeee')
     r6 = builtins.module :: static
     r7 = unicode_2 :: static  ('print')

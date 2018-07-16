@@ -567,23 +567,36 @@ static inline PyObject *_CPy_FromDummy(PyObject *p) {
 }
 
 static void CPy_CatchError(PyObject **p_type, PyObject **p_value, PyObject **p_traceback) {
+    // We need to return the existing sys.exc_info() information, so
+    // that it can be restored when we finish handling the error we
+    // are catching now. Grab that triple and convert NULL values to
+    // the ExcDummy object in order to simplify refcount handling in
+    // generated code.
     PyErr_GetExcInfo(p_type, p_value, p_traceback);
     _CPy_ToDummy(p_type);
     _CPy_ToDummy(p_value);
     _CPy_ToDummy(p_traceback);
 
+    // Retrieve the error info and normalize it so that it looks like
+    // what python code needs it to be.
     PyObject *type, *value, *traceback;
     PyErr_Fetch(&type, &value, &traceback);
-    /* Could we avoid always normalizing? */
+    // Could we avoid always normalizing?
     PyErr_NormalizeException(&type, &value, &traceback);
     if (traceback != NULL) {
         PyException_SetTraceback(value, traceback);
     }
+    // Indicate that we are now handling this exception by stashing it
+    // in sys.exc_info().  mypyc routines that need access to the
+    // exception will read it out of there.
     PyErr_SetExcInfo(type, value, traceback);
+    // Clear the error indicator, since the exception isn't
+    // propagating anymore.
     PyErr_Clear();
 }
 
 static void CPy_RestoreExcInfo(PyObject *type, PyObject *value, PyObject *traceback) {
+    // PyErr_SetExcInfo steals the references to the values passed to it.
     PyErr_SetExcInfo(_CPy_FromDummy(type), _CPy_FromDummy(value), _CPy_FromDummy(traceback));
 }
 
