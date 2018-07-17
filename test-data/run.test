@@ -902,6 +902,31 @@ assert sum == 50.0
 assert str(from_int(10)) == '10.0'
 assert str(to_int(3.14)) == '3'
 
+[case testBytes]
+def f(x: bytes) -> bytes:
+    return x
+
+def concat(a: bytes, b: bytes) -> bytes:
+    return a + b
+
+def eq(a: bytes, b: bytes) -> bool:
+    return a == b
+
+def neq(a: bytes, b: bytes) -> bool:
+    return a != b
+
+def join() -> bytes:
+    seq = (b'1', b'2', b'3')
+    return b'.'.join(seq)
+[file driver.py]
+from native import f, concat, eq, neq, join
+assert f(b'123') == b'123'
+assert concat(b'123', b'456') == b'123456'
+assert eq(b'123', b'123')
+assert not eq(b'123', b'1234')
+assert neq(b'123', b'1234')
+assert join() == b'1.2.3'
+
 [case testBigIntLiteral]
 def big_int() -> None:
     a_62_bit = 4611686018427387902

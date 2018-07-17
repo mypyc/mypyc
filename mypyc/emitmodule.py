@@ -222,6 +222,13 @@ class ModuleGenerator:
                     'if ({} == NULL)'.format(symbol),
                     '    return NULL;',
                 )
+            elif isinstance(literal, bytes):
+                emitter.emit_lines(
+                    '{} = PyBytes_FromStringAndSize({}, {});'.format(
+                        symbol, *encode_as_c_string(str(literal.decode('utf8')))),
+                    'if ({} == NULL)'.format(symbol),
+                    '    return NULL;',
+                )
             else:
                 assert False, ('Literals must be integers, floating point numbers, or strings,',
                                'but the provided literal is of type {}'.format(type(literal)))
