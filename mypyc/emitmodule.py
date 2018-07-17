@@ -225,7 +225,7 @@ class ModuleGenerator:
             elif isinstance(literal, bytes):
                 emitter.emit_lines(
                     '{} = PyBytes_FromStringAndSize({}, {});'.format(
-                        symbol, *encode_as_c_string(str(literal.decode('utf8')))),
+                        symbol, *encode_as_c_string(str(literal.decode('unicode-escape')))),
                     'if ({} == NULL)'.format(symbol),
                     '    return NULL;',
                 )
