@@ -70,7 +70,6 @@ def encode_as_c_string(s: str) -> Tuple[str, int]:
 def encode_bytes_as_c_string(b: bytes) -> Tuple[str, int]:
     """Produce a single-escaped, quoted C string and its size from a bytes"""
     # This is a kind of abusive way to do this...
-    b = b.decode('unicode-escape').encode('raw-unicode-escape')
     escaped = str(b)[2:-1].replace('"', '\\"')
     return '"{}"'.format(escaped), len(b)
 

@@ -1158,7 +1158,7 @@ class IRBuilder(NodeVisitor[Value]):
         return self.load_static_float(expr.value)
 
     def visit_bytes_expr(self, expr: BytesExpr) -> Value:
-        value = bytes(expr.value, 'utf8')
+        value = bytes(expr.value, 'utf8').decode('unicode-escape').encode('raw-unicode-escape')
         return self.load_static_bytes(value)
 
     def is_native_ref_expr(self, expr: RefExpr) -> bool:
