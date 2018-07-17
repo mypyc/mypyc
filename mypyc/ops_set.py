@@ -1,5 +1,5 @@
 """Primitive set ops."""
-from mypyc.ops_primitive import func_op, custom_op, method_op, binary_op, simple_emit
+from mypyc.ops_primitive import func_op, method_op, binary_op, simple_emit, negative_int_emit
 from mypyc.ops import (
     object_rprimitive, bool_rprimitive, set_rprimitive, int_rprimitive, ERR_MAGIC, ERR_FALSE,
     ERR_NEVER, EmitterInterface
@@ -46,22 +46,8 @@ binary_op(
     result_type=bool_rprimitive,
     error_kind=ERR_MAGIC,
     format_str='{dest} = {args[0]} in {args[1]} :: set',
-    emit=simple_emit('{dest} = PySet_Contains({args[1]}, {args[0]});')
+    emit=negative_int_emit('{dest} = PySet_Contains({args[1]}, {args[0]});')
 )
-
-
-def emit_remove(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-    temp = emitter.temp_name()
-    emitter.emit_declaration('int %s;' % temp)
-    emitter.emit_line('%s = PySet_Discard(%s, %s);' % (temp, args[0], args[1]))
-    emitter.emit_line('if (%s < 0) {' % temp)
-    emitter.emit_line('    %s = false;' % dest)
-    emitter.emit_line('} else if (%s == 0) {' % temp)
-    emitter.emit_line('    _PyErr_SetKeyError(%s);' % args[1])
-    emitter.emit_line('    %s = false;' % dest)
-    emitter.emit_line('} else {')
-    emitter.emit_line('    %s = true;' % dest)
-    emitter.emit_line('}')
 
 
 method_op(
@@ -69,7 +55,7 @@ method_op(
     arg_types=[set_rprimitive, object_rprimitive],
     result_type=bool_rprimitive,
     error_kind=ERR_FALSE,
-    emit=emit_remove
+    emit=simple_emit('{dest} = CPySet_Remove({args[0]}, {args[1]});')
 )
 
 
