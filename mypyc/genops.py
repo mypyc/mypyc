@@ -1678,9 +1678,9 @@ class IRBuilder(NodeVisitor[Value]):
             self.accept(t.body)
 
     class TryFinallyNonlocalControl(NonlocalControl):
-        def __init__(self, target: BasicBlock, ret_reg: Register) -> None:
+        def __init__(self, target: BasicBlock) -> None:
             self.target = target
-            self.ret_reg = ret_reg
+            self.ret_reg = None  # type: Optional[Register]
 
         def gen_break(self, builder: 'IRBuilder') -> None:
             assert False, "unimplemented"
@@ -1689,6 +1689,9 @@ class IRBuilder(NodeVisitor[Value]):
             assert False, "unimplemented"
 
         def gen_return(self, builder: 'IRBuilder', value: Value) -> None:
+            if self.ret_reg is None:
+                self.ret_reg = builder.alloc_temp(builder.ret_types[-1])
+
             builder.add(Assign(self.ret_reg, value))
             builder.add(Goto(self.target))
 
@@ -1698,18 +1701,19 @@ class IRBuilder(NodeVisitor[Value]):
         Just makes sure that sys.exc_info always gets restored when we
         leave and the return register is decrefed if it isn't null.
         """
-        def __init__(self, outer: NonlocalControl, ret_reg: Value, saved: Value) -> None:
+        def __init__(self, outer: NonlocalControl, ret_reg: Optional[Value], saved: Value) -> None:
             super().__init__(outer)
             self.ret_reg = ret_reg
             self.saved = saved
 
         def gen_cleanup(self, builder: 'IRBuilder') -> None:
             # Do an error branch on the return value register, which
-            # may be undefined. This will allow it to be properliy
+            # may be undefined. This will allow it to be properly
             # decrefed if it is not null. This is kind of a hack.
-            target = BasicBlock()
-            builder.add(Branch(self.ret_reg, target, target, Branch.IS_ERROR))
-            builder.activate_block(target)
+            if self.ret_reg:
+                target = BasicBlock()
+                builder.add(Branch(self.ret_reg, target, target, Branch.IS_ERROR))
+                builder.activate_block(target)
 
             # Restore the old exc_info
             # Don't bother plumbing a line through because it can't fail
@@ -1720,30 +1724,30 @@ class IRBuilder(NodeVisitor[Value]):
             builder.goto_and_activate(target)
 
     def try_finally_try(self, err_handler: BasicBlock, return_entry: BasicBlock,
-                        main_entry: BasicBlock, try_body: TryStmt) -> Register:
-        # TODO: Don't generate this if it isn't needed
-        ret_reg = self.alloc_temp(self.ret_types[-1])
-
+                        main_entry: BasicBlock, try_body: TryStmt) -> Optional[Register]:
         # Compile the try block with an error handler
+        control = IRBuilder.TryFinallyNonlocalControl(return_entry)
         self.error_handlers.append(err_handler)
-        self.nonlocal_control.append(IRBuilder.TryFinallyNonlocalControl(return_entry, ret_reg))
+
+        self.nonlocal_control.append(control)
         self.goto_and_activate(BasicBlock())
         self.visit_try_body(try_body)
         self.add_leave(main_entry)
         self.nonlocal_control.pop()
         self.error_handlers.pop()
 
-        return ret_reg
+        return control.ret_reg
 
     def try_finally_entry_blocks(self,
                                  err_handler: BasicBlock, return_entry: BasicBlock,
                                  main_entry: BasicBlock, finally_block: BasicBlock,
-                                 ret_reg: Register) -> Value:
+                                 ret_reg: Optional[Register]) -> Value:
         old_exc = self.alloc_temp(exc_rtuple)
 
         # Entry block for non-exceptional flow
         self.activate_block(main_entry)
-        self.add(Assign(ret_reg, self.add(LoadErrorValue(self.ret_types[-1]))))
+        if ret_reg:
+            self.add(Assign(ret_reg, self.add(LoadErrorValue(self.ret_types[-1]))))
         self.add(Goto(return_entry))
 
         self.activate_block(return_entry)
@@ -1752,7 +1756,8 @@ class IRBuilder(NodeVisitor[Value]):
 
         # Entry block for errors
         self.activate_block(err_handler)
-        self.add(Assign(ret_reg, self.add(LoadErrorValue(self.ret_types[-1]))))
+        if ret_reg:
+            self.add(Assign(ret_reg, self.add(LoadErrorValue(self.ret_types[-1]))))
         self.add(Assign(old_exc, self.primitive_op(error_catch_op, [], -1)))
         self.add(Goto(finally_block))
 
@@ -1760,7 +1765,7 @@ class IRBuilder(NodeVisitor[Value]):
 
     def try_finally_body(
             self, finally_block: BasicBlock, finally_body: Block,
-            ret_reg: Value, old_exc: Value) -> Tuple[BasicBlock, FinallyNonlocalControl]:
+            ret_reg: Optional[Value], old_exc: Value) -> Tuple[BasicBlock, FinallyNonlocalControl]:
         cleanup_block = BasicBlock()
         # Compile the finally block with the nonlocal control flow overridden to restore exc_info
         self.error_handlers.append(cleanup_block)
@@ -1775,7 +1780,7 @@ class IRBuilder(NodeVisitor[Value]):
 
     def try_finally_resolve_control(self, cleanup_block: BasicBlock,
                                     finally_control: FinallyNonlocalControl,
-                                    old_exc: Value, ret_reg: Value) -> BasicBlock:
+                                    old_exc: Value, ret_reg: Optional[Value]) -> BasicBlock:
         """Resolve the control flow out of a finally block.
 
         This means returning if there was a return, propagating
@@ -1784,17 +1789,20 @@ class IRBuilder(NodeVisitor[Value]):
         reraise, rest = BasicBlock(), BasicBlock()
         self.add(Branch(old_exc, rest, reraise, Branch.IS_ERROR))
 
+        # Reraise the exception if there was one
         self.activate_block(reraise)
         self.primitive_op(reraise_exception_op, [], NO_TRACEBACK_LINE_NO)
         self.add(Unreachable())
         self.error_handlers.pop()
 
-        self.activate_block(rest)
-        return_block, rest = BasicBlock(), BasicBlock()
-        self.add(Branch(ret_reg, rest, return_block, Branch.IS_ERROR))
+        # If there was a return, keep returning
+        if ret_reg:
+            self.activate_block(rest)
+            return_block, rest = BasicBlock(), BasicBlock()
+            self.add(Branch(ret_reg, rest, return_block, Branch.IS_ERROR))
 
-        self.activate_block(return_block)
-        self.nonlocal_control[-1].gen_return(self, ret_reg)
+            self.activate_block(return_block)
+            self.nonlocal_control[-1].gen_return(self, ret_reg)
 
         # TODO: handle break/continue
         self.activate_block(rest)

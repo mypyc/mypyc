@@ -198,32 +198,32 @@ def a() -> str:
 [out]
 L0:
 L1:
-    r1 = builtins.module :: static
-    r2 = unicode_0 :: static  ('print')
-    r3 = getattr r1, r2
-    if is_error(r3) goto L7 (error at a:3) else goto L2
+    r0 = builtins.module :: static
+    r1 = unicode_0 :: static  ('print')
+    r2 = getattr r0, r1
+    if is_error(r2) goto L7 (error at a:3) else goto L2
 L2:
-    r4 = py_call(r3)
-    dec_ref r3
-    if is_error(r4) goto L7 (error at a:3) else goto L3
+    r3 = py_call(r2)
+    dec_ref r2
+    if is_error(r3) goto L7 (error at a:3) else goto L3
 L3:
-    r5 = cast(None, r4)
-    if is_error(r5) goto L7 (error at a:3) else goto L24
+    r4 = cast(None, r3)
+    if is_error(r4) goto L7 (error at a:3) else goto L24
 L4:
-    r6 = unicode_1 :: static  ('hi')
-    inc_ref r6
-    r0 = r6
+    r5 = unicode_1 :: static  ('hi')
+    inc_ref r5
+    r6 = r5
     goto L6
 L5:
     r8 = <error> :: str
-    r0 = r8
+    r6 = r8
 L6:
     r9 = <error> :: tuple[object, object, object]
     r7 = r9
     goto L8
 L7:
     r10 = <error> :: str
-    r0 = r10
+    r6 = r10
     r11 = error_catch
     r7 = r11
 L8:
@@ -247,13 +247,13 @@ L12:
 L13:
     unreachable
 L14:
-    if is_error(r0) goto L16 else goto L15
+    if is_error(r6) goto L16 else goto L15
 L15:
-    return r0
+    return r6
 L16:
     goto L22
 L17:
-    if is_error(r0) goto L18 else goto L27
+    if is_error(r6) goto L18 else goto L27
 L18:
     if is_error(r7) goto L20 else goto L19
 L19:
@@ -270,15 +270,15 @@ L23:
     r20 = <error> :: str
     return r20
 L24:
-    dec_ref r5
+    dec_ref r4
     goto L4
 L25:
     dec_ref r17
     goto L11
 L26:
-    dec_ref r0
+    dec_ref r6
     dec_ref r7
     goto L13
 L27:
-    dec_ref r0
+    dec_ref r6
     goto L18
