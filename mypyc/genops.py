@@ -1445,7 +1445,7 @@ class IRBuilder(NodeVisitor[Value]):
         return dict_reg
 
     def visit_set_expr(self, expr: SetExpr) -> Value:
-        set_reg = self.add(PrimitiveOp([], new_set_op, expr.line))
+        set_reg = self.primitive_op(new_set_op, [], expr.line)
         for key_expr in expr.items:
             key_reg = self.accept(key_expr)
             self.primitive_op(set_add_op, [set_reg, key_reg], expr.line)
