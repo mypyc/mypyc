@@ -15,6 +15,8 @@ env:
 
 install:
   - export PYTHONVERSION=`python --version | awk '{ print $2 }'`
+  - echo $PYTHONVERSION
+  - ls /opt/python/
   - if [[ $PYTHON_DEBUG_BUILD == 1 ]]; then export PYTHONDIR=~/python-debug/python-$PYTHONVERSION; else export PYTHONDIR="/opt/python/$PYTHONVERSION"; fi
   - if [[ $PYTHON_DEBUG_BUILD == 1 ]]; then VENV=$PYTHONDIR/env; scripts/build-debug-python.sh $PYTHONVERSION $PYTHONDIR $VENV; source $VENV/bin/activate; fi
   - pip install -U pip setuptools wheel
