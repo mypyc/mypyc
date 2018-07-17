@@ -13,7 +13,7 @@ It would be translated to something that conceptually looks like this:
    r3 = r2 + r1 :: int
    return r3
 """
-from typing import Dict, List, Tuple, Optional, Union, Sequence, Set, NoReturn
+from typing import Dict, List, Tuple, Optional, Union, Sequence, Set, NoReturn, overload
 from abc import abstractmethod
 import sys
 import traceback
@@ -37,7 +37,7 @@ from mypy.types import (
     Type, Instance, CallableType, NoneTyp, TupleType, UnionType, AnyType, TypeVarType, PartialType,
     TypeType, FunctionLike, Overloaded, TypeOfAny
 )
-from mypy.visitor import NodeVisitor
+from mypy.visitor import ExpressionVisitor, StatementVisitor
 from mypy.subtypes import is_named_instance
 from mypy.checkmember import bind_self
 from mypy.checkexpr import map_actuals_to_formals
@@ -61,6 +61,7 @@ from mypyc.ops import (
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import list_len_op, list_get_item_op, list_set_item_op, new_list_op
+from mypyc.ops_set import new_set_op, set_add_op
 from mypyc.ops_dict import new_dict_op, dict_get_item_op
 from mypyc.ops_misc import (
     none_op, iter_op, next_op, py_getattr_op, py_setattr_op,
@@ -107,7 +108,7 @@ def build_ir(modules: List[MypyFile],
 
         # Second pass.
         builder = IRBuilder(types, mapper, module_names, fvv)
-        module.accept(builder)
+        builder.visit_mypy_file(module)
         module_ir = ModuleIR(
             builder.imports,
             builder.from_imports,
@@ -401,7 +402,7 @@ class CleanupNonlocalControl(NonlocalControl):
         self.outer.gen_return(builder, value)
 
 
-class IRBuilder(NodeVisitor[Value]):
+class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def __init__(self,
                  types: Dict[Expression, Type],
                  mapper: Mapper,
@@ -442,11 +443,11 @@ class IRBuilder(NodeVisitor[Value]):
         self.from_imports = {}  # type: Dict[str, List[Tuple[str, str]]]
         self.imports = []  # type: List[str]
 
-    def visit_mypy_file(self, mypyfile: MypyFile) -> Value:
+    def visit_mypy_file(self, mypyfile: MypyFile) -> None:
         if mypyfile.fullname() in ('typing', 'abc'):
             # These module are special; their contents are currently all
             # built-in primitives.
-            return INVALID_VALUE
+            return
 
         self.module_path = mypyfile.path
         self.module_name = mypyfile.fullname()
@@ -471,9 +472,7 @@ class IRBuilder(NodeVisitor[Value]):
         func_ir = FuncIR(TOP_LEVEL_NAME, None, self.module_name, sig, blocks, env)
         self.functions.append(func_ir)
 
-        return INVALID_VALUE
-
-    def visit_class_def(self, cdef: ClassDef) -> Value:
+    def visit_class_def(self, cdef: ClassDef) -> None:
         class_ir = self.mapper.type_to_ir[cdef.info]
         for name, node in sorted(cdef.info.names.items(), key=lambda x: x[0]):
             if isinstance(node.node, FuncDef):
@@ -495,9 +494,7 @@ class IRBuilder(NodeVisitor[Value]):
                         class_ir.glue_methods[(cls, name)] = f
                         self.functions.append(f)
 
-        return INVALID_VALUE
-
-    def visit_import(self, node: Import) -> Value:
+    def visit_import(self, node: Import) -> None:
         if node.is_unreachable or node.is_mypy_only:
             pass
         if not node.is_top_level:
@@ -506,9 +503,7 @@ class IRBuilder(NodeVisitor[Value]):
         for node_id, _ in node.ids:
             self.imports.append(node_id)
 
-        return INVALID_VALUE
-
-    def visit_import_from(self, node: ImportFrom) -> Value:
+    def visit_import_from(self, node: ImportFrom) -> None:
         if node.is_unreachable or node.is_mypy_only:
             pass
 
@@ -522,17 +517,13 @@ class IRBuilder(NodeVisitor[Value]):
             as_name = maybe_as_name or name
             self.from_imports[node.id].append((name, as_name))
 
-        return INVALID_VALUE
-
-    def visit_import_all(self, node: ImportAll) -> Value:
+    def visit_import_all(self, node: ImportAll) -> None:
         if node.is_unreachable or node.is_mypy_only:
             pass
         if not node.is_top_level:
             assert False, "non-toplevel imports not supported"
 
         self.imports.append(node.id)
-
-        return INVALID_VALUE
 
     def gen_glue_method(self, sig: FuncSignature, target: FuncIR,
                         cls: ClassIR, base: ClassIR, line: int) -> FuncIR:
@@ -584,7 +575,7 @@ class IRBuilder(NodeVisitor[Value]):
                       FuncSignature(rt_args, ret_type), blocks, env)
 
     def gen_func_def(self, fitem: FuncItem, name: str, sig: FuncSignature,
-                     class_name: Optional[str] = None) -> Tuple[FuncIR, Value]:
+                     class_name: Optional[str] = None) -> Tuple[FuncIR, Optional[Value]]:
         """Generates and returns the FuncIR for a given FuncDef.
 
         If the given FuncItem is a nested function, then we generate a callable class representing
@@ -644,10 +635,10 @@ class IRBuilder(NodeVisitor[Value]):
 
         if fn_info.is_nested:
             func_ir = self.add_call_to_callable_class(blocks, sig, env, fn_info)
-            func_reg = self.instantiate_callable_class(fn_info)
+            func_reg = self.instantiate_callable_class(fn_info)  # type: Optional[Value]
         else:
             func_ir = FuncIR(fn_info.name, class_name, self.module_name, sig, blocks, env)
-            func_reg = INVALID_VALUE
+            func_reg = None
 
         return (func_ir, func_reg)
 
@@ -658,12 +649,12 @@ class IRBuilder(NodeVisitor[Value]):
         else:
             self.add_implicit_unreachable()
 
-    def visit_func_def(self, fdef: FuncDef) -> Value:
+    def visit_func_def(self, fdef: FuncDef) -> None:
         func_ir, func_reg = self.gen_func_def(fdef, fdef.name(), self.mapper.fdef_to_sig(fdef))
 
         # If the function that was visited was a nested function, then either look it up in our
         # current environment or define it if it was not already defined.
-        if self.fn_info.contains_nested:
+        if func_reg:
             if fdef.original_def:
                 # Get the target associated with the previously defined FuncDef.
                 func_target = self.environment.lookup(fdef.original_def)
@@ -676,7 +667,6 @@ class IRBuilder(NodeVisitor[Value]):
             self.assign_to_target(func_target, func_reg, fdef.line)
 
         self.functions.append(func_ir)
-        return INVALID_VALUE
 
     def add_implicit_return(self) -> None:
         block = self.blocks[-1][-1]
@@ -689,48 +679,43 @@ class IRBuilder(NodeVisitor[Value]):
         if not block.ops or not isinstance(block.ops[-1], ControlOp):
             self.add(Unreachable())
 
-    def visit_block(self, block: Block) -> Value:
+    def visit_block(self, block: Block) -> None:
         for stmt in block.body:
             self.accept(stmt)
-        return INVALID_VALUE
 
-    def visit_expression_stmt(self, stmt: ExpressionStmt) -> Value:
+    def visit_expression_stmt(self, stmt: ExpressionStmt) -> None:
         self.accept(stmt.expr)
-        return INVALID_VALUE
 
-    def visit_return_stmt(self, stmt: ReturnStmt) -> Value:
+    def visit_return_stmt(self, stmt: ReturnStmt) -> None:
         if stmt.expr:
             retval = self.accept(stmt.expr)
             retval = self.coerce(retval, self.ret_types[-1], stmt.line)
         else:
             retval = self.add(PrimitiveOp([], none_op, line=-1))
         self.nonlocal_control[-1].gen_return(self, retval)
-        return INVALID_VALUE
 
-    def visit_assignment_stmt(self, stmt: AssignmentStmt) -> Value:
+    def visit_assignment_stmt(self, stmt: AssignmentStmt) -> None:
         assert len(stmt.lvalues) == 1
         if isinstance(stmt.rvalue, CallExpr) and isinstance(stmt.rvalue.analyzed, TypeVarExpr):
             # Just ignore type variable declarations -- they are a compile-time only thing.
             # TODO: It would be nice to actually construct TypeVar objects to match Python
             #       semantics.
-            return INVALID_VALUE
+            return
         lvalue = stmt.lvalues[0]
         if stmt.type and isinstance(stmt.rvalue, TempNode):
             # This is actually a variable annotation without initializer. Don't generate
             # an assignment but we need to call get_assignment_target since it adds a
             # name binding as a side effect.
             self.get_assignment_target(lvalue)
-            return INVALID_VALUE
+            return
         self.assign(lvalue, stmt.rvalue)
-        return INVALID_VALUE
 
-    def visit_operator_assignment_stmt(self, stmt: OperatorAssignmentStmt) -> Value:
+    def visit_operator_assignment_stmt(self, stmt: OperatorAssignmentStmt) -> None:
         target = self.get_assignment_target(stmt.lvalue)
         rreg = self.accept(stmt.rvalue)
         res = self.read_from_target(target, stmt.line)
         res = self.binary_op(res, rreg, stmt.op, stmt.line)
         self.assign_to_target(target, res, res.line)
-        return INVALID_VALUE
 
     def get_assignment_target(self, lvalue: Lvalue) -> AssignmentTarget:
         if isinstance(lvalue, NameExpr):
@@ -868,7 +853,7 @@ class IRBuilder(NodeVisitor[Value]):
         self.assign_to_target(target, rvalue_reg, rvalue.line)
         return target
 
-    def visit_if_stmt(self, stmt: IfStmt) -> Value:
+    def visit_if_stmt(self, stmt: IfStmt) -> None:
         if_body, next = BasicBlock(), BasicBlock()
         else_body = BasicBlock() if stmt.else_body else next
 
@@ -884,7 +869,6 @@ class IRBuilder(NodeVisitor[Value]):
             self.accept(stmt.else_body)
             self.add_leave(next)
         self.activate_block(next)
-        return INVALID_VALUE
 
     def add_leave(self, target: BasicBlock) -> None:
         if not self.blocks[-1][-1].ops or not isinstance(self.blocks[-1][-1].ops[-1], ControlOp):
@@ -915,7 +899,7 @@ class IRBuilder(NodeVisitor[Value]):
     def pop_loop_stack(self) -> None:
         self.nonlocal_control.pop()
 
-    def visit_while_stmt(self, s: WhileStmt) -> Value:
+    def visit_while_stmt(self, s: WhileStmt) -> None:
         body, next, top = BasicBlock(), BasicBlock(), BasicBlock()
 
         self.push_loop_stack(top, next)
@@ -932,9 +916,8 @@ class IRBuilder(NodeVisitor[Value]):
         self.activate_block(next)
 
         self.pop_loop_stack()
-        return INVALID_VALUE
 
-    def visit_for_stmt(self, s: ForStmt) -> Value:
+    def visit_for_stmt(self, s: ForStmt) -> None:
         if (isinstance(s.expr, CallExpr)
                 and isinstance(s.expr.callee, RefExpr)
                 and s.expr.callee.fullname == 'builtins.range'):
@@ -972,7 +955,6 @@ class IRBuilder(NodeVisitor[Value]):
             self.activate_block(next)
 
             self.pop_loop_stack()
-            return INVALID_VALUE
 
         elif is_list_rprimitive(self.node_type(s.expr)):
             body_block, next_block, end_block = BasicBlock(), BasicBlock(), BasicBlock()
@@ -1018,8 +1000,6 @@ class IRBuilder(NodeVisitor[Value]):
 
             self.pop_loop_stack()
 
-            return INVALID_VALUE
-
         else:
             body_block, end_block, next_block = BasicBlock(), BasicBlock(), BasicBlock()
 
@@ -1060,15 +1040,11 @@ class IRBuilder(NodeVisitor[Value]):
 
             self.pop_loop_stack()
 
-            return INVALID_VALUE
-
-    def visit_break_stmt(self, node: BreakStmt) -> Value:
+    def visit_break_stmt(self, node: BreakStmt) -> None:
         self.nonlocal_control[-1].gen_break(self)
-        return INVALID_VALUE
 
-    def visit_continue_stmt(self, node: ContinueStmt) -> Value:
+    def visit_continue_stmt(self, node: ContinueStmt) -> None:
         self.nonlocal_control[-1].gen_continue(self)
-        return INVALID_VALUE
 
     def visit_unary_expr(self, expr: UnaryExpr) -> Value:
         return self.unary_op(self.accept(expr.expr), expr.op, expr.line)
@@ -1466,12 +1442,19 @@ class IRBuilder(NodeVisitor[Value]):
                 line=expr.line)
         return dict_reg
 
+    def visit_set_expr(self, expr: SetExpr) -> Value:
+        set_reg = self.primitive_op(new_set_op, [], expr.line)
+        for key_expr in expr.items:
+            key_reg = self.accept(key_expr)
+            self.primitive_op(set_add_op, [set_reg, key_reg], expr.line)
+        return set_reg
+
     def visit_str_expr(self, expr: StrExpr) -> Value:
         return self.load_static_unicode(expr.value)
 
     # Conditional expressions
 
-    def process_conditional(self, e: Node, true: BasicBlock, false: BasicBlock) -> None:
+    def process_conditional(self, e: Expression, true: BasicBlock, false: BasicBlock) -> None:
         if isinstance(e, OpExpr) and e.op in ['and', 'or']:
             if e.op == 'and':
                 # Short circuit 'and' in a conditional context.
@@ -1546,8 +1529,8 @@ class IRBuilder(NodeVisitor[Value]):
             value = self.primitive_op(bool_op, [value], value.line)
         self.add(Branch(value, true, false, Branch.BOOL_EXPR))
 
-    def visit_nonlocal_decl(self, o: NonlocalDecl) -> Value:
-        return INVALID_VALUE
+    def visit_nonlocal_decl(self, o: NonlocalDecl) -> None:
+        pass
 
     def visit_slice_expr(self, expr: SliceExpr) -> Value:
         def get_arg(arg: Optional[Expression]) -> Value:
@@ -1561,13 +1544,12 @@ class IRBuilder(NodeVisitor[Value]):
                 get_arg(expr.stride)]
         return self.primitive_op(new_slice_op, args, expr.line)
 
-    def visit_raise_stmt(self, s: RaiseStmt) -> Value:
+    def visit_raise_stmt(self, s: RaiseStmt) -> None:
         if s.expr is None:
             self.primitive_op(reraise_exception_op, [], NO_TRACEBACK_LINE_NO)
             self.add(Unreachable())
-            return INVALID_VALUE
+            return
 
-        assert s.expr is not None, "re-raise not implemented yet"
         assert s.from_expr is None, "from_expr not implemented"
 
         # TODO: Do we want to dynamically handle the case where the
@@ -1579,14 +1561,13 @@ class IRBuilder(NodeVisitor[Value]):
 
         if isinstance(typ, FunctionLike) and typ.is_type_obj():
             etyp = self.accept(s.expr)
-            exc = self.primitive_op(py_call_op, [etyp], s.expr.line)
+            exc = self.py_call(etyp, [], s.expr.line)
         else:
             exc = self.accept(s.expr)
             etyp = self.primitive_op(type_op, [exc], s.expr.line)
 
         self.primitive_op(raise_exception_op, [etyp, exc], s.line)
         self.add(Unreachable())
-        return INVALID_VALUE
 
     class ExceptNonlocalControl(CleanupNonlocalControl):
         """Nonlocal control for except blocks.
@@ -1842,7 +1823,7 @@ class IRBuilder(NodeVisitor[Value]):
 
         self.activate_block(out_block)
 
-    def visit_try_stmt(self, t: TryStmt) -> Value:
+    def visit_try_stmt(self, t: TryStmt) -> None:
         # Our compilation strategy for try/except/else/finally is to
         # treat try/except/else and try/finally as separate language
         # constructs that we compile separately. When we have a
@@ -1852,7 +1833,6 @@ class IRBuilder(NodeVisitor[Value]):
             self.visit_try_finally_stmt(t, t.finally_body)
         else:
             self.visit_try_except_stmt(t)
-        return INVALID_VALUE
 
     def visit_lambda_expr(self, expr: LambdaExpr) -> Value:
         typ = self.types[expr]
@@ -1868,18 +1848,19 @@ class IRBuilder(NodeVisitor[Value]):
 
         fname = '__mypyc_lambda_{}__'.format(self.lambda_counter)
         func_ir, func_reg = self.gen_func_def(expr, fname, fsig)
+        assert func_reg is not None
 
         self.functions.append(func_ir)
         return func_reg
 
-    def visit_pass_stmt(self, o: PassStmt) -> Value:
-        return INVALID_VALUE
+    def visit_pass_stmt(self, o: PassStmt) -> None:
+        pass
 
-    def visit_global_decl(self, o: GlobalDecl) -> Value:
+    def visit_global_decl(self, o: GlobalDecl) -> None:
         # Pure declaration -- no runtime effect
-        return INVALID_VALUE
+        pass
 
-    def visit_assert_stmt(self, a: AssertStmt) -> Value:
+    def visit_assert_stmt(self, a: AssertStmt) -> None:
         cond = self.accept(a.expr)
         ok_block, error_block = BasicBlock(), BasicBlock()
         self.add_bool_branch(cond, ok_block, error_block)
@@ -1895,11 +1876,10 @@ class IRBuilder(NodeVisitor[Value]):
             # The general case -- explicitly construct an exception instance
             message = self.accept(a.msg)
             exc_type = self.load_module_attr_by_fullname('builtins.AssertionError', a.line)
-            exc = self.primitive_op(py_call_op, [exc_type, message], a.line)
+            exc = self.py_call(exc_type, [message], a.line)
             self.primitive_op(raise_exception_op, [exc_type, exc], a.line)
         self.add(Unreachable())
         self.activate_block(ok_block)
-        return INVALID_VALUE
 
     def visit_cast_expr(self, o: CastExpr) -> Value:
         assert False, "CastExpr handled in CallExpr"
@@ -1922,10 +1902,10 @@ class IRBuilder(NodeVisitor[Value]):
     def visit_complex_expr(self, o: ComplexExpr) -> Value:
         raise NotImplementedError
 
-    def visit_decorator(self, o: Decorator) -> Value:
+    def visit_decorator(self, o: Decorator) -> None:
         raise NotImplementedError
 
-    def visit_del_stmt(self, o: DelStmt) -> Value:
+    def visit_del_stmt(self, o: DelStmt) -> None:
         raise NotImplementedError
 
     def visit_dictionary_comprehension(self, o: DictionaryComprehension) -> Value:
@@ -1937,7 +1917,7 @@ class IRBuilder(NodeVisitor[Value]):
     def visit_enum_call_expr(self, o: EnumCallExpr) -> Value:
         raise NotImplementedError
 
-    def visit_exec_stmt(self, o: ExecStmt) -> Value:
+    def visit_exec_stmt(self, o: ExecStmt) -> None:
         raise NotImplementedError
 
     def visit_generator_expr(self, o: GeneratorExpr) -> Value:
@@ -1955,16 +1935,13 @@ class IRBuilder(NodeVisitor[Value]):
     def visit_newtype_expr(self, o: NewTypeExpr) -> Value:
         raise NotImplementedError
 
-    def visit_overloaded_func_def(self, o: OverloadedFuncDef) -> Value:
+    def visit_overloaded_func_def(self, o: OverloadedFuncDef) -> None:
         raise NotImplementedError
 
-    def visit_print_stmt(self, o: PrintStmt) -> Value:
+    def visit_print_stmt(self, o: PrintStmt) -> None:
         raise NotImplementedError
 
     def visit_reveal_expr(self, o: RevealExpr) -> Value:
-        raise NotImplementedError
-
-    def visit_set_expr(self, o: SetExpr) -> Value:
         raise NotImplementedError
 
     def visit_star_expr(self, o: StarExpr) -> Value:
@@ -1991,10 +1968,10 @@ class IRBuilder(NodeVisitor[Value]):
     def visit_unicode_expr(self, o: UnicodeExpr) -> Value:
         raise NotImplementedError
 
-    def visit_var(self, o: Var) -> Value:
+    def visit_var(self, o: Var) -> None:
         raise NotImplementedError
 
-    def visit_with_stmt(self, o: WithStmt) -> Value:
+    def visit_with_stmt(self, o: WithStmt) -> None:
         raise NotImplementedError
 
     def visit_yield_from_expr(self, o: YieldFromExpr) -> Value:
@@ -2077,13 +2054,21 @@ class IRBuilder(NodeVisitor[Value]):
         sys.exit(2)
         assert False
 
-    def accept(self, node: Node) -> Value:
+    @overload
+    def accept(self, node: Expression) -> Value: ...
+
+    @overload
+    def accept(self, node: Statement) -> None: ...
+
+    def accept(self, node: Union[Statement, Expression]) -> Optional[Value]:
         try:
-            res = node.accept(self)
             if isinstance(node, Expression):
-                assert res != INVALID_VALUE
+                res = node.accept(self)
                 res = self.coerce(res, self.node_type(node), node.line)
-            return res
+                return res
+            else:
+                node.accept(self)
+                return None
         except Exception:
             self.crash_report(node.line)
 
