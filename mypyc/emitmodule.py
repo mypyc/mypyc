@@ -67,6 +67,14 @@ def encode_as_c_string(s: str) -> Tuple[str, int]:
     return '"{}"'.format(escaped), len(b)
 
 
+def encode_bytes_as_c_string(b: bytes) -> Tuple[str, int]:
+    """Produce a single-escaped, quoted C string and its size from a bytes"""
+    # This is a kind of abusive way to do this...
+    b = b.decode('unicode-escape').encode('raw-unicode-escape')
+    escaped = str(b)[2:-1].replace('"', '\\"')
+    return '"{}"'.format(escaped), len(b)
+
+
 class ModuleGenerator:
     def __init__(self,
                  modules: List[Tuple[str, ModuleIR]],
@@ -225,7 +233,7 @@ class ModuleGenerator:
             elif isinstance(literal, bytes):
                 emitter.emit_lines(
                     '{} = PyBytes_FromStringAndSize({}, {});'.format(
-                        symbol, *encode_as_c_string(str(literal.decode('unicode-escape')))),
+                        symbol, *encode_bytes_as_c_string(literal)),
                     'if ({} == NULL)'.format(symbol),
                     '    return NULL;',
                 )
