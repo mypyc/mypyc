@@ -281,6 +281,26 @@ static CPyTagged CPyTagged_Add(CPyTagged left, CPyTagged right) {
     return CPyTagged_StealFromObject(result);
 }
 
+static CPyTagged CPyTagged_InPlaceAdd(CPyTagged *left_ptr, CPyTagged right) {
+    CPyTagged left = *left_ptr;
+    if (CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right)) {
+        CPyTagged sum = left + right;
+        if (!CPyTagged_IsAddOverflow(sum, left, right)) {
+            *left_ptr = sum;
+            return left;
+        }
+    }
+    PyObject *left_obj = CPyTagged_AsObject(left);
+    PyObject *right_obj = CPyTagged_AsObject(right);
+    PyObject *result = PyNumber_InPlaceAdd(left_obj, right_obj);
+    if (result == NULL) {
+        CPyError_OutOfMemory();
+    }
+    Py_DECREF(left_obj);
+    Py_DECREF(right_obj);
+    return CPyTagged_StealFromObject(result);
+}
+
 static inline bool CPyTagged_IsSubtractOverflow(CPyTagged diff, CPyTagged left, CPyTagged right) {
     // This check was copied from some of my old code I believe that it works :-)
     return (long long)(diff ^ left) < 0 && (long long)(diff ^ right) >= 0;
