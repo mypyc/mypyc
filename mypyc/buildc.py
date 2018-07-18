@@ -87,12 +87,11 @@ import sys
 module = Extension('{package_name}',
                    sources=['{cpath}'],
                    extra_compile_args=['-Wno-unused-function', '-Wno-unused-label', '-Werror',
-                                       '-Wno-unreachable-code', '-Wno-unused-variables'],
+                                       '-Wno-unreachable-code', '-Wno-unused-variable'],
                    libraries=[{libraries}],
                    library_dirs=[{library_dirs}])
 
 vars = sysconfig.get_config_vars()
-
 # On OS X, Force the creation of dynamic libraries instead of bundles so that
 # we can link against multi-module shared libraries.
 # From https://stackoverflow.com/a/32765319
