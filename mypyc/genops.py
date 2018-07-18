@@ -705,7 +705,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.nonlocal_control[-1].gen_return(self, retval)
 
     def visit_assignment_stmt(self, stmt: AssignmentStmt) -> None:
-        assert len(stmt.lvalues) == 1
+        assert len(stmt.lvalues) >= 1
         if isinstance(stmt.rvalue, CallExpr) and isinstance(stmt.rvalue.analyzed, TypeVarExpr):
             # Just ignore type variable declarations -- they are a compile-time only thing.
             # TODO: It would be nice to actually construct TypeVar objects to match Python
@@ -718,7 +718,12 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # name binding as a side effect.
             self.get_assignment_target(lvalue)
             return
-        self.assign(lvalue, stmt.rvalue)
+
+        line = stmt.rvalue.line
+        rvalue_reg = self.accept(stmt.rvalue)
+        for lvalue in stmt.lvalues:
+            target = self.get_assignment_target(lvalue)
+            self.assign_to_target(target, rvalue_reg, line)
 
     def visit_operator_assignment_stmt(self, stmt: OperatorAssignmentStmt) -> None:
         target = self.get_assignment_target(stmt.lvalue)
@@ -2117,9 +2122,31 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         handle_loop(loop_params)
 
+    def visit_del_stmt(self, o: DelStmt) -> None:
+        if isinstance(o.expr, TupleExpr):
+            for expr_item in o.expr.items:
+                    self.visit_del_item(expr_item)
+        else:
+            self.visit_del_item(o.expr)
+
+    def visit_del_item(self, expr: Expression) -> None:
+        if isinstance(expr, IndexExpr):
+            base_reg = self.accept(expr.base)
+            index_reg = self.accept(expr.index)
+            self.translate_special_method_call(
+                base_reg,
+                '__delitem__',
+                [index_reg],
+                result_type=None,
+                line=expr.line
+            )
+        else:
+            assert False, 'Unsupported del operation'
+
     # Unimplemented constructs
     # TODO: some of these are actually things that should never show up,
     # so properly sort those out.
+
     def visit__promote_expr(self, o: PromoteExpr) -> Value:
         raise NotImplementedError
 
@@ -2133,9 +2160,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         raise NotImplementedError
 
     def visit_decorator(self, o: Decorator) -> None:
-        raise NotImplementedError
-
-    def visit_del_stmt(self, o: DelStmt) -> None:
         raise NotImplementedError
 
     def visit_ellipsis(self, o: EllipsisExpr) -> Value:
