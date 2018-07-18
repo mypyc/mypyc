@@ -962,9 +962,6 @@ def call_native_function(x: int) -> int:
 def call_python_function(x: int) -> int:
     return int(x)
 
-def call_python_function_with_keyword_arg(x: str) -> int:
-    return int(x, base=2)
-
 def return_float() -> float:
     return 5.0
 
@@ -1033,6 +1030,38 @@ L0:
     r1 = py_call(f)
     r2 = cast(float, r1)
     return r2
+
+[case testCallableTypesWithKeywordArgs]
+def call_python_function_with_keyword_arg(x: str) -> int:
+    return int(x, base=2)
+[out]
+def call_python_function_with_keyword_arg(x):
+    x :: str
+    r0 :: int
+    r1 :: object
+    r2 :: str
+    r3 :: object
+    r4 :: str
+    r5 :: tuple[str]
+    r6 :: dict
+    r7 :: object
+    r8 :: bool
+    r9, r10 :: object
+    r11 :: int
+L0:
+    r0 = 2
+    r1 = builtins.module :: static
+    r2 = unicode_0 :: static  ('int')
+    r3 = getattr r1, r2
+    r4 = unicode_1 :: static  ('base')
+    r5 = (x)
+    r6 = {}
+    r7 = box(int, r0)
+    r8 = r6.__setitem__(r4, r7) :: dict
+    r9 = box(tuple[str], r5)
+    r10 = py_call_with_kwargs(r3, r9, r6)
+    r11 = unbox(int, r10)
+    return r11
 
 [case testObjectAsBoolean]
 from typing import List

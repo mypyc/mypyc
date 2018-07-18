@@ -66,14 +66,9 @@ from mypyc.ops_list import (
 from mypyc.ops_dict import new_dict_op, dict_get_item_op, dict_set_item_op
 from mypyc.ops_set import new_set_op, set_add_op
 from mypyc.ops_misc import (
-<<<<<<< HEAD
     none_op, true_op, false_op, iter_op, next_op, py_getattr_op, py_setattr_op,
-    py_call_op, py_method_call_op, fast_isinstance_op, bool_op, new_slice_op,
-=======
-    none_op, iter_op, next_op, py_getattr_op, py_setattr_op,
     py_call_op, py_call_with_kwargs_op, py_method_call_op,
     fast_isinstance_op, bool_op, new_slice_op,
->>>>>>> Add WIP
     is_none_op, type_op,
 )
 from mypyc.ops_exc import (
@@ -1206,15 +1201,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         key = self.load_static_unicode(attr)
         return self.add(PrimitiveOp([obj, key], py_getattr_op, line))
 
-    def py_call(self, function: Value, arg_values: List[Value], arg_kinds: List[int],
-                arg_names: List[Optional[str]], line: int) -> Value:
+    def py_call(self,
+                function: Value,
+                arg_values: List[Value],
+                line: int,
+                arg_kinds: Optional[List[int]] = None,
+                arg_names: Optional[List[Optional[str]]] = None) -> Value:
         """Call to non-mypyc-generated function, e.g. some python builtin functions."""
         # Box all arguments since we are invoking a non-mypyc-generated function.
 
-        if all(kind == ARG_POS for kind in arg_kinds):
+        if (arg_kinds is None) or all(kind == ARG_POS for kind in arg_kinds):
             arg_boxes = [self.box(value) for value in arg_values]
             return self.add(PrimitiveOp([function] + arg_boxes, py_call_op, line))
         else:
+            assert arg_names is not None
+
             pos_arg_values = []
             kw_arg_names = []
             kw_arg_values = []
@@ -1315,7 +1316,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         else:
             # Fall back to a Python call
             function = self.accept(callee)
-            return self.py_call(function, args, expr.arg_kinds, expr.arg_names, expr.line)
+            return self.py_call(function, args, expr.line,
+                                arg_kinds=expr.arg_kinds, arg_names=expr.arg_names)
 
     def get_native_signature(self, callee: RefExpr) -> Optional[CallableType]:
         """Get the signature of a native function, or return None if not available.
@@ -1352,7 +1354,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # Fall back to a PyCall for non-native module calls
             function = self.accept(callee)
             args = [self.accept(arg) for arg in expr.args]
-            return self.py_call(function, args, expr.arg_kinds, expr.arg_names, expr.line)
+            return self.py_call(function, args, expr.line,
+                                arg_kinds=expr.arg_kinds, arg_names=expr.arg_names)
         else:
             obj = self.accept(callee.expr)
             args = [self.accept(arg) for arg in expr.args]
@@ -1480,6 +1483,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return self.add(TupleSet(items, expr.line))
 
     def visit_dict_expr(self, expr: DictExpr) -> Value:
+        """First accepts all keys and values, then makes a dict out of them."""
         keys = []
         values = []
         for key_expr, value_expr in expr.items:
@@ -1607,7 +1611,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         if isinstance(typ, FunctionLike) and typ.is_type_obj():
             etyp = self.accept(s.expr)
-            exc = self.py_call(etyp, [], [], [], s.expr.line)
+            exc = self.py_call(etyp, [], s.expr.line)
         else:
             exc = self.accept(s.expr)
             etyp = self.primitive_op(type_op, [exc], s.expr.line)
@@ -2002,7 +2006,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # The general case -- explicitly construct an exception instance
             message = self.accept(a.msg)
             exc_type = self.load_module_attr_by_fullname('builtins.AssertionError', a.line)
-            exc = self.py_call(exc_type, [message], [ARG_POS], [None], a.line)
+            exc = self.py_call(exc_type, [message], a.line)
             self.primitive_op(raise_exception_op, [exc_type, exc], a.line)
         self.add(Unreachable())
         self.activate_block(ok_block)
