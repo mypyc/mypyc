@@ -578,10 +578,9 @@ def delDictMultiple() -> None:
     del d["one"], d["four"]
 [out]
 def delList():
-    l :: list
     r0, r1 :: int
     r2, r3 :: object
-    r4 :: list
+    r4, l :: list
     r5 :: int
     r6 :: object
     r7 :: bool
@@ -599,7 +598,7 @@ L0:
     r8 = None
     return r8
 def delDict():
-    d, r0 :: dict
+    r0 :: dict
     r1 :: str
     r2 :: int
     r3 :: object
@@ -608,6 +607,7 @@ def delDict():
     r6 :: int
     r7 :: object
     r8 :: bool
+    d :: dict
     r9 :: str
     r10 :: bool
     r11 :: None
@@ -627,10 +627,9 @@ L0:
     r11 = None
     return r11
 def delListMultiple():
-    l :: list
     r0, r1, r2, r3, r4, r5, r6 :: int
     r7, r8, r9, r10, r11, r12, r13 :: object
-    r14 :: list
+    r14, l :: list
     r15 :: int
     r16 :: object
     r17 :: bool
@@ -670,7 +669,7 @@ L0:
     r24 = None
     return r24
 def delDictMultiple():
-    d, r0 :: dict
+    r0 :: dict
     r1 :: str
     r2 :: int
     r3 :: object
@@ -687,6 +686,7 @@ def delDictMultiple():
     r14 :: int
     r15 :: object
     r16 :: bool
+    d :: dict
     r17 :: str
     r18 :: bool
     r19 :: str
