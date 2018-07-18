@@ -2077,24 +2077,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         handle_loop(loop_params)
 
-    # Unimplemented constructs
-    # TODO: some of these are actually things that should never show up,
-    # so properly sort those out.
-    def visit__promote_expr(self, o: PromoteExpr) -> Value:
-        raise NotImplementedError
-
-    def visit_await_expr(self, o: AwaitExpr) -> Value:
-        raise NotImplementedError
-
-    def visit_backquote_expr(self, o: BackquoteExpr) -> Value:
-        raise NotImplementedError
-
-    def visit_complex_expr(self, o: ComplexExpr) -> Value:
-        raise NotImplementedError
-
-    def visit_decorator(self, o: Decorator) -> None:
-        raise NotImplementedError
-
     def visit_del_stmt(self, o: DelStmt) -> None:
         if isinstance(o.expr, IndexExpr):
             self.visit_del_item(o.expr)
@@ -2115,8 +2097,23 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             result_type=None,
             line=expr.line
         )
+    # Unimplemented constructs
+    # TODO: some of these are actually things that should never show up,
+    # so properly sort those out.
 
-    def visit_dictionary_comprehension(self, o: DictionaryComprehension) -> Value:
+    def visit__promote_expr(self, o: PromoteExpr) -> Value:
+        raise NotImplementedError
+
+    def visit_await_expr(self, o: AwaitExpr) -> Value:
+        raise NotImplementedError
+
+    def visit_backquote_expr(self, o: BackquoteExpr) -> Value:
+        raise NotImplementedError
+
+    def visit_complex_expr(self, o: ComplexExpr) -> Value:
+        raise NotImplementedError
+
+    def visit_decorator(self, o: Decorator) -> None:
         raise NotImplementedError
 
     def visit_ellipsis(self, o: EllipsisExpr) -> Value:
