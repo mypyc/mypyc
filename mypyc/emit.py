@@ -156,12 +156,12 @@ class Emitter:
 
     def tuple_c_declaration(self, rtuple: RTuple) -> List[str]:
         result = ['struct {} {{'.format(self.tuple_struct_name(rtuple))]
-        i = 0
         if len(rtuple.types) == 0:  # empty tuple
             # The behavior of empty structs in C is compiler dependent so we add a dummy variable
             # to avoid empty tuples being defined as empty structs.
             result.append('int dummy_var_to_avoid_empty_struct;')
         else:
+            i = 0
             for typ in rtuple.types:
                 result.append('    {}f{};'.format(self.ctype_spaced(typ), i))
                 i += 1
