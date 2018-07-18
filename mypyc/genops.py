@@ -59,6 +59,7 @@ from mypyc.ops import (
     NAMESPACE_TYPE, RaiseStandardError, LoadErrorValue,
     NO_TRACEBACK_LINE_NO,
     FuncDecl, FUNC_NORMAL, FUNC_STATICMETHOD, FUNC_CLASSMETHOD,
+    void_rtype, RPrimitive,
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import (
@@ -938,13 +939,47 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             target = self.get_assignment_target(lvalue)
             self.assign(target, rvalue_reg, line)
 
-    def visit_operator_assignment_stmt(self, stmt: OperatorAssignmentStmt) -> None:
+    def translate_in_place_op(self, op: str) -> Optional[str]:
+        op_map = {
+            '+': '__iadd__',
+            '-': '__isub__',
+            '*': '__imul__',
+            '@': '__imatmul__',
+            '/': '__itruediv__',
+            '//': '__ifloordiv__',
+            '%': '__imod__',
+            '**': '__ipow__',
+            '<<': '__ilshift__',
+            '>>': '__irshift__',
+            '&': '__iand__',
+            '^': '__ixor__',
+            '|': '__ior__'
+        }
+        return op_map.get(op)
+
+    def in_place_op(self, target: AssignmentTarget, rvalue_reg: Value, op: str, line: int) -> None:
+        target_value = self.read_from_target(target, line)
+        if isinstance(target_value.type, RInstance):
+            method_name = self.translate_in_place_op(op)
+            assert method_name is not None, "can't find method for op %s" % op
+            self.add(MethodCall(void_rtype,
+                                target_value,
+                                method_name,
+                                [rvalue_reg],
+                                line))
+        elif isinstance(target_value.type, RPrimitive):
+            res = self.binary_op(target_value, rvalue_reg, op, line)
+            self.assign_to_target(target, res, res.line)
+        else:
+            assert False, "halp"
+
+    def visit_operator_assignment_stmt(self, stmt: OperatorAssignmentStmt) -> Value:
+        """Operator assignment statement such as x += 1"""
         self.disallow_class_assignments([stmt.lvalue])
         target = self.get_assignment_target(stmt.lvalue)
         rreg = self.accept(stmt.rvalue)
-        res = self.read(target, stmt.line)
-        res = self.binary_op(res, rreg, stmt.op, stmt.line)
-        self.assign(target, res, res.line)
+        self.in_place_op(target, rreg, stmt.op, stmt.line)
+        return INVALID_VALUE
 
     def get_assignment_target(self, lvalue: Lvalue) -> AssignmentTarget:
         if isinstance(lvalue, NameExpr):
