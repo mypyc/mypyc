@@ -2078,25 +2078,26 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         handle_loop(loop_params)
 
     def visit_del_stmt(self, o: DelStmt) -> None:
-        if isinstance(o.expr, IndexExpr):
-            self.visit_del_item(o.expr)
-        elif isinstance(o.expr, TupleExpr):
+        if isinstance(o.expr, TupleExpr):
             for expr_item in o.expr.items:
-                if isinstance(expr_item, IndexExpr):
                     self.visit_del_item(expr_item)
+        else:
+            self.visit_del_item(o.expr)
+
+    def visit_del_item(self, expr: Expression) -> None:
+        if isinstance(expr, IndexExpr):
+            base_reg = self.accept(expr.base)
+            index_reg = self.accept(expr.index)
+            self.translate_special_method_call(
+                base_reg,
+                '__delitem__',
+                [index_reg],
+                result_type=None,
+                line=expr.line
+            )
         else:
             assert False, 'Unsupported del operation'
 
-    def visit_del_item(self, expr: IndexExpr) -> None:
-        base_reg = self.accept(expr.base)
-        index_reg = self.accept(expr.index)
-        self.translate_special_method_call(
-            base_reg,
-            '__delitem__',
-            [index_reg],
-            result_type=None,
-            line=expr.line
-        )
     # Unimplemented constructs
     # TODO: some of these are actually things that should never show up,
     # so properly sort those out.
