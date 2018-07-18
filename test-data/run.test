@@ -1759,6 +1759,14 @@ for a in l2 + l3:
 3004 b
 5006 c
 [case testDel]
+from typing import List
+def printDict(dict) -> None:
+    l = list(dict.keys()) # type: List[str]
+    l.sort()
+    for key in l:
+        print(key, dict[key])
+    print("#########")
+
 def delList() -> None:
     l = [1, 2, 3]
     print(tuple(l))
@@ -1767,9 +1775,9 @@ def delList() -> None:
 
 def delDict() -> None:
     d = {"one":1, "two":2}
-    print(d)
+    printDict(d)
     del d["one"]
-    print(d)
+    printDict(d)
 
 def delListMultiple() -> None:
     l = [1, 2, 3, 4, 5, 6, 7]
@@ -1779,9 +1787,9 @@ def delListMultiple() -> None:
 
 def delDictMultiple() -> None:
     d = {"one":1, "two":2, "three":3, "four":4}
-    print(d)
+    printDict(d)
     del d["two"], d["four"]
-    print(d)
+    printDict(d)
 [file driver.py]
 from native import delList, delDict, delListMultiple, delDictMultiple
 delList()
@@ -1791,9 +1799,18 @@ delDictMultiple()
 [out]
 (1, 2, 3)
 (1, 3)
-{'one': 1, 'two': 2}
-{'two': 2}
+one 1
+two 2
+#########
+two 2
+#########
 (1, 2, 3, 4, 5, 6, 7)
 (1, 3, 5, 7)
-{'one': 1, 'two': 2, 'three': 3, 'four': 4}
-{'one': 1, 'three': 3}
+four 4
+one 1
+three 3
+two 2
+#########
+one 1
+three 3
+#########

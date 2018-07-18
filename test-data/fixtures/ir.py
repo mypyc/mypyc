@@ -68,6 +68,7 @@ class tuple(Generic[T], Sized):
 class function: pass
 
 class list(Generic[T], Iterable[T], Sized):
+    def __init__(self, i: Optional[Iterable[T]] = None) -> None: pass
     def __getitem__(self, i: int) -> T: pass
     def __setitem__(self, i: int, o: T) -> None: pass
     def __delitem__(self, i: int) -> None: pass
@@ -78,6 +79,7 @@ class list(Generic[T], Iterable[T], Sized):
     def append(self, x: T) -> None: pass
     def pop(self) -> T: pass
     def extend(self, l: Iterable[T]) -> None: pass
+    def sort(self) -> None: pass
 
 class dict(Generic[T, S]):
     def __getitem__(self, x: T) -> S: pass
@@ -87,6 +89,7 @@ class dict(Generic[T, S]):
     def __iter__(self) -> Iterator[T]: pass
     def update(self, x: Dict[T, S]) -> None: pass
     def pop(self, x: int) -> T: pass
+    def keys(self) -> list[T]: pass
 
 class set(Generic[T]):
     def __init__(self, i: Optional[Iterable[T]] = None) -> None: pass
