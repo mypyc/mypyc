@@ -51,6 +51,13 @@ class float:
     def __mul__(self, n: float) -> float: pass
     def __div__(self, n: float) -> float: pass
 
+class bytes:
+    def __init__(self, x: object) -> None: pass
+    def __add__(self, x: object) -> bytes: pass
+    def __eq__(self, x:object) -> bool:pass
+    def __ne__(self, x: object) -> bool: pass
+    def join(self, x: Iterable[object]) -> bytes: pass
+
 class bool: pass
 
 class tuple(Generic[T], Sized):
@@ -80,8 +87,14 @@ class dict(Generic[T, S]):
     def pop(self, x: int) -> T: pass
 
 class set(Generic[T]):
-    def add(self, x: T) -> None: pass
+    def __init__(self, i: Optional[Iterable[T]] = None) -> None: pass
     def __iter__(self) -> Iterator[T]: pass
+    def __len__(self) -> int: pass
+    def add(self, x: T) -> None: pass
+    def remove(self, x: T) -> None: pass
+    def discard(self, x: T) -> None: pass
+    def clear(self) -> None: pass
+    def pop(self) -> T: pass
 
 class slice: pass
 

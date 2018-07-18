@@ -122,6 +122,8 @@ list_rprimitive = RPrimitive('builtins.list', is_unboxed=False, is_refcounted=Tr
 
 dict_rprimitive = RPrimitive('builtins.dict', is_unboxed=False, is_refcounted=True)
 
+set_rprimitive = RPrimitive('builtins.set', is_unboxed=False, is_refcounted=True)
+
 # At the C layer, str is refered to as unicode (PyUnicode)
 str_rprimitive = RPrimitive('builtins.str', is_unboxed=False, is_refcounted=True)
 
@@ -155,6 +157,10 @@ def is_list_rprimitive(rtype: RType) -> bool:
 
 def is_dict_rprimitive(rtype: RType) -> bool:
     return isinstance(rtype, RPrimitive) and rtype.name == 'builtins.dict'
+
+
+def is_set_rprimitive(rtype: RType) -> bool:
+    return isinstance(rtype, RPrimitive) and rtype.name == 'builtins.set'
 
 
 def is_str_rprimitive(rtype: RType) -> bool:
@@ -324,12 +330,23 @@ class Environment:
         self.indexes = OrderedDict()  # type: Dict[Value, int]
         self.symtable = {}  # type: Dict[SymbolNode, AssignmentTarget]
         self.temp_index = 0
+        self.names = {}  # type: Dict[str, int]
 
     def regs(self) -> Iterable['Value']:
         return self.indexes.keys()
 
     def add(self, reg: 'Value', name: str) -> None:
-        reg.name = name
+        # Ensure uniqueness of variable names in this environment.
+        # This is needed for things like list comprehensions, which are their own scope--
+        # if we don't do this and two comprehensions use the same variable, we'd try to
+        # declare that variable twice.
+        unique_name = name
+        while unique_name in self.names:
+            unique_name = name + str(self.names[name])
+            self.names[name] += 1
+        self.names[unique_name] = 0
+        reg.name = unique_name
+
         self.indexes[reg] = len(self.indexes)
 
     def add_local(self, symbol: SymbolNode, typ: RType, is_arg: bool = False) -> 'Register':
@@ -1347,7 +1364,7 @@ class ClassIR:
 INVALID_CLASS = ClassIR('<INVALID_CLASS>', '')
 
 
-LiteralsMap = Dict[Tuple[Type[object], Union[int, float, str]], str]
+LiteralsMap = Dict[Tuple[Type[object], Union[int, float, str, bytes]], str]
 
 
 class ModuleIR:
