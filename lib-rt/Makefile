@@ -14,7 +14,6 @@ CFLAGS += -fPIC
 
 LDFLAGS += $(shell $(PYTHONCONFIG) --ldflags)
 
-
 test_capi.o: test_capi.cc CPy.h Makefile ../mypyc/test/test_external.py
 	c++ -c -o test_capi.o $(CFLAGS) test_capi.cc
 
