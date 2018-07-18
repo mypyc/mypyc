@@ -1758,3 +1758,99 @@ for a in l2 + l3:
 1002 a
 3004 b
 5006 c
+[case testDel]
+from typing import List
+def printDict(dict) -> None:
+    l = list(dict.keys()) # type: List[str]
+    l.sort()
+    for key in l:
+        print(key, dict[key])
+    print("#########")
+
+def delList() -> None:
+    l = [1, 2, 3]
+    print(tuple(l))
+    del l[1]
+    print(tuple(l))
+
+def delDict() -> None:
+    d = {"one":1, "two":2}
+    printDict(d)
+    del d["one"]
+    printDict(d)
+
+def delListMultiple() -> None:
+    l = [1, 2, 3, 4, 5, 6, 7]
+    print(tuple(l))
+    del l[1], l[2], l[3]
+    print(tuple(l))
+
+def delDictMultiple() -> None:
+    d = {"one":1, "two":2, "three":3, "four":4}
+    printDict(d)
+    del d["two"], d["four"]
+    printDict(d)
+[file driver.py]
+from native import delList, delDict, delListMultiple, delDictMultiple
+delList()
+delDict()
+delListMultiple()
+delDictMultiple()
+[out]
+(1, 2, 3)
+(1, 3)
+one 1
+two 2
+#########
+two 2
+#########
+(1, 2, 3, 4, 5, 6, 7)
+(1, 3, 5, 7)
+four 4
+one 1
+three 3
+two 2
+#########
+one 1
+three 3
+#########
+
+[case testNativeIndex]
+from typing import Any
+class Item:
+    def __init__(self) -> None:
+        self.value = 7
+class NonBoxedThing:
+    def __getitem__(self, index: Item) -> Item:
+        x = Item()
+        x.value = 2 * index.value + 1
+        return x
+class BoxedThing:
+    def __getitem__(self, index: int) -> int:
+        return 2 * index + 1
+def index_into(x : Any, y : Any) -> Any:
+    return x[y]
+def internal_index_into() -> None:
+    x = BoxedThing()
+    print (x[3])
+    y = NonBoxedThing()
+    z = Item()
+    z.value = 22
+    print(y[z].value)
+[file driver.py]
+from native import Item, BoxedThing, NonBoxedThing, index_into, internal_index_into
+x = BoxedThing()
+y = 3
+print(x[y], index_into(x, y))
+
+z = NonBoxedThing()
+w = Item()
+w.value = 22
+print(z[w].value, index_into(z, w).value)
+
+internal_index_into()
+[out]
+7 7
+45 45
+7
+45
