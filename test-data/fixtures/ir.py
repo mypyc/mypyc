@@ -63,6 +63,7 @@ class function: pass
 class list(Generic[T], Iterable[T], Sized):
     def __getitem__(self, i: int) -> T: pass
     def __setitem__(self, i: int, o: T) -> None: pass
+    def __delitem__(self, i: int) -> None: pass
     def __mul__(self, i: int) -> List[T]: pass
     def __rmul__(self, i: int) -> List[T]: pass
     def __iter__(self) -> Iterator[T]: pass
@@ -74,6 +75,7 @@ class list(Generic[T], Iterable[T], Sized):
 class dict(Generic[T, S]):
     def __getitem__(self, x: T) -> S: pass
     def __setitem__(self, x: T, y: S) -> None: pass
+    def __delitem__(self, x: T) -> None: pass
     def __contains__(self, x: T) -> bool: pass
     def __iter__(self) -> Iterator[T]: pass
     def update(self, x: Dict[T, S]) -> None: pass
