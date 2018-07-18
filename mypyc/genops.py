@@ -2096,6 +2096,27 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         raise NotImplementedError
 
     def visit_del_stmt(self, o: DelStmt) -> None:
+        if isinstance(o.expr, IndexExpr):
+            self.visit_del_item(o.expr)
+        elif isinstance(o.expr, TupleExpr):
+            for expr_item in o.expr.items:
+                if isinstance(expr_item, IndexExpr):
+                    self.visit_del_item(expr_item)
+        else:
+            assert False, 'Unsupported del operation'
+
+    def visit_del_item(self, expr: IndexExpr) -> None:
+        base_reg = self.accept(expr.base)
+        index_reg = self.accept(expr.index)
+        self.translate_special_method_call(
+            base_reg,
+            '__delitem__',
+            [index_reg],
+            result_type=None,
+            line=expr.line
+        )
+
+    def visit_dictionary_comprehension(self, o: DictionaryComprehension) -> Value:
         raise NotImplementedError
 
     def visit_ellipsis(self, o: EllipsisExpr) -> Value:
