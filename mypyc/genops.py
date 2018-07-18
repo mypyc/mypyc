@@ -715,12 +715,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return
 
         line = stmt.rvalue.line
-        rvalue_reg = None
+        rvalue_reg = self.accept(stmt.rvalue)
         for lvalue in stmt.lvalues:
             target = self.get_assignment_target(lvalue)
-            if rvalue_reg is None:
-                rvalue_reg = self.accept(stmt.rvalue)
-            assert rvalue_reg is not None
             self.assign_to_target(target, rvalue_reg, line)
 
     def visit_operator_assignment_stmt(self, stmt: OperatorAssignmentStmt) -> None:
