@@ -453,7 +453,8 @@ class Emitter:
             if len(rtype.types) == 0:
                 return  # empty tuples can't fail.
             else:
-                self.emit_line('if ({}.f0 == {}) {{'.format(value, self.c_error_value(rtype.types[0])))
+                self.emit_line('if ({}.f0 == {}) {{'.format(value,
+                                                            self.c_error_value(rtype.types[0])))
         self.emit_lines(failure, '}')
 
     def emit_gc_visit(self, target: str, rtype: RType) -> None:
