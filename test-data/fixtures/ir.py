@@ -77,6 +77,7 @@ class list(Generic[T], Iterable[T], Sized):
     def append(self, x: T) -> None: pass
     def pop(self) -> T: pass
     def extend(self, l: Iterable[T]) -> None: pass
+    def insert(self, i: int, x: T) -> None: pass
 
 class dict(Generic[T, S]):
     def __getitem__(self, x: T) -> S: pass

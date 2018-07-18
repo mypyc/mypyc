@@ -1238,9 +1238,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                         py_call_with_kwargs_op,
                                         line))
 
-    def py_method_call(self, obj: Value, method: Value, args: List[Value], line: int) -> Value:
-        arg_boxes = [self.box(arg) for arg in args]  # type: List[Value]
-        return self.add(PrimitiveOp([obj, method] + arg_boxes, py_method_call_op, line))
+    def py_method_call(self,
+                       obj: Value,
+                       method_name: str,
+                       arg_values: List[Value],
+                       line: int,
+                       arg_kinds: Optional[List[int]] = None,
+                       arg_names: Optional[List[Optional[str]]] = None) -> Value:
+        if (arg_kinds is None) or all(kind == ARG_POS for kind in arg_kinds):
+            arg_boxes = [self.box(value) for value in arg_values]
+            method_name_reg = self.load_static_unicode(method_name)
+            return self.add(PrimitiveOp([obj, method_name_reg] + arg_boxes,
+                                        py_method_call_op, line))
+        else:
+            method = self.py_get_attr(obj, method_name, line)
+            return self.py_call(method, arg_values, line, arg_kinds=arg_kinds, arg_names=arg_names)
 
     def coerce_native_call_args(self,
                                 args: Sequence[Value],
@@ -1385,8 +1397,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                                arg_regs, expr.line))
 
             # Fall back to Python method call
-            method_name = self.load_static_unicode(callee.name)
-            return self.py_method_call(obj, method_name, args, expr.line)
+            return self.py_method_call(obj, callee.name, args, expr.line,
+                                       arg_kinds=expr.arg_kinds, arg_names=expr.arg_names)
 
     def get_native_method_signature(self, callee: MemberExpr) -> Optional[CallableType]:
         typ = self.types[callee.expr]

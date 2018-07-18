@@ -514,6 +514,30 @@ assert f(l) == 1
 g(l, [11, 12])
 assert l == [11, 12]
 
+[case testMethodCallWithKeywordArgs]
+from typing import Tuple
+import testmodule
+class A:
+    def echo(self, a: int, b: int, c: int) -> Tuple[int, int, int]:
+        return a, b, c
+def test_native_method_call_with_kwargs() -> None:
+    a = A()
+    assert a.echo(1, c=3, b=2) == (1, 2, 3)
+    assert a.echo(c = 3, a = 1, b = 2) == (1, 2, 3)
+def test_module_method_call_with_kwargs() -> None:
+    a = testmodule.A()
+    assert a.echo(1, c=3, b=2) == (1, 2, 3)
+    assert a.echo(c = 3, a = 1, b = 2) == (1, 2, 3)
+[file testmodule.py]
+from typing import Tuple
+class A:
+    def echo(self, a: int, b: int, c: int) -> Tuple[int, int, int]:
+        return a, b, c
+[file driver.py]
+import native
+native.test_native_method_call_with_kwargs()
+native.test_module_method_call_with_kwargs()
+
 [case testException]
 from typing import List
 def f(x: List[int]) -> None:
