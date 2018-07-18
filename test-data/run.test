@@ -1419,6 +1419,34 @@ assert d == 5.0
 assert e() == 5.0
 assert f == 5.0
 
+[case testKeywordArgs]
+from typing import Tuple
+import testmodule
+
+def g(a: int, b: int, c: int) -> Tuple[int, int, int]:
+    return a, b, c
+
+def call_native_function_with_keyword_args() -> Tuple[int, int, int]:
+    return g(c = 3, a = 1, b = 2)
+
+def call_module_function_with_keyword_args() -> Tuple[int, int, int]:
+    return testmodule.g(c = 3, a = 1, b = 2)
+
+def call_python_function_with_keyword_arg(x: str) -> int:
+    return int(x, base=2)
+
+[file testmodule.py]
+from typing import Tuple
+
+def g(a: int, b: int, c: int) -> Tuple[int, int, int]:
+    return a, b, c
+
+[file driver.py]
+from native import call_native_function_with_keyword_args, call_module_function_with_keyword_args, call_python_function_with_keyword_arg
+assert call_native_function_with_keyword_args() == (1, 2, 3)
+assert call_module_function_with_keyword_args() == (1, 2, 3)
+assert call_python_function_with_keyword_arg("11") == 3
+
 [case testArbitraryLvalues]
 from typing import List, Dict, Any
 
