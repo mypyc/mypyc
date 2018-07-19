@@ -19,6 +19,7 @@ from mypyc.exceptions import insert_exception_handling
 from mypyc.emit import EmitterContext, Emitter, HeaderDeclaration
 from mypyc.namegen import exported_name
 
+
 class MarkedDeclaration:
     """Add a mark, useful for topological sort."""
     def __init__(self, declaration: HeaderDeclaration, mark: bool) -> None:

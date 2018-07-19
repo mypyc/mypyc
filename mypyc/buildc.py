@@ -10,6 +10,7 @@ import sys
 from typing import List, Tuple
 from mypyc.namegen import exported_name
 
+
 class BuildError(Exception):
     def __init__(self, output: bytes) -> None:
         super().__init__('Build failed')
@@ -143,7 +144,6 @@ def make_setup_py(package_name: str, packages: str,
                   library_dirs: List[str],
                   runtime_library_dirs: List[str]) -> str:
     setup_path = os.path.join(dirname, 'setup.py')
-    basename = os.path.basename(cpath)
     with open(setup_path, 'w') as f:
         f.write(
             setup_format.format(
