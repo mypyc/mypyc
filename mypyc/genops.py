@@ -1222,20 +1222,19 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             assert arg_names is not None
 
             pos_arg_values = []
-            kw_arg_names = []
-            kw_arg_values = []
+            kw_arg_key_value_pairs = []
             for value, kind, name in zip(arg_values, arg_kinds, arg_names):
                 if kind == ARG_POS:
                     pos_arg_values.append(value)
                 elif kind == ARG_NAMED:
                     assert name is not None
-                    kw_arg_names.append(self.load_static_unicode(name))
-                    kw_arg_values.append(value)
+                    key = self.load_static_unicode(name)
+                    kw_arg_key_value_pairs.append((key, value))
                 else:
                     raise NotImplementedError
 
             pos_args_tuple = self.add(TupleSet(pos_arg_values, line))
-            kw_args_dict = self.make_dict(kw_arg_names, kw_arg_values, line)
+            kw_args_dict = self.make_dict(kw_arg_key_value_pairs, line)
 
             pos_tuple_boxed = self.box(pos_args_tuple)
 
@@ -1501,13 +1500,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def visit_dict_expr(self, expr: DictExpr) -> Value:
         """First accepts all keys and values, then makes a dict out of them."""
-        keys = []
-        values = []
+        key_value_pairs = []
         for key_expr, value_expr in expr.items:
-            keys.append(self.accept(key_expr))
-            values.append(self.accept(value_expr))
+            key = self.accept(key_expr)
+            value = self.accept(value_expr)
+            key_value_pairs.append((key, value))
 
-        return self.make_dict(keys, values, expr.line)
+        return self.make_dict(key_value_pairs, expr.line)
 
     def visit_set_expr(self, expr: SetExpr) -> Value:
         set_reg = self.primitive_op(new_set_op, [], expr.line)
@@ -2342,9 +2341,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def box_expr(self, expr: Expression) -> Value:
         return self.box(self.accept(expr))
 
-    def make_dict(self, keys: List[Value], values: List[Value], line: int) -> Value:
+    def make_dict(self, key_value_pairs: List[Tuple[Value, Value]], line: int) -> Value:
         dict_reg = self.add(PrimitiveOp([], new_dict_op, line))
-        for key, value in zip(keys, values):
+        for key, value in key_value_pairs:
             self.translate_special_method_call(
                 dict_reg,
                 '__setitem__',
