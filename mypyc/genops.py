@@ -1414,8 +1414,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return target
 
         # Fall back to Python method call
-        method_name = self.load_static_unicode(name)
-        return self.py_method_call(base, method_name, args, base.line)
+        return self.py_method_call(base, name, args, base.line, arg_kinds, arg_names)
 
     def get_native_method_signature(self, typ: Type, name: str) -> Optional[CallableType]:
         if isinstance(typ, Instance):
