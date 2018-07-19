@@ -1818,25 +1818,27 @@ three 3
 [case testNativeIndex]
 from typing import Any
 class Item:
-    def __init__(self) -> None:
-        self.value = 7
+    def __init__(self, value: str) -> None:
+        self.value = value
+
 class NonBoxedThing:
     def __getitem__(self, index: Item) -> Item:
-        x = Item()
-        x.value = 2 * index.value + 1
-        return x
+        return Item("2 * " + index.value + " + 1")
+
 class BoxedThing:
     def __getitem__(self, index: int) -> int:
         return 2 * index + 1
+
 def index_into(x : Any, y : Any) -> Any:
     return x[y]
+
 def internal_index_into() -> None:
     x = BoxedThing()
     print (x[3])
     y = NonBoxedThing()
-    z = Item()
-    z.value = 22
+    z = Item("3")
     print(y[z].value)
+
 [file driver.py]
 from native import Item, BoxedThing, NonBoxedThing, index_into, internal_index_into
 x = BoxedThing()
@@ -1844,13 +1846,12 @@ y = 3
 print(x[y], index_into(x, y))
 
 z = NonBoxedThing()
-w = Item()
-w.value = 22
+w = Item("3")
 print(z[w].value, index_into(z, w).value)
 
 internal_index_into()
 [out]
 7 7
-45 45
+2 * 3 + 1 2 * 3 + 1
 7
-45
+2 * 3 + 1
