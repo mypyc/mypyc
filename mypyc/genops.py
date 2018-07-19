@@ -482,6 +482,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.functions.append(func_ir)
 
     def visit_class_def(self, cdef: ClassDef) -> None:
+        import inspect
+        assert False, '\n'.join(str(x) for x in inpsect.getmembers(cdef.info))
         class_ir = self.mapper.type_to_ir[cdef.info]
         for name, node in sorted(cdef.info.names.items(), key=lambda x: x[0]):
             if isinstance(node.node, FuncDef):
