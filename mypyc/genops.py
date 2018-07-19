@@ -53,7 +53,7 @@ from mypyc.ops import (
     bool_rprimitive, list_rprimitive, is_list_rprimitive, dict_rprimitive, set_rprimitive,
     str_rprimitive, tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive,
     exc_rtuple,
-    PrimitiveOp, ControlOp,
+    PrimitiveOp, ControlOp, LoadErrorValue,
     ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap, FuncSignature,
     VTableAttr, VTableMethod, VTableEntries,
     NAMESPACE_TYPE, RaiseStandardError, LoadErrorValue,
@@ -584,6 +584,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                       cls.name, self.module_name,
                       FuncSignature(rt_args, ret_type), blocks, env)
 
+    def gen_arg_default(self) -> None:
+        fitem = self.fn_info.fitem
+        for arg in fitem.arguments:
+            if arg.initializer:
+                target = self.environment.lookup(arg.variable)
+                error_block, body_block = BasicBlock(), BasicBlock()
+                self.add(Branch(target.register, error_block, body_block, Branch.IS_ERROR))
+                self.activate_block(error_block)
+                reg = self.accept(arg.initializer)
+                self.add(Assign(target.register, reg))
+                self.add(Goto(body_block))
+                self.activate_block(body_block)
+
+
+
     def gen_func_def(self, fitem: FuncItem, name: str, sig: FuncSignature,
                      class_name: Optional[str] = None) -> Tuple[FuncIR, Optional[Value]]:
         """Generates and returns the FuncIR for a given FuncDef.
@@ -617,9 +632,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         | c_obj |   --------------------------+
         +-------+
         """
-        assert all(arg.initializer is None for arg in fitem.arguments), (
-            "Default args unimplemented")
-
         self.enter(FuncInfo(fitem, name, self.gen_func_ns()))
 
         # The top-most environment is for the module top level.
@@ -632,6 +644,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.setup_env_class()
 
         self.load_env_registers()
+        self.gen_arg_default()
 
         if self.fn_info.contains_nested:
             self.finalize_env_class()
@@ -1255,6 +1268,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                 line: int) -> List[Value]:
         coerced_arg_regs = []
         for reg, arg_type in zip(args, arg_types):
+            if reg is None:
+                reg = LoadErrorValue(arg_type)
+                reg.is_borrowed = True
+                self.add(reg)
             coerced_arg_regs.append(self.coerce(reg, arg_type, line))
         return coerced_arg_regs
 
@@ -2660,5 +2677,5 @@ def keyword_args_to_positional(args: List[Value],
                                               signature.arg_kinds,
                                               signature.arg_names,
                                               lambda n: AnyType(TypeOfAny.special_form))
-    assert all(len(lst) == 1 for lst in formal_to_actual)
-    return [args[formal_to_actual[i][0]] for i in range(len(args))]
+    assert all(len(lst) <= 1 for lst in formal_to_actual)
+    return [None if len(lst) == 0 else args[lst[0]] for lst in formal_to_actual]
