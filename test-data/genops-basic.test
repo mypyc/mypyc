@@ -1584,6 +1584,8 @@ L7:
 L8:
     return r11
 
+[case testNativeIndex]
+from typing import List
 class A:
     def __getitem__(self, index: int) -> int: pass
 

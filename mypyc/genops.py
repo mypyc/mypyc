@@ -1130,6 +1130,19 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.add(TupleGet(base, expr.index.value, expr.line))
 
         index_reg = self.accept(expr.index)
+        if isinstance(self.node_type(expr.base), RInstance):
+            typ = self.types[expr.base]
+            signature = self.get_native_method_signature(typ, '__getitem__')
+            if signature is not None:
+                args = [index_reg]
+                arg_types = [self.type_to_rtype(arg_type) for arg_type in signature.arg_types]
+                arg_regs = self.coerce_native_call_args(args, arg_types, expr.line)
+                return self.add(MethodCall(self.type_to_rtype(signature.ret_type),
+                                           base,
+                                           '__getitem__',
+                                           arg_regs,
+                                           expr.line))
+
         target_reg = self.translate_special_method_call(
             base,
             '__getitem__',
@@ -1342,7 +1355,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 # Look up the declared signature of the method, since the
                 # inferred signature can have type variable substitutions which
                 # aren't valid at runtime due to type erasure.
-                signature = self.get_native_method_signature(callee)
+                typ = self.types[callee.expr]
+                signature = self.get_native_method_signature(typ, callee.name)
                 if signature:
                     args = keyword_args_to_positional(args, expr.arg_kinds, expr.arg_names,
                                                       signature)
@@ -1357,10 +1371,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             method_name = self.load_static_unicode(callee.name)
             return self.py_method_call(obj, method_name, args, expr.line)
 
-    def get_native_method_signature(self, callee: MemberExpr) -> Optional[CallableType]:
-        typ = self.types[callee.expr]
+    def get_native_method_signature(self, typ: Type, name: str) -> Optional[CallableType]:
         if isinstance(typ, Instance):
-            method = typ.type.get(callee.name)
+            method = typ.type.get(name)
             if method and isinstance(method.node, FuncDef) and isinstance(method.node.type,
                                                                           CallableType):
                 return bind_self(method.node.type)
