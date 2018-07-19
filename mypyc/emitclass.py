@@ -60,6 +60,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     call_fn = cl.get_method('__call__')
     call_name = '{}{}'.format(PREFIX, call_fn.cname(emitter.names)) if call_fn else '0'
 
+    # TODO: Add remaining dunder methods
     index_fn = cl.get_method('__getitem__')
     if index_fn:
         as_mapping_value_name = '{}_as_mapping'.format(name_prefix)
@@ -400,9 +401,9 @@ def generate_as_mapping_for_class(index_method: FuncIR,
                                   name: str,
                                   emitter: Emitter) -> str:
     emitter.emit_line('static PyMappingMethods {} = {{'.format(name))
-    emitter.emit_line('0,')
-    emitter.emit_line('{}{},'.format(DUNDER_PREFIX, index_method.cname(emitter.names)))
-    emitter.emit_line('0,')
+    emitter.emit_line('0,        /* mp_length */')
+    emitter.emit_line('{}{},     /* mp_subscript */'.format(DUNDER_PREFIX, index_method.cname(emitter.names)))
+    emitter.emit_line('0,        /* mp_ass_subscript */')
     emitter.emit_line('};')
     return name
 
