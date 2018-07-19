@@ -1130,6 +1130,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.add(TupleGet(base, expr.index.value, expr.line))
 
         index_reg = self.accept(expr.index)
+        return self.get_method_call(self.types[expr.base],
+                                    base,
+                                    [index_reg],
+                                    '__getitem__',
+                                    self.node_type(expr),
+                                    expr.line)
+
+    """
         if isinstance(self.node_type(expr.base), RInstance):
             typ = self.types[expr.base]
             signature = self.get_native_method_signature(typ, '__getitem__')
@@ -1153,6 +1161,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return target_reg
 
         assert False, 'Unsupported indexing operation'
+"""
 
     def visit_int_expr(self, expr: IntExpr) -> Value:
         if expr.value > MAX_SHORT_INT:
@@ -1339,9 +1348,19 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             args = [self.accept(arg) for arg in expr.args]
             return self.py_call(function, args, expr.line)
         else:
-            obj = self.accept(callee.expr)
             args = [self.accept(arg) for arg in expr.args]
             assert callee.expr in self.types
+            obj = self.accept(callee.expr)
+            return self.get_method_call(self.types[expr],
+                                        obj,
+                                        args,
+                                        callee.name,
+                                        self.node_type(expr),
+                                        expr.line,
+                                        expr.arg_kinds,
+                                        expr.arg_names)
+
+    """
             receiver_rtype = self.node_type(callee.expr)
 
             # If the base type is one of ours, do a MethodCall
@@ -1370,22 +1389,24 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # Fall back to Python method call
             method_name = self.load_static_unicode(callee.name)
             return self.py_method_call(obj, method_name, args, expr.line)
+        """
 
     def get_method_call(self,
-                        base: Expression,
+                        base_type: Type,
+                        base: Value,
                         args: List[Value],
                         name: str,
+                        return_rtype: RType,
+                        line: int,
                         arg_kinds: Optional[List[int]] = None,
                         arg_names: Optional[List[Optional[str]]] = None) -> Value:
         # If the base type is one of ours, do a MethodCall
-        base_rtype = self.node_type(base)
-        obj = self.accept(base)
+        base_rtype = self.type_to_rtype(base_type)
         if isinstance(base_rtype, RInstance):
             # Look up the declared signature of the method, since the
             # inferred signature can have type variable substitutions which
             # aren't valid at runtime due to type erasure.
-            typ = self.types[base]
-            signature = self.get_native_method_signature(typ, name)
+            signature = self.get_native_method_signature(base_type, name)
             if signature:
                 if arg_kinds is None:
                     assert arg_names is not None, "arg_kinds present without arg_names"
@@ -1397,17 +1418,16 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 arg_regs = self.coerce_native_call_args(args, arg_types, base.line)
                 target_type = self.type_to_rtype(signature.ret_type)
 
-                return self.add(MethodCall(target_type, obj, name, arg_regs, base.line))
+                return self.add(MethodCall(target_type, base, name, arg_regs, line))
 
         # First try to do a special-cased method call
-        target = self.translate_special_method_call(
-            obj, name, args, None, base.line)
+        target = self.translate_special_method_call(base, name, args, return_rtype, line)
         if target:
             return target
 
         # Fall back to Python method call
-        method_name = self.load_static_unicode(callee.name)
-        return self.py_method_call(obj, method_name, args, expr.line)
+        method_name = self.load_static_unicode(name)
+        return self.py_method_call(base, method_name, args, base.line)
 
     def get_native_method_signature(self, typ: Type, name: str) -> Optional[CallableType]:
         if isinstance(typ, Instance):
