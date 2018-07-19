@@ -1130,10 +1130,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.add(TupleGet(base, expr.index.value, expr.line))
 
         index_reg = self.accept(expr.index)
-        return self.get_method_call(self.types[expr.base],
+        return self.gen_method_call(self.types[expr.base],
                                     base,
-                                    [index_reg],
                                     '__getitem__',
+                                    [index_reg],
                                     self.node_type(expr),
                                     expr.line)
 
@@ -1325,20 +1325,20 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             args = [self.accept(arg) for arg in expr.args]
             assert callee.expr in self.types
             obj = self.accept(callee.expr)
-            return self.get_method_call(self.types[callee.expr],
+            return self.gen_method_call(self.types[callee.expr],
                                         obj,
-                                        args,
                                         callee.name,
+                                        args,
                                         self.node_type(expr),
                                         expr.line,
                                         expr.arg_kinds,
                                         expr.arg_names)
 
-    def get_method_call(self,
+    def gen_method_call(self,
                         base_type: Type,
                         base: Value,
-                        args: List[Value],
                         name: str,
+                        args: List[Value],
                         return_rtype: RType,
                         line: int,
                         arg_kinds: Optional[List[int]] = None,

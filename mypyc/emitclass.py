@@ -402,7 +402,8 @@ def generate_as_mapping_for_class(index_method: FuncIR,
                                   emitter: Emitter) -> str:
     emitter.emit_line('static PyMappingMethods {} = {{'.format(name))
     emitter.emit_line('0,        /* mp_length */')
-    emitter.emit_line('{}{},     /* mp_subscript */'.format(DUNDER_PREFIX, index_method.cname(emitter.names)))
+    emitter.emit_line('{}{},     /* mp_subscript */'.format(DUNDER_PREFIX,
+                                                            index_method.cname(emitter.names)))
     emitter.emit_line('0,        /* mp_ass_subscript */')
     emitter.emit_line('};')
     return name
