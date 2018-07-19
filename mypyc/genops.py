@@ -1216,8 +1216,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Box all arguments since we are invoking a non-mypyc-generated function.
 
         if (arg_kinds is None) or all(kind == ARG_POS for kind in arg_kinds):
-            arg_boxes = [self.box(value) for value in arg_values]
-            return self.add(PrimitiveOp([function] + arg_boxes, py_call_op, line))
+            return self.primitive_op(py_call_op, [function] + arg_values, line)
         else:
             assert arg_names is not None
 
@@ -1236,11 +1235,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             pos_args_tuple = self.add(TupleSet(pos_arg_values, line))
             kw_args_dict = self.make_dict(kw_arg_key_value_pairs, line)
 
-            pos_tuple_boxed = self.box(pos_args_tuple)
-
-            return self.add(PrimitiveOp([function, pos_tuple_boxed, kw_args_dict],
-                                        py_call_with_kwargs_op,
-                                        line))
+            return self.primitive_op(py_call_with_kwargs_op,
+                                     [function, pos_args_tuple, kw_args_dict],
+                                     line)
 
     def py_method_call(self,
                        obj: Value,
@@ -1250,10 +1247,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                        arg_kinds: Optional[List[int]] = None,
                        arg_names: Optional[List[Optional[str]]] = None) -> Value:
         if (arg_kinds is None) or all(kind == ARG_POS for kind in arg_kinds):
-            arg_boxes = [self.box(value) for value in arg_values]
             method_name_reg = self.load_static_unicode(method_name)
-            return self.add(PrimitiveOp([obj, method_name_reg] + arg_boxes,
-                                        py_method_call_op, line))
+            return self.primitive_op(py_method_call_op, [obj, method_name_reg] + arg_values, line)
         else:
             method = self.py_get_attr(obj, method_name, line)
             return self.py_call(method, arg_values, line, arg_kinds=arg_kinds, arg_names=arg_names)
