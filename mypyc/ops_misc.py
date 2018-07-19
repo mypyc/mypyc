@@ -158,6 +158,13 @@ method_op('__setitem__',
           emit=simple_emit('{dest} = PyObject_SetItem({args[0]}, {args[1]}, {args[2]}) >= 0;'),
           priority=0)
 
+method_op('__delitem__',
+          arg_types=[object_rprimitive, object_rprimitive],
+          result_type=bool_rprimitive,
+          error_kind=ERR_FALSE,
+          emit=simple_emit('{dest} = PyObject_DelItem({args[0]}, {args[1]}) >= 0;'),
+          priority=0)
+
 py_getattr_op = func_op(
     name='builtins.getattr',
     arg_types=[object_rprimitive, object_rprimitive],
@@ -174,6 +181,13 @@ py_setattr_op = func_op(
     emit=simple_emit('{dest} = PyObject_SetAttr({args[0]}, {args[1]}, {args[2]}) >= 0;')
 )
 
+py_delattr_op = func_op(
+    name='builtins.delattr',
+    arg_types=[object_rprimitive, object_rprimitive],
+    result_type=bool_rprimitive,
+    error_kind=ERR_FALSE,
+    emit=simple_emit('{dest} = PyObject_DelAttr({args[0]}, {args[1]}) >= 0;')
+)
 
 py_call_op = custom_op(
     arg_types=[object_rprimitive],
@@ -182,6 +196,14 @@ py_call_op = custom_op(
     error_kind=ERR_MAGIC,
     format_str = '{dest} = py_call({comma_args})',
     emit=simple_emit('{dest} = PyObject_CallFunctionObjArgs({comma_args}, NULL);'))
+
+py_call_with_kwargs_op = custom_op(
+    arg_types=[object_rprimitive],
+    result_type=object_rprimitive,
+    is_var_arg=True,
+    error_kind=ERR_MAGIC,
+    format_str = '{dest} = py_call_with_kwargs({args[0]}, {args[1]}, {args[2]})',
+    emit=simple_emit('{dest} = PyObject_Call({args[0]}, {args[1]}, {args[2]});'))
 
 
 py_method_call_op = custom_op(
