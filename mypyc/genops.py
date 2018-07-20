@@ -1366,10 +1366,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 and callee.fullname is not None
                 and all(kind in (ARG_POS, ARG_NAMED) for kind in expr.arg_kinds)):
             # Normalize keyword args to positionals.
-            arg_values_with_nones = self.keyword_args_to_positional(arg_values,
-                                                                    expr.arg_kinds,
-                                                                    expr.arg_names,
-                                                                    signature)
+            arg_values_with_nones = self.keyword_args_to_positional(
+                arg_values, expr.arg_kinds, expr.arg_names, signature)
             # Put in errors for missing args, potentially to be filled in with default args later.
             arg_values = self.missing_args_to_error_values(arg_values_with_nones,
                                                            signature.arg_types)
@@ -1482,10 +1480,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     assert arg_names is not None, "arg_kinds present but arg_names is not"
 
                 # Normalize keyword args to positionals.
-                arg_values_with_nones = self.keyword_args_to_positional(arg_values,
-                                                                        arg_kinds,
-                                                                        arg_names,
-                                                                        signature)
+                arg_values_with_nones = self.keyword_args_to_positional(
+                    arg_values, arg_kinds, arg_names, signature)
                 arg_values = self.missing_args_to_error_values(arg_values_with_nones,
                                                                signature.arg_types)
 
