@@ -43,6 +43,28 @@ print(count(5))
 2
 6
 
+[case testWhileElse]
+def count(n: int) -> int:
+    i = 1
+    while i <= n:
+        i = i + 1
+        if i == 5:
+            break
+    else:
+        i *= -1
+    return i
+[file driver.py]
+from native import count
+print(count(0))
+print(count(1))
+print(count(5))
+print(count(6))
+[out]
+-1
+-2
+5
+5
+
 [case testFor]
 from typing import List
 def count(n: int) -> None:

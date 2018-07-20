@@ -931,18 +931,28 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.nonlocal_control.pop()
 
     def visit_while_stmt(self, s: WhileStmt) -> None:
-        body, next, top = BasicBlock(), BasicBlock(), BasicBlock()
+        body, next, top, else_block = BasicBlock(), BasicBlock(), BasicBlock(), BasicBlock()
+
+        if s.else_body is not None:
+            normal_loop_exit = else_block
+        else:
+            normal_loop_exit = next
 
         self.push_loop_stack(top, next)
 
         # Split block so that we get a handle to the top of the loop.
         self.goto_and_activate(top)
-        self.process_conditional(s.expr, body, next)
+        self.process_conditional(s.expr, body, normal_loop_exit)
 
         self.activate_block(body)
         self.accept(s.body)
         # Add branch to the top at the end of the body.
         self.add(Goto(top))
+
+        if s.else_body is not None:
+            self.activate_block(else_block)
+            self.accept(s.else_body)
+            self.add(Goto(next))
 
         self.activate_block(next)
 
