@@ -30,7 +30,7 @@ from mypy.nodes import (
     NamedTupleExpr, NewTypeExpr, NonlocalDecl, OverloadedFuncDef, PrintStmt, RaiseStmt,
     RevealExpr, SetExpr, SliceExpr, StarExpr, SuperExpr, TryStmt, TypeAliasExpr,
     TypeApplication, TypeVarExpr, TypedDictExpr, UnicodeExpr, WithStmt, YieldFromExpr, YieldExpr,
-    GDEF, ARG_POS, ARG_NAMED
+    GDEF, ARG_POS, ARG_NAMED, ARG_STAR, ARG_STAR2
 )
 import mypy.nodes
 from mypy.types import (
@@ -1208,9 +1208,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 line: int,
                 arg_kinds: Optional[List[int]] = None,
                 arg_names: Optional[List[Optional[str]]] = None) -> Value:
-        """Call to non-mypyc-generated function, e.g. some python builtin functions."""
-        # Box all arguments since we are invoking a non-mypyc-generated function.
-
+        """Use py_call_op or py_call_with_kwargs_op for function call."""
         if (arg_kinds is None) or all(kind == ARG_POS for kind in arg_kinds):
             return self.primitive_op(py_call_op, [function] + arg_values, line)
         else:
@@ -1278,53 +1276,60 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         """Translate a non-method call."""
         assert isinstance(callee, RefExpr)  # TODO: Allow arbitrary callees
 
-        # Gen the args
-        args = [self.accept(arg) for arg in expr.args]
+        # Gen the argument values
+        arg_values = [self.accept(arg) for arg in expr.args]
 
-        # Don't rely on the inferred callee type, since it may have type
-        # variable substitutions that aren't valid at runtime (due to type
-        # erasure). Instead pick the declared signature of the native function
-        # as the true signature.
-        signature = self.get_native_signature(callee)
-        if signature is not None:
-            # Normalize keyword args to positionals.
-            args = keyword_args_to_positional(args, expr.arg_kinds, expr.arg_names, signature)
-
-        fullname = callee.fullname
-        if fullname == 'builtins.len' and len(expr.args) == 1 and expr.arg_kinds == [ARG_POS]:
-            expr_rtype = args[0].type
+        # Special case builtins.len
+        if (callee.fullname == 'builtins.len'
+                and len(expr.args) == 1
+                and expr.arg_kinds == [ARG_POS]):
+            expr_rtype = arg_values[0].type
             if isinstance(expr_rtype, RTuple):
                 # len() of fixed-length tuple can be trivially determined statically.
                 return self.add(LoadInt(len(expr_rtype.types)))
-        if (fullname == 'builtins.isinstance'
+
+        # Special case builtins.isinstance
+        if (callee.fullname == 'builtins.isinstance'
                 and len(expr.args) == 2
                 and expr.arg_kinds == [ARG_POS, ARG_POS]
                 and isinstance(expr.args[1], RefExpr)
                 and isinstance(expr.args[1].node, TypeInfo)
                 and self.is_native_module_ref_expr(expr.args[1])):
             # Special case native isinstance() checks as this makes them much faster.
-            return self.primitive_op(fast_isinstance_op, args, expr.line)
+            return self.primitive_op(fast_isinstance_op, arg_values, expr.line)
 
         # Handle data-driven special-cased primitive call ops.
-        if fullname is not None and expr.arg_kinds == [ARG_POS] * len(args):
-            ops = func_ops.get(fullname, [])
-            target = self.matching_primitive_op(ops, args, expr.line)
+        if callee.fullname is not None and expr.arg_kinds == [ARG_POS] * len(arg_values):
+            ops = func_ops.get(callee.fullname, [])
+            target = self.matching_primitive_op(ops, arg_values, expr.line)
             if target:
                 return target
 
-        fn = callee.fullname
-        # Try to generate a native call.
-        if signature and fn:
-            # Native call
+        # Don't rely on the inferred callee type, since it may have type
+        # variable substitutions that aren't valid at runtime (due to type
+        # erasure). Instead pick the declared signature of the native function
+        # as the true signature.
+        signature = self.get_native_signature(callee)
+
+        # Standard native call
+        if (signature is not None
+                and callee.fullname is not None
+                and all(kind in (ARG_POS, ARG_NAMED) for kind in expr.arg_kinds)):
+            # Normalize keyword args to positionals.
+            arg_values = self.keyword_args_to_positional(arg_values,
+                                                         expr.arg_kinds,
+                                                         expr.arg_names,
+                                                         signature)
+
             arg_types = [self.type_to_rtype(arg_type) for arg_type in signature.arg_types]
-            args = self.coerce_native_call_args(args, arg_types, expr.line)
+            args = self.coerce_native_call_args(arg_values, arg_types, expr.line)
             ret_type = self.type_to_rtype(signature.ret_type)
-            return self.add(Call(ret_type, fn, args, expr.line))
-        else:
-            # Fall back to a Python call
-            function = self.accept(callee)
-            return self.py_call(function, args, expr.line,
-                                arg_kinds=expr.arg_kinds, arg_names=expr.arg_names)
+            return self.add(Call(ret_type, callee.fullname, args, expr.line))
+
+        # Fall back to a Python call
+        function = self.accept(callee)
+        return self.py_call(function, arg_values, expr.line,
+                            arg_kinds=expr.arg_kinds, arg_names=expr.arg_names)
 
     def get_native_signature(self, callee: RefExpr) -> Optional[CallableType]:
         """Get the signature of a native function, or return None if not available.
@@ -1401,7 +1406,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 else:
                     assert arg_names is not None, "arg_kinds present but arg_names is not"
 
-                args = keyword_args_to_positional(args, arg_kinds, arg_names, signature)
+                args = self.keyword_args_to_positional(args, arg_kinds, arg_names, signature)
                 arg_types = [self.type_to_rtype(arg_type) for arg_type in signature.arg_types]
                 arg_regs = self.coerce_native_call_args(args, arg_types, base.line)
                 target_type = self.type_to_rtype(signature.ret_type)
@@ -2135,7 +2140,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def visit_del_stmt(self, o: DelStmt) -> None:
         if isinstance(o.expr, TupleExpr):
             for expr_item in o.expr.items:
-                    self.visit_del_item(expr_item)
+                self.visit_del_item(expr_item)
         else:
             self.visit_del_item(o.expr)
 
@@ -2649,16 +2654,16 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.unbox_or_cast(src, target_type, line)
         return src
 
-
-def keyword_args_to_positional(args: List[Value],
-                               arg_kinds: List[int],
-                               arg_names: List[Optional[str]],
-                               signature: CallableType) -> List[Value]:
-    # NOTE: This doesn't support default argument values, *args or **kwargs.
-    formal_to_actual = map_actuals_to_formals(arg_kinds,
-                                              arg_names,
-                                              signature.arg_kinds,
-                                              signature.arg_names,
-                                              lambda n: AnyType(TypeOfAny.special_form))
-    assert all(len(lst) == 1 for lst in formal_to_actual)
-    return [args[formal_to_actual[i][0]] for i in range(len(args))]
+    def keyword_args_to_positional(self,
+                                   arg_values: List[Value],
+                                   arg_kinds: List[int],
+                                   arg_names: List[Optional[str]],
+                                   signature: CallableType) -> List[Value]:
+        # NOTE: This doesn't support default argument values, *args or **kwargs.
+        formal_to_actual = map_actuals_to_formals(arg_kinds,
+                                                arg_names,
+                                                signature.arg_kinds,
+                                                signature.arg_names,
+                                                lambda n: AnyType(TypeOfAny.special_form))
+        assert all(len(lst) == 1 for lst in formal_to_actual)
+        return [arg_values[formal_to_actual[i][0]] for i in range(len(arg_values))]
