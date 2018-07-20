@@ -67,6 +67,72 @@ list_iter(list(reversed(range(5))))
 1
 0
 
+[case testRangeForElse]
+def run_for(n: int) -> None:
+    for i in range(n):
+        if i == 3:
+            break
+        print(i)
+    else:
+        print(n+1)
+[file driver.py]
+from native import run_for
+run_for(3)
+run_for(5)
+[out]
+0
+1
+2
+4
+0
+1
+2
+
+[case testListForElse]
+def run_for(n: int) -> None:
+    for i in list(range(n)):
+        if i == 3:
+            break
+        print(i)
+    else:
+        print(n+1)
+[file driver.py]
+from native import run_for
+run_for(3)
+run_for(5)
+[out]
+0
+1
+2
+4
+0
+1
+2
+
+[case testIterForElse]
+from typing import Iterator
+def run_for(n: int) -> None:
+    def identity(x: Iterator[int]) -> Iterator[int]:
+        return x
+    for i in identity(range(n)):
+        if i == 3:
+            break
+        print(i)
+    else:
+        print(n+1)
+[file driver.py]
+from native import run_for
+run_for(3)
+run_for(5)
+[out]
+0
+1
+2
+4
+0
+1
+2
+
 [case testRecursiveFibonacci]
 def fib(n: int) -> int:
     if n <= 1:
