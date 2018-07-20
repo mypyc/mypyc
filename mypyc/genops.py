@@ -13,7 +13,7 @@ It would be translated to something that conceptually looks like this:
    r3 = r2 + r1 :: int
    return r3
 """
-from typing import Callable, Dict, List, Tuple, Optional, Union, Sequence, Set, NoReturn, overload
+from typing import Callable, Dict, List, Tuple, Optional, Union, Sequence, Set, overload
 from abc import abstractmethod
 import sys
 import traceback
@@ -53,7 +53,7 @@ from mypyc.ops import (
     bool_rprimitive, list_rprimitive, is_list_rprimitive, dict_rprimitive, set_rprimitive,
     str_rprimitive, tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive,
     exc_rtuple,
-    PrimitiveOp, ControlOp,
+    PrimitiveOp, ControlOp, LoadErrorValue,
     ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap, FuncSignature,
     VTableAttr, VTableMethod, VTableEntries,
     NAMESPACE_TYPE, RaiseStandardError, LoadErrorValue,
@@ -67,7 +67,8 @@ from mypyc.ops_dict import new_dict_op, dict_get_item_op, dict_set_item_op
 from mypyc.ops_set import new_set_op, set_add_op
 from mypyc.ops_misc import (
     none_op, true_op, false_op, iter_op, next_op, py_getattr_op, py_setattr_op, py_delattr_op,
-    py_call_op, py_method_call_op, fast_isinstance_op, bool_op, new_slice_op,
+    py_call_op, py_call_with_kwargs_op, py_method_call_op,
+    fast_isinstance_op, bool_op, new_slice_op,
     is_none_op, type_op,
 )
 from mypyc.ops_exc import (
@@ -77,6 +78,7 @@ from mypyc.ops_exc import (
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
+from mypyc.crash import crash_report
 
 GenFunc = Callable[[], None]
 
@@ -244,7 +246,12 @@ class Mapper:
             else:
                 return object_rprimitive
         elif isinstance(typ, TupleType):
-            return RTuple([self.type_to_rtype(t) for t in typ.items])
+            # Use our unboxed tuples for raw tuples but fall back to
+            # being boxed for NamedTuple.
+            if typ.fallback.type.fullname() == 'builtins.tuple':
+                return RTuple([self.type_to_rtype(t) for t in typ.items])
+            else:
+                return tuple_rprimitive
         elif isinstance(typ, CallableType):
             return object_rprimitive
         elif isinstance(typ, NoneTyp):
@@ -613,6 +620,24 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                       cls.name, self.module_name,
                       FuncSignature(rt_args, ret_type), blocks, env)
 
+    def gen_arg_default(self) -> None:
+        """Generate blocks for arguments that have default values.
+
+        If the passed value is an error value, then assign the default value to the argument.
+        """
+        fitem = self.fn_info.fitem
+        for arg in fitem.arguments:
+            if arg.initializer:
+                target = self.environment.lookup(arg.variable)
+                assert isinstance(target, AssignmentTargetRegister)
+                error_block, body_block = BasicBlock(), BasicBlock()
+                self.add(Branch(target.register, error_block, body_block, Branch.IS_ERROR))
+                self.activate_block(error_block)
+                reg = self.accept(arg.initializer)
+                self.add(Assign(target.register, reg))
+                self.add(Goto(body_block))
+                self.activate_block(body_block)
+
     def gen_func_def(self, fitem: FuncItem, name: str, sig: FuncSignature,
                      class_name: Optional[str] = None) -> Tuple[FuncIR, Optional[Value]]:
         # TODO: do something about abstract methods.
@@ -648,9 +673,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         | c_obj |   --------------------------+
         +-------+
         """
-        assert all(arg.initializer is None for arg in fitem.arguments), (
-            "Default args unimplemented")
-
         self.enter(FuncInfo(fitem, name, self.gen_func_ns()))
 
         # The top-most environment is for the module top level.
@@ -663,6 +685,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.setup_env_class()
 
         self.load_env_registers()
+        self.gen_arg_default()
 
         if self.fn_info.contains_nested:
             self.finalize_env_class()
@@ -979,9 +1002,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         if (isinstance(expr, CallExpr)
                 and isinstance(expr.callee, RefExpr)
                 and expr.callee.fullname == 'builtins.range'):
-            body, next, top, end_block = BasicBlock(), BasicBlock(), BasicBlock(), BasicBlock()
+            body_block, exit_block, condition_block, increment_block = (BasicBlock(),
+                    BasicBlock(), BasicBlock(), BasicBlock())
 
-            self.push_loop_stack(end_block, next)
+            self.push_loop_stack(increment_block, exit_block)
 
             # Special case for x in range(...)
             # TODO: Check argument counts and kinds; check the lvalue
@@ -990,18 +1014,18 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
             # Initialize loop index to 0.
             index_target = self.assign(index, IntExpr(0))
-            self.add(Goto(top))
+            self.add(Goto(condition_block))
 
             # Add loop condition check.
-            self.activate_block(top)
+            self.activate_block(condition_block)
             index_reg = self.read_from_target(index_target, line)
             comparison = self.binary_op(index_reg, end_reg, '<', line)
-            self.add_bool_branch(comparison, body, next)
+            self.add_bool_branch(comparison, body_block, exit_block)
 
-            self.activate_block(body)
+            self.activate_block(body_block)
             body_insts()
 
-            self.goto_and_activate(end_block)
+            self.goto_and_activate(increment_block)
 
             # Increment index register.
             one_reg = self.add(LoadInt(1))
@@ -1009,15 +1033,15 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                   self.binary_op(index_reg, one_reg, '+', line), line)
 
             # Go back to loop condition check.
-            self.add(Goto(top))
-            self.activate_block(next)
+            self.add(Goto(condition_block))
+            self.activate_block(exit_block)
 
             self.pop_loop_stack()
 
         elif is_list_rprimitive(self.node_type(expr)):
-            body_block, next_block, end_block = BasicBlock(), BasicBlock(), BasicBlock()
+            body_block, exit_block, increment_block = BasicBlock(), BasicBlock(), BasicBlock()
 
-            self.push_loop_stack(end_block, next_block)
+            self.push_loop_stack(increment_block, exit_block)
 
             expr_reg = self.accept(expr)
 
@@ -1033,7 +1057,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             len_reg = self.add(PrimitiveOp([expr_reg], list_len_op, line))
 
             comparison = self.binary_op(index_reg, len_reg, '<', line)
-            self.add_bool_branch(comparison, body_block, next_block)
+            self.add_bool_branch(comparison, body_block, exit_block)
 
             self.activate_block(body_block)
             target_list_type = self.types[expr]
@@ -1046,18 +1070,18 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
             body_insts()
 
-            self.goto_and_activate(end_block)
+            self.goto_and_activate(increment_block)
             self.add(Assign(index_reg, self.binary_op(index_reg, one_reg, '+', line)))
             self.add(Goto(condition_block))
 
-            self.activate_block(next_block)
+            self.activate_block(exit_block)
 
             self.pop_loop_stack()
 
         else:
-            body_block, end_block, next_block = BasicBlock(), BasicBlock(), BasicBlock()
+            body_block, exit_block, increment_block = BasicBlock(), BasicBlock(), BasicBlock()
 
-            self.push_loop_stack(next_block, end_block)
+            self.push_loop_stack(increment_block, exit_block)
 
             # Define registers to contain the expression, along with the iterator that will be used
             # for the for-loop.
@@ -1068,9 +1092,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # checked to see if the value returned is NULL, which would signal either the end of
             # the Iterable being traversed or an exception being raised. Note that Branch.IS_ERROR
             # checks only for NULL (an exception does not necessarily have to be raised).
-            self.goto_and_activate(next_block)
+            self.goto_and_activate(increment_block)
             next_reg = self.add(PrimitiveOp([iter_reg], next_op, line))
-            self.add(Branch(next_reg, end_block, body_block, Branch.IS_ERROR))
+            self.add(Branch(next_reg, exit_block, body_block, Branch.IS_ERROR))
 
             # Create a new block for the body of the loop. Set the previous branch to go here if
             # the conditional evaluates to false. Assign the value obtained from __next__ to the
@@ -1079,13 +1103,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.activate_block(body_block)
             self.assign_to_target(self.get_assignment_target(index), next_reg, line)
             body_insts()
-            self.add(Goto(next_block))
+            self.add(Goto(increment_block))
 
             # Create a new block for when the loop is finished. Set the branch to go here if the
             # conditional evaluates to true. If an exception was raised during the loop, then
             # err_reg wil be set to True. If no_err_occurred_op returns False, then the exception
             # will be propagated using the ERR_FALSE flag.
-            self.activate_block(end_block)
+            self.activate_block(exit_block)
             self.add(PrimitiveOp([], no_err_occurred_op, line))
 
             self.pop_loop_stack()
@@ -1162,16 +1186,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.add(TupleGet(base, expr.index.value, expr.line))
 
         index_reg = self.accept(expr.index)
-        target_reg = self.translate_special_method_call(
-            base,
-            '__getitem__',
-            [index_reg],
-            self.node_type(expr),
-            expr.line)
-        if target_reg is not None:
-            return target_reg
-
-        assert False, 'Unsupported indexing operation'
+        # Index exprs can be type applications, in which case the type
+        # is missing from the table. Handle that by getting an Any.
+        return self.gen_method_call(self.types.get(expr.base, AnyType(TypeOfAny.special_form)),
+                                    base,
+                                    '__getitem__',
+                                    [index_reg],
+                                    self.node_type(expr),
+                                    expr.line)
 
     def visit_int_expr(self, expr: IntExpr) -> Value:
         if expr.value > MAX_SHORT_INT:
@@ -1195,6 +1217,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def is_native_module_ref_expr(self, expr: RefExpr) -> bool:
         return self.is_native_ref_expr(expr) and expr.kind == GDEF
+
+    def is_synthetic_type(self, typ: TypeInfo) -> bool:
+        """Is a type something other than just a class we've created?"""
+        return typ.is_named_tuple or typ.is_newtype or typ.typeddict_type is not None
 
     def is_free_variable(self, symbol: SymbolNode) -> bool:
         fitem = self.fn_info.fitem
@@ -1237,13 +1263,52 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         key = self.load_static_unicode(attr)
         return self.add(PrimitiveOp([obj, key], py_getattr_op, line))
 
-    def py_call(self, function: Value, args: List[Value], line: int) -> Value:
-        arg_boxes = [self.box(arg) for arg in args]  # type: List[Value]
-        return self.add(PrimitiveOp([function] + arg_boxes, py_call_op, line))
+    def py_call(self,
+                function: Value,
+                arg_values: List[Value],
+                line: int,
+                arg_kinds: Optional[List[int]] = None,
+                arg_names: Optional[List[Optional[str]]] = None) -> Value:
+        """Call to non-mypyc-generated function, e.g. some python builtin functions."""
+        # Box all arguments since we are invoking a non-mypyc-generated function.
 
-    def py_method_call(self, obj: Value, method: Value, args: List[Value], line: int) -> Value:
-        arg_boxes = [self.box(arg) for arg in args]  # type: List[Value]
-        return self.add(PrimitiveOp([obj, method] + arg_boxes, py_method_call_op, line))
+        if (arg_kinds is None) or all(kind == ARG_POS for kind in arg_kinds):
+            return self.primitive_op(py_call_op, [function] + arg_values, line)
+        else:
+            assert arg_names is not None
+
+            pos_arg_values = []
+            kw_arg_key_value_pairs = []
+            for value, kind, name in zip(arg_values, arg_kinds, arg_names):
+                if kind == ARG_POS:
+                    pos_arg_values.append(value)
+                elif kind == ARG_NAMED:
+                    assert name is not None
+                    key = self.load_static_unicode(name)
+                    kw_arg_key_value_pairs.append((key, value))
+                else:
+                    raise NotImplementedError
+
+            pos_args_tuple = self.add(TupleSet(pos_arg_values, line))
+            kw_args_dict = self.make_dict(kw_arg_key_value_pairs, line)
+
+            return self.primitive_op(py_call_with_kwargs_op,
+                                     [function, pos_args_tuple, kw_args_dict],
+                                     line)
+
+    def py_method_call(self,
+                       obj: Value,
+                       method_name: str,
+                       arg_values: List[Value],
+                       line: int,
+                       arg_kinds: Optional[List[int]] = None,
+                       arg_names: Optional[List[Optional[str]]] = None) -> Value:
+        if (arg_kinds is None) or all(kind == ARG_POS for kind in arg_kinds):
+            method_name_reg = self.load_static_unicode(method_name)
+            return self.primitive_op(py_method_call_op, [obj, method_name_reg] + arg_values, line)
+        else:
+            method = self.py_get_attr(obj, method_name, line)
+            return self.py_call(method, arg_values, line, arg_kinds=arg_kinds, arg_names=arg_names)
 
     def coerce_native_call_args(self,
                                 args: Sequence[Value],
@@ -1284,7 +1349,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         signature = self.get_native_signature(callee)
         if signature is not None:
             # Normalize keyword args to positionals.
-            args = keyword_args_to_positional(args, expr.arg_kinds, expr.arg_names, signature)
+            pos_args = keyword_args_to_positional(args, expr.arg_kinds, expr.arg_names, signature)
+            args = self.missing_args_to_error_values(pos_args, signature.arg_types)
 
         fullname = callee.fullname
         if fullname == 'builtins.len' and len(expr.args) == 1 and expr.arg_kinds == [ARG_POS]:
@@ -1319,7 +1385,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         else:
             # Fall back to a Python call
             function = self.accept(callee)
-            return self.py_call(function, args, expr.line)
+            return self.py_call(function, args, expr.line,
+                                arg_kinds=expr.arg_kinds, arg_names=expr.arg_names)
+
+    def missing_args_to_error_values(self,
+                                     args: List[Optional[Value]],
+                                     types: List[Type]) -> List[Value]:
+        """Generate LoadErrorValues for missing arguments."""
+        ret_args = []  # type: List[Value]
+        for reg, arg_type in zip(args, types):
+            if reg is None:
+                reg = LoadErrorValue(self.type_to_rtype(arg_type))
+                reg.is_borrowed = True
+                self.add(reg)
+            ret_args.append(reg)
+        return ret_args
 
     def get_native_signature(self, callee: RefExpr) -> Optional[CallableType]:
         """Get the signature of a native function, or return None if not available.
@@ -1330,6 +1410,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         if self.is_native_module_ref_expr(callee):
             node = callee.node
             if isinstance(node, TypeInfo):
+                # NamedTuples and NewTypes don't get constructors generated by us
+                if self.is_synthetic_type(node):
+                    return None
                 node = node['__init__'].node
                 if isinstance(node, FuncDef) and isinstance(node.type, CallableType):
                     signature = bind_self(node.type)
@@ -1356,43 +1439,65 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # Fall back to a PyCall for non-native module calls
             function = self.accept(callee)
             args = [self.accept(arg) for arg in expr.args]
-            return self.py_call(function, args, expr.line)
+            return self.py_call(function, args, expr.line,
+                                arg_kinds=expr.arg_kinds, arg_names=expr.arg_names)
         else:
-            obj = self.accept(callee.expr)
             args = [self.accept(arg) for arg in expr.args]
             assert callee.expr in self.types
-            receiver_rtype = self.node_type(callee.expr)
+            obj = self.accept(callee.expr)
+            return self.gen_method_call(self.types[callee.expr],
+                                        obj,
+                                        callee.name,
+                                        args,
+                                        self.node_type(expr),
+                                        expr.line,
+                                        expr.arg_kinds,
+                                        expr.arg_names)
 
-            # First try to do a special-cased method call
-            target = self.translate_special_method_call(
-                obj, callee.name, args, self.node_type(expr), expr.line)
-            if target:
-                return target
+    def gen_method_call(self,
+                        base_type: Type,
+                        base: Value,
+                        name: str,
+                        args: List[Value],
+                        return_rtype: RType,
+                        line: int,
+                        arg_kinds: Optional[List[int]] = None,
+                        arg_names: Optional[List[Optional[str]]] = None) -> Value:
 
-            # If the base type is one of ours, do a MethodCall
-            if isinstance(receiver_rtype, RInstance):
-                # Look up the declared signature of the method, since the
-                # inferred signature can have type variable substitutions which
-                # aren't valid at runtime due to type erasure.
-                signature = self.get_native_method_signature(callee)
-                if signature:
-                    args = keyword_args_to_positional(args, expr.arg_kinds, expr.arg_names,
-                                                      signature)
-                    arg_types = [self.type_to_rtype(arg_type)
-                                 for arg_type in signature.arg_types]
-                    arg_regs = self.coerce_native_call_args(args, arg_types, expr.line)
-                    target_type = self.type_to_rtype(signature.ret_type)
-                    return self.add(MethodCall(target_type, obj, callee.name,
-                                               arg_regs, expr.line))
+        # If the base type is one of ours, do a MethodCall
+        base_rtype = self.type_to_rtype(base_type)
+        if isinstance(base_rtype, RInstance):
+            # Look up the declared signature of the method, since the
+            # inferred signature can have type variable substitutions which
+            # aren't valid at runtime due to type erasure.
+            signature = self.get_native_method_signature(base_type, name)
+            if signature:
+                if arg_kinds is None:
+                    assert arg_names is None, "arg_kinds not present but arg_names is"
+                    arg_kinds = [ARG_POS for _ in args]
+                    arg_names = [None for _ in args]
+                else:
+                    assert arg_names is not None, "arg_kinds present but arg_names is not"
 
-            # Fall back to Python method call
-            method_name = self.load_static_unicode(callee.name)
-            return self.py_method_call(obj, method_name, args, expr.line)
+                pos_args = keyword_args_to_positional(args, arg_kinds, arg_names, signature)
+                args = self.missing_args_to_error_values(pos_args, signature.arg_types)
+                arg_types = [self.type_to_rtype(arg_type) for arg_type in signature.arg_types]
+                arg_regs = self.coerce_native_call_args(args, arg_types, base.line)
+                target_type = self.type_to_rtype(signature.ret_type)
 
-    def get_native_method_signature(self, callee: MemberExpr) -> Optional[CallableType]:
-        typ = self.types[callee.expr]
+                return self.add(MethodCall(target_type, base, name, arg_regs, line))
+
+        # Try to do a special-cased method call
+        target = self.translate_special_method_call(base, name, args, return_rtype, line)
+        if target:
+            return target
+
+        # Fall back to Python method call
+        return self.py_method_call(base, name, args, base.line, arg_kinds, arg_names)
+
+    def get_native_method_signature(self, typ: Type, name: str) -> Optional[CallableType]:
         if isinstance(typ, Instance):
-            method = typ.type.get(callee.name)
+            method = typ.type.get(name)
             if method and isinstance(method.node, FuncDef) and isinstance(method.node.type,
                                                                           CallableType):
                 return bind_self(method.node.type)
@@ -1475,26 +1580,26 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def visit_tuple_expr(self, expr: TupleExpr) -> Value:
         tuple_type = self.node_type(expr)
-        assert isinstance(tuple_type, RTuple)
+        # When handling NamedTuple et. al we might not have proper type info,
+        # so make some up if we need it.
+        types = (tuple_type.types if isinstance(tuple_type, RTuple)
+                 else [object_rprimitive] * len(expr.items))
 
         items = []
-        for item_expr, item_type in zip(expr.items, tuple_type.types):
+        for item_expr, item_type in zip(expr.items, types):
             reg = self.accept(item_expr)
             items.append(self.coerce(reg, item_type, item_expr.line))
         return self.add(TupleSet(items, expr.line))
 
     def visit_dict_expr(self, expr: DictExpr) -> Value:
-        dict_reg = self.add(PrimitiveOp([], new_dict_op, expr.line))
+        """First accepts all keys and values, then makes a dict out of them."""
+        key_value_pairs = []
         for key_expr, value_expr in expr.items:
-            key_reg = self.accept(key_expr)
-            value_reg = self.accept(value_expr)
-            self.translate_special_method_call(
-                dict_reg,
-                '__setitem__',
-                [key_reg, value_reg],
-                result_type=None,
-                line=expr.line)
-        return dict_reg
+            key = self.accept(key_expr)
+            value = self.accept(value_expr)
+            key_value_pairs.append((key, value))
+
+        return self.make_dict(key_value_pairs, expr.line)
 
     def visit_set_expr(self, expr: SetExpr) -> Value:
         set_reg = self.primitive_op(new_set_op, [], expr.line)
@@ -2281,12 +2386,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return desc.arg_types[-1]
         return desc.arg_types[n]
 
-    def crash_report(self, line: int) -> NoReturn:
-        traceback.print_exc()
-        print("{}:{}: mypyc crashed here".format(self.module_path, line))
-        sys.exit(2)
-        assert False
-
     @overload
     def accept(self, node: Expression) -> Value: ...
 
@@ -2303,7 +2402,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 node.accept(self)
                 return None
         except Exception:
-            self.crash_report(node.line)
+            crash_report(self.module_path, node.line)
 
     def alloc_temp(self, type: RType) -> Register:
         return self.environment.add_temp(type)
@@ -2315,6 +2414,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         if isinstance(node, IntExpr):
             # TODO: Don't special case IntExpr
             return int_rprimitive
+        if node not in self.types:
+            return object_rprimitive
         mypy_type = self.types[node]
         return self.type_to_rtype(mypy_type)
 
@@ -2332,6 +2433,17 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def box_expr(self, expr: Expression) -> Value:
         return self.box(self.accept(expr))
+
+    def make_dict(self, key_value_pairs: List[Tuple[Value, Value]], line: int) -> Value:
+        dict_reg = self.add(PrimitiveOp([], new_dict_op, line))
+        for key, value in key_value_pairs:
+            self.translate_special_method_call(
+                dict_reg,
+                '__setitem__',
+                [key, value],
+                result_type=None,
+                line=line)
+        return dict_reg
 
     def load_outer_env(self, base: Value, outer_env: Environment) -> Value:
         """Loads the environment class for a given base into a register.
@@ -2547,7 +2659,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # If the global is from 'builtins', turn it into a module attr load instead
         if self.is_builtin_ref_expr(expr):
             return self.load_module_attr(expr)
-        if self.is_native_module_ref_expr(expr) and isinstance(expr.node, TypeInfo):
+        if (self.is_native_module_ref_expr(expr) and isinstance(expr.node, TypeInfo)
+                and not self.is_synthetic_type(expr.node)):
             assert expr.fullname is not None
             return self.load_native_type_object(expr.fullname)
         _globals = self.load_globals_dict()
@@ -2619,12 +2732,12 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 def keyword_args_to_positional(args: List[Value],
                                arg_kinds: List[int],
                                arg_names: List[Optional[str]],
-                               signature: CallableType) -> List[Value]:
+                               signature: CallableType) -> List[Optional[Value]]:
     # NOTE: This doesn't support default argument values, *args or **kwargs.
     formal_to_actual = map_actuals_to_formals(arg_kinds,
                                               arg_names,
                                               signature.arg_kinds,
                                               signature.arg_names,
                                               lambda n: AnyType(TypeOfAny.special_form))
-    assert all(len(lst) == 1 for lst in formal_to_actual)
-    return [args[formal_to_actual[i][0]] for i in range(len(args))]
+    assert all(len(lst) <= 1 for lst in formal_to_actual)
+    return [None if len(lst) == 0 else args[lst[0]] for lst in formal_to_actual]
