@@ -1235,7 +1235,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             pos_args_list = self.primitive_op(new_list_op, pos_arg_values, line)
             for list_value in star_arg_list_values:
                 # TODO: Write a C-primitive for extend.
-                pos_args_list = self.py_method_call(pos_args_list, 'extend', [list_value], line)
+                self.py_method_call(pos_args_list, 'extend', [list_value], line)
 
             pos_args_tuple = self.primitive_op(list_tuple_op, [pos_args_list], line)
             kw_args_dict = self.make_dict(kw_arg_key_value_pairs, line)
