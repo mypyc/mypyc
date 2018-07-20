@@ -6,10 +6,12 @@ from typing import Optional, List, Tuple
 
 from mypyc.common import PREFIX, NATIVE_PREFIX, REG_PREFIX, DUNDER_PREFIX
 from mypyc.emit import Emitter
-from mypyc.emitfunc import native_function_header
+from mypyc.emitfunc import (
+    native_function_header, generate_tuple_check_code
+)
 from mypyc.ops import (
-    ClassIR, FuncIR, RType, Environment, object_rprimitive, FuncSignature,
-    VTableMethod, VTableAttr, VTableEntries,
+    ClassIR, FuncIR, RType, RTuple, Environment, object_rprimitive, FuncSignature,
+    VTableMethod, VTableAttr, VTableEntries
 )
 from mypyc.sametype import is_same_type
 from mypyc.namegen import NameGenerator
@@ -191,12 +193,19 @@ def generate_native_getters_and_setters(cl: ClassIR,
     for attr, rtype in cl.attributes.items():
         # Native getter
         emitter.emit_line('{}{}({} *self)'.format(emitter.ctype_spaced(rtype),
-                                               native_getter_name(cl, attr, emitter.names),
-                                               cl.struct_name(emitter.names)))
+                                                  native_getter_name(cl, attr, emitter.names),
+                                                  cl.struct_name(emitter.names)))
         emitter.emit_line('{')
         if rtype.is_refcounted:
+            if isinstance(rtype, RTuple):
+                attr_expr = 'self->{}'.format(attr)
+                emitter.emit_line(
+                    'if ({}) {{'.format(
+                        generate_tuple_check_code(rtype, attr_expr, emitter.c_undefined_value)))
+            else:
+                emitter.emit_line(
+                    'if (self->{} == {}) {{'.format(attr, emitter.c_undefined_value(rtype)))
             emitter.emit_lines(
-                'if (self->{} == {}) {{'.format(attr, emitter.c_undefined_value(rtype)),
                 'PyErr_SetString(PyExc_AttributeError, "attribute {} of {} undefined");'.format(
                     repr(attr), repr(cl.name)),
                 '} else {')
@@ -205,7 +214,6 @@ def generate_native_getters_and_setters(cl: ClassIR,
         emitter.emit_line('return self->{};'.format(attr))
         emitter.emit_line('}')
         emitter.emit_line()
-
         # Native setter
         emitter.emit_line(
             'bool {}({} *self, {}value)'.format(native_setter_name(cl, attr, emitter.names),
@@ -213,8 +221,15 @@ def generate_native_getters_and_setters(cl: ClassIR,
                                                 emitter.ctype_spaced(rtype)))
         emitter.emit_line('{')
         if rtype.is_refcounted:
-            emitter.emit_line('if (self->{} != {}) {{'.format(attr,
-                                                              emitter.c_undefined_value(rtype)))
+            if isinstance(rtype, RTuple):
+                attr_expr = 'self->{}'.format(attr)
+                emitter.emit_line(
+                    'if ({}) {{'
+                    .format(generate_tuple_check_code(
+                        rtype, attr_expr, emitter.c_undefined_value, "!=")))
+            else:
+                emitter.emit_line('if (self->{} != {}) {{'
+                                  .format(attr, emitter.c_undefined_value(rtype)))
             emitter.emit_dec_ref('self->{}'.format(attr), rtype)
             emitter.emit_line('}')
         emitter.emit_inc_ref('value'.format(attr), rtype)
@@ -430,7 +445,6 @@ def generate_getseter_declarations(cl: ClassIR, emitter: Emitter) -> None:
 def generate_getseters_table(cl: ClassIR,
                              name: str,
                              emitter: Emitter) -> None:
-
     emitter.emit_line('static PyGetSetDef {}[] = {{'.format(name))
     if not cl.is_trait:
         for attr in cl.attributes:
@@ -468,7 +482,13 @@ def generate_getter(cl: ClassIR,
     emitter.emit_line('{}({} *self, void *closure)'.format(getter_name(cl, attr, emitter.names),
                                                            cl.struct_name(emitter.names)))
     emitter.emit_line('{')
-    emitter.emit_line('if (self->{} == {}) {{'.format(attr, emitter.c_undefined_value(rtype)))
+    if isinstance(rtype, RTuple):
+        attr_expr = 'self->{}'.format(attr)
+        emitter.emit_line(
+            'if ({}) {{'.format(
+                generate_tuple_check_code(rtype, attr_expr, emitter.c_undefined_value)))
+    else:
+        emitter.emit_line('if (self->{} == {}) {{'.format(attr, emitter.c_undefined_value(rtype)))
     emitter.emit_line('PyErr_SetString(PyExc_AttributeError,')
     emitter.emit_line('    "attribute {} of {} undefined");'.format(repr(attr),
                                                                     repr(cl.name)))
@@ -490,7 +510,15 @@ def generate_setter(cl: ClassIR,
         cl.struct_name(emitter.names)))
     emitter.emit_line('{')
     if rtype.is_refcounted:
-        emitter.emit_line('if (self->{} != {}) {{'.format(attr, emitter.c_undefined_value(rtype)))
+        if isinstance(rtype, RTuple):
+            attr_expr = 'self->{}'.format(attr)
+            emitter.emit_line(
+                'if ({}) {{'
+                .format(
+                    generate_tuple_check_code(rtype, attr_expr, emitter.c_undefined_value, '!=')))
+        else:
+            emitter.emit_line(
+                'if (self->{} != {}) {{'.format(attr, emitter.c_undefined_value(rtype)))
         emitter.emit_dec_ref('self->{}'.format(attr), rtype)
         emitter.emit_line('}')
     emitter.emit_line('if (value != NULL) {')

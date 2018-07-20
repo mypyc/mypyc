@@ -2261,3 +2261,10 @@ typing.List[native.A] typing.List[typing.Tuple[int, str]] typing.List[typing.Lis
 Lol(a=1, b=[])
 10
 1
+
+[case testTupleAttr]
+from typing import Tuple
+class C:
+    d: Tuple[Tuple[int, int], int, str, object]
+[file driver.py]
+[out]

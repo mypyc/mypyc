@@ -11,7 +11,25 @@ from mypyc.ops import (
     EmitterInterface, Unreachable, is_int_rprimitive, NAMESPACE_STATIC, NAMESPACE_TYPE,
     RaiseStandardError,
 )
+from typing import Callable
 from mypyc.namegen import NameGenerator
+
+
+def generate_tuple_check_code(
+        rtuple: RTuple,
+        tuple_expr_in_c: str,
+        c_compare_type_func: Callable[[RType], str],
+        compare: str = '==') -> str:
+    item_expr_in_c = tuple_expr_in_c + '.f0'
+    item_type = rtuple.types[0]
+    while isinstance(item_type, RTuple):
+        item_type = item_type.types[0]
+        item_expr_in_c += '.f0'
+    return '{} {} {}'.format(
+        item_expr_in_c,
+        compare,
+        c_compare_type_func(item_type)
+    )
 
 
 def native_function_type(fn: FuncIR, emitter: Emitter) -> str:
@@ -100,10 +118,10 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
             compare = '!=' if op.negated else '=='
             if isinstance(typ, RTuple):
                 # TODO: What about empty tuple?
-                item_type = typ.types[0]
-                cond = '{}.f0 {} {}'.format(self.reg(op.left),
-                                            compare,
-                                            self.c_error_value(item_type))
+                cond = generate_tuple_check_code(typ,
+                                            self.reg(op.left),
+                                            self.c_error_value,
+                                            compare)
             else:
                 cond = '{} {} {}'.format(self.reg(op.left),
                                          compare,

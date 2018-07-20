@@ -176,8 +176,15 @@ class Emitter:
         name = 'tuple_undefined_' + id
         if name not in context.statics:
             struct_name = self.tuple_struct_name(rtuple)
-            values = ', '.join(self.c_undefined_value(item)
-                               for item in rtuple.types)
+            undefined_values = []
+            for item in rtuple.types:
+                if not isinstance(item, RTuple):
+                    undefined_values.append(self.c_undefined_value(item))
+                else:
+                    # TODO this needs to be recursive
+                    undefined_values.append(
+                        '{{ {} }}'.format(', '.join(map(self.c_undefined_value, item.types))))
+            values = ', '.join(undefined_values)
             init = 'struct {} {} = {{ {} }};'.format(struct_name, name, values)
             context.statics[name] = init
         return name
