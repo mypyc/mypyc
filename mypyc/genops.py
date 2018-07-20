@@ -585,7 +585,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                       FuncSignature(rt_args, ret_type), blocks, env)
 
     def gen_arg_default(self) -> None:
-        """ Generate blocks for arguments that have default values.
+        """Generate blocks for arguments that have default values.
+
         If the passed value is an error value, then assign the default value to the argument.
         """
         fitem = self.fn_info.fitem
@@ -1345,13 +1346,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def missing_args_to_error_values(self,
                                      args: List[Optional[Value]],
                                      types: List[Type]) -> List[Value]:
-        """ Generate LoadErrorValues for missing arguments
-        """
+        """Generate LoadErrorValues for missing arguments."""
         ret_args = []  # type: List[Value]
-        for index, reg in enumerate(args):
+        for reg, arg_type in zip(args, types):
             if reg is None:
-                arg_type = self.type_to_rtype(types[index])
-                reg = LoadErrorValue(arg_type)
+                reg = LoadErrorValue(self.type_to_rtype(arg_type))
                 reg.is_borrowed = True
                 self.add(reg)
             ret_args.append(reg)

@@ -289,10 +289,9 @@ print(f((1,2,3,4)))
 
 [case testFunctionCallWithDefaultArgs]
 from typing import Tuple, List
-def f(x: int, y: int = 3, s: str = "test", l: List[int] = []) -> Tuple[int, str]:
-    l.append(x + y)
+def f(x: int, y: int = 3, s: str = "test") -> Tuple[int, str]:
     def inner() -> int:
-        return l[-1]
+        return x + y
     return inner(), s
 def g() -> None:
     assert f(2) == (5, "test")
@@ -304,10 +303,9 @@ g()
 [case testMethodCallWithDefaultArgs]
 from typing import Tuple, List
 class A:
-    def f(self, x: int, y: int = 3, s: str = "test", l: List[int] = []) -> Tuple[int, str]:
-        l.append(x + y)
+    def f(self, x: int, y: int = 3, s: str = "test") -> Tuple[int, str]:
         def inner() -> int:
-            return l[-1]
+            return x + y
         return inner(), s
 def g() -> None:
     a = A()
