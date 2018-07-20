@@ -64,7 +64,7 @@ from mypyc.ops_list import (
     list_append_op, list_len_op, list_get_item_op, list_set_item_op, new_list_op,
 )
 from mypyc.ops_tuple import list_tuple_op
-from mypyc.ops_dict import new_dict_op, dict_get_item_op, dict_set_item_op
+from mypyc.ops_dict import new_dict_op, dict_get_item_op, dict_set_item_op, dict_update_op
 from mypyc.ops_set import new_set_op, set_add_op
 from mypyc.ops_misc import (
     none_op, true_op, false_op, iter_op, next_op, py_getattr_op, py_setattr_op, py_delattr_op,
@@ -1218,7 +1218,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             pos_arg_values = []
             kw_arg_key_value_pairs = []
             star_arg_list_values = []
+            star2_arg_dict_values = []
             list_function = self.load_module_attr_by_fullname('builtins.list', line)
+            dict_function = self.load_module_attr_by_fullname('builtins.dict', line)
             for value, kind, name in zip(arg_values, arg_kinds, arg_names):
                 if kind == ARG_POS:
                     pos_arg_values.append(value)
@@ -1229,6 +1231,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 elif kind == ARG_STAR:
                     list_value = self.py_call(list_function, [value], line)
                     star_arg_list_values.append(list_value)
+                elif kind == ARG_STAR2:
+                    dict_value = self.py_call(dict_function, [value], line)
+                    star2_arg_dict_values.append(dict_value)
                 else:
                     raise NotImplementedError
 
@@ -1236,9 +1241,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             for list_value in star_arg_list_values:
                 # TODO: Write a C-primitive for extend.
                 self.py_method_call(pos_args_list, 'extend', [list_value], line)
-
             pos_args_tuple = self.primitive_op(list_tuple_op, [pos_args_list], line)
+
             kw_args_dict = self.make_dict(kw_arg_key_value_pairs, line)
+            # NOTE: mypy currently only supports a single ** arg, but python supports multiple.
+            # This code supports multiple primarily to make the logic easier to follow.
+            for dict_value in star2_arg_dict_values:
+                self.primitive_op(dict_update_op, [kw_args_dict, dict_value], line)
 
             return self.primitive_op(py_call_with_kwargs_op,
                                      [function, pos_args_tuple, kw_args_dict],
