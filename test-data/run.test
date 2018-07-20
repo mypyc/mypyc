@@ -287,6 +287,34 @@ print(f((1,2,3,4)))
 [out]
 2
 
+[case testFunctionCallWithDefaultArgs]
+from typing import Tuple, List
+def f(x: int, y: int = 3, s: str = "test") -> Tuple[int, str]:
+    def inner() -> int:
+        return x + y
+    return inner(), s
+def g() -> None:
+    assert f(2) == (5, "test")
+    assert f(s = "123", x = -2) == (1, "123")
+[file driver.py]
+from native import g
+g()
+
+[case testMethodCallWithDefaultArgs]
+from typing import Tuple, List
+class A:
+    def f(self, x: int, y: int = 3, s: str = "test") -> Tuple[int, str]:
+        def inner() -> int:
+            return x + y
+        return inner(), s
+def g() -> None:
+    a = A()
+    assert a.f(2) == (5, "test")
+    assert a.f(s = "123", x = -2) == (1, "123")
+[file driver.py]
+from native import g
+g()
+
 [case testPycall]
 import testmodule
 
@@ -1995,3 +2023,35 @@ internal_index_into()
 2 * 3 + 1 2 * 3 + 1
 7
 2 * 3 + 1
+
+[case testTypeAlias]
+from typing import Tuple, List, Dict, NewType, NamedTuple
+class A:
+    pass
+
+T = List[A]
+U = List[Tuple[int, str]]
+Z = List[List[int]]
+D = Dict[int, List[int]]
+N = NewType('N', int)
+G = Tuple[int, str]
+def foo(x: N) -> int:
+    return x
+foo(N(10))
+z = N(10)
+Lol = NamedTuple('Lol', (('a', int), ('b', T)))
+x = Lol(1, [])
+def take_lol(x: Lol) -> int:
+    return x.a
+
+[file driver.py]
+from native import *
+print(T, U, Z, D)
+print(x)
+print(z)
+print(take_lol(x))
+[out]
+typing.List[native.A] typing.List[typing.Tuple[int, str]] typing.List[typing.List[int]] typing.Dict[int, typing.List[int]]
+Lol(a=1, b=[])
+10
+1
