@@ -63,6 +63,7 @@ from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, nam
 from mypyc.ops_list import (
     list_append_op, list_len_op, list_get_item_op, list_set_item_op, new_list_op,
 )
+from mypyc.ops_tuple import list_tuple_op
 from mypyc.ops_dict import new_dict_op, dict_get_item_op, dict_set_item_op
 from mypyc.ops_set import new_set_op, set_add_op
 from mypyc.ops_misc import (
@@ -1216,6 +1217,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
             pos_arg_values = []
             kw_arg_key_value_pairs = []
+            star_arg_list_values = []
+            list_function = self.load_module_attr_by_fullname('builtins.list', line)
             for value, kind, name in zip(arg_values, arg_kinds, arg_names):
                 if kind == ARG_POS:
                     pos_arg_values.append(value)
@@ -1223,10 +1226,18 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     assert name is not None
                     key = self.load_static_unicode(name)
                     kw_arg_key_value_pairs.append((key, value))
+                elif kind == ARG_STAR:
+                    list_value = self.py_call(list_function, [value], line)
+                    star_arg_list_values.append(list_value)
                 else:
                     raise NotImplementedError
 
-            pos_args_tuple = self.add(TupleSet(pos_arg_values, line))
+            pos_args_list = self.primitive_op(new_list_op, pos_arg_values, line)
+            for list_value in star_arg_list_values:
+                # TODO: Write a C-primitive for extend.
+                pos_args_list = self.py_method_call(pos_args_list, 'extend', [list_value], line)
+
+            pos_args_tuple = self.primitive_op(list_tuple_op, [pos_args_list], line)
             kw_args_dict = self.make_dict(kw_arg_key_value_pairs, line)
 
             return self.primitive_op(py_call_with_kwargs_op,
@@ -1263,9 +1274,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         callee = expr.callee
         if isinstance(callee, IndexExpr) and isinstance(callee.analyzed, TypeApplication):
             callee = callee.analyzed.expr  # Unwrap type application
-
-        assert all(kind in (ARG_POS, ARG_NAMED) for kind in expr.arg_kinds), (
-            "Only positional and keyword arguments implemented")
 
         if isinstance(callee, MemberExpr):
             return self.translate_method_call(expr, callee)

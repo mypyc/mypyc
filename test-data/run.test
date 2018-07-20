@@ -1490,12 +1490,13 @@ def g(a: int, b: int, c: int) -> Tuple[int, int, int]:
     return a, b, c
 
 def test_star_args() -> None:
+    print(g(*[1, 2, 3]))
     assert g(*[1, 2, 3]) == (1, 2, 3)
     assert g(*(1, 2, 3)) == (1, 2, 3)
-    assert g(*(1), *[2, 3]) == (1, 2, 3)
-    assert g(*[], *(1), *(), *[2], *[], *(3), *()) == (1, 2, 3)
+    assert g(*(1,), *[2, 3]) == (1, 2, 3)
+    assert g(*(), *(1,), *(), *(2,), *(3,), *()) == (1, 2, 3)
 
-[case driver.py]
+[file driver.py]
 import native
 native.test_star_args()
 
