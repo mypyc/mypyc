@@ -1264,7 +1264,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     dict_value = self.py_call(dict_function, [value], line)
                     star2_arg_dict_values.append(dict_value)
                 else:
-                    raise NotImplementedError
+                    assert False, ("Argument kind should not be possible:", kind)
 
             pos_args_list = self.primitive_op(new_list_op, pos_arg_values, line)
             for list_value in star_arg_list_values:
