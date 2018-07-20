@@ -1303,6 +1303,8 @@ class ClassIR:
         self.name = name
         self.module_name = module_name
         self.is_trait = is_trait
+        self.properties = OrderedDict()  # type: OrderedDict[str, RType]
+        self.property_getters = OrderedDict()  # type: OrderedDict[str, FuncIR]
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
         # We populate method_types with the signatures of every method before
         # we generate methods, and we rely on this information being present.
@@ -1340,6 +1342,8 @@ class ClassIR:
         for ir in self.mro:
             if name in ir.attributes:
                 return ir.attributes[name]
+            if name in ir.properties:
+                return ir.properties[name]
         assert False, '%r has no attribute %r' % (self.name, name)
 
     def method_sig(self, name: str) -> FuncSignature:

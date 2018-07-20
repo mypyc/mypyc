@@ -1845,3 +1845,63 @@ three 3
 dummy.x successfully deleted
 dummy.x successfully deleted
 dummy.y successfully deleted
+
+[case testProperty]
+class Temperature:
+    @property
+    def celsius(self) -> float:
+        return 5.0 * (self.farenheit - 32.0) / 9.0
+
+    def __init__(self, farenheit: float) -> None:
+        self.farenheit = farenheit
+
+    def print_temp(self) -> None:
+        print("F:", self.farenheit, "C:", self.celsius)
+
+    @property
+    def rankine(self) -> float:
+        raise NotImplementedError
+
+class Access:
+    @property
+    def number_of_accesses(self) -> int:
+        self._count += 1
+        return self._count
+    def __init__(self) -> None:
+        self._count = 0
+
+[file driver.py]
+from native import Temperature, Access
+import traceback
+x = Temperature(32.0)
+try:
+    print (x.rankine)
+except NotImplementedError as e:
+    traceback.print_exc()
+print (x.celsius)
+x.print_temp()
+
+y = Temperature(212.0)
+print (y.celsius)
+y.print_temp()
+
+z = Access()
+print (z.number_of_accesses)
+print (z.number_of_accesses)
+print (z.number_of_accesses)
+print (z.number_of_accesses)
+[out]
+Traceback (most recent call last):
+  File "tmp/driver.py", line 5, in <module>
+    print (x.rankine)
+  File "tmp/py/native.py", line 14, in rankine
+    raise NotImplementedError
+NotImplementedError
+0.0
+F: 32.0 C: 0.0
+100.0
+F: 212.0 C: 100.0
+1
+2
+3
+4

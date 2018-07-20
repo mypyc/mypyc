@@ -1582,3 +1582,53 @@ L7:
     goto L5
 L8:
     return r11
+
+[case testProperty]
+class PropertyHolder:
+    @property
+    def value(self) -> int:
+        return self.left + self.right if self.is_add else self.left - self.right
+    def __init__(self, left: int, right: int, is_add: bool) -> None:
+        self.left = left
+        self.right = right
+        self.is_add = is_add
+    def twice_value(self) -> int:
+        return self.value
+[out]
+def PropertyHolder.__init__(self, left, right, is_add):
+    self :: PropertyHolder
+    left, right :: int
+    is_add, r0, r1, r2 :: bool
+    r3 :: None
+L0:
+    self.left = left; r0 = is_error
+    self.right = right; r1 = is_error
+    self.is_add = is_add; r2 = is_error
+    r3 = None
+    return r3
+def PropertyHolder.twice_value(self):
+    self :: PropertyHolder
+    r0 :: int
+L0:
+    r0 = self.value
+    return r0
+def PropertyHolder.value(self):
+    self :: PropertyHolder
+    r0 :: bool
+    r1, r2, r3, r4, r5, r6, r7 :: int
+L0:
+    r0 = self.is_add
+    if r0 goto L1 else goto L2 :: bool
+L1:
+    r2 = self.left
+    r3 = self.right
+    r4 = r2 + r3 :: int
+    r1 = r4
+    goto L3
+L2:
+    r5 = self.left
+    r6 = self.right
+    r7 = r5 - r6 :: int
+    r1 = r7
+L3:
+    return r1

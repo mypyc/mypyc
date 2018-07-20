@@ -213,6 +213,17 @@ def generate_native_getters_and_setters(cl: ClassIR,
                            '}')
         emitter.emit_line()
 
+    for prop, rtype in cl.properties.items():
+        func_ir = cl.property_getters[prop]
+        emitter.emit_line('{}{}({} *self)'.format(emitter.ctype_spaced(rtype),
+                                                  native_getter_name(cl, prop, emitter.names),
+                                                  cl.struct_name(emitter.names)))
+        emitter.emit_line('{')
+        emitter.emit_line('return {}{}((PyObject *)self);'.format(NATIVE_PREFIX,
+                                                                  func_ir.cname(emitter.names)))
+        emitter.emit_line('}')
+        emitter.emit_line()
+
 
 def generate_vtables(base: ClassIR,
                      vtable_name: str,
@@ -397,6 +408,11 @@ def generate_getseter_declarations(cl: ClassIR, emitter: Emitter) -> None:
         emitter.emit_line('{}({} *self, PyObject *value, void *closure);'.format(
             setter_name(cl, attr, emitter.names),
             cl.struct_name(emitter.names)))
+    for prop in cl.properties:
+        emitter.emit_line('static PyObject *')
+        emitter.emit_line('{}({} *self, void *closure);'.format(
+            getter_name(cl, prop, emitter.names),
+            cl.struct_name(emitter.names)))
 
 
 def generate_getseters_table(cl: ClassIR,
@@ -409,6 +425,10 @@ def generate_getseters_table(cl: ClassIR,
         emitter.emit_line(' (getter){}, (setter){},'.format(getter_name(cl, attr, emitter.names),
                                                             setter_name(cl, attr, emitter.names)))
         emitter.emit_line(' NULL, NULL},')
+    for prop in cl.properties:
+        emitter.emit_line('{{"{}",'.format(prop))
+        emitter.emit_line(' (getter){},'.format(getter_name(cl, prop, emitter.names)))
+        emitter.emit_line('NULL, NULL, NULL},')
     emitter.emit_line('{NULL}  /* Sentinel */')
     emitter.emit_line('};')
 
@@ -420,6 +440,10 @@ def generate_getseters(cl: ClassIR, emitter: Emitter) -> None:
         generate_setter(cl, attr, rtype, emitter)
         if i < len(cl.attributes) - 1:
             emitter.emit_line('')
+    for prop, rtype in cl.properties.items():
+        func_ir = cl.property_getters[prop]
+        emitter.emit_line('')
+        generate_readonly_getter(cl, prop, rtype, func_ir, emitter)
 
 
 def generate_getter(cl: ClassIR,
@@ -469,4 +493,24 @@ def generate_setter(cl: ClassIR,
     emitter.emit_line('} else')
     emitter.emit_line('    self->{} = {};'.format(attr, emitter.c_undefined_value(rtype)))
     emitter.emit_line('return 0;')
+    emitter.emit_line('}')
+
+
+def generate_readonly_getter(cl: ClassIR,
+                             attr: str,
+                             rtype: RType,
+                             func_ir: FuncIR,
+                             emitter: Emitter) -> None:
+    emitter.emit_line('static PyObject *')
+    emitter.emit_line('{}({} *self, void *closure)'.format(getter_name(cl, attr, emitter.names),
+                                                           cl.struct_name(emitter.names)))
+    emitter.emit_line('{')
+    if rtype.is_unboxed:
+        emitter.emit_line('{}retval = {}{}((PyObject *) self);'.format(
+            emitter.ctype_spaced(rtype), NATIVE_PREFIX, func_ir.cname(emitter.names)))
+        emitter.emit_box('retval', 'retbox', rtype, declare_dest=True)
+        emitter.emit_line('return retbox;')
+    else:
+        emitter.emit_line('return {}{}((PyObject *) self);'.format(NATIVE_PREFIX,
+                                                                   func_ir.cname(emitter.names)))
     emitter.emit_line('}')
