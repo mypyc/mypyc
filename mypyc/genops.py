@@ -1311,7 +1311,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # as the true signature.
         signature = self.get_native_signature(callee)
 
-        # Standard native call
+        # Standard native call if signature and fullname are good and all arguments are positional
+        # or named.
         if (signature is not None
                 and callee.fullname is not None
                 and all(kind in (ARG_POS, ARG_NAMED) for kind in expr.arg_kinds)):
@@ -1385,11 +1386,16 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                         base_type: Type,
                         base: Value,
                         name: str,
-                        args: List[Value],
+                        arg_values: List[Value],
                         return_rtype: RType,
                         line: int,
                         arg_kinds: Optional[List[int]] = None,
                         arg_names: Optional[List[Optional[str]]] = None) -> Value:
+        # If arg_kinds contains values other than arg_pos and arg_named, then fallback to
+        # Python method call.
+        if (arg_kinds is not None
+                and not all(kind in (ARG_POS, ARG_NAMED) for kind in arg_kinds)):
+            return self.py_method_call(base, name, arg_values, base.line, arg_kinds, arg_names)
 
         # If the base type is one of ours, do a MethodCall
         base_rtype = self.type_to_rtype(base_type)
@@ -1401,25 +1407,28 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             if signature:
                 if arg_kinds is None:
                     assert arg_names is None, "arg_kinds not present but arg_names is"
-                    arg_kinds = [ARG_POS for _ in args]
-                    arg_names = [None for _ in args]
+                    arg_kinds = [ARG_POS for _ in arg_values]
+                    arg_names = [None for _ in arg_values]
                 else:
                     assert arg_names is not None, "arg_kinds present but arg_names is not"
 
-                args = self.keyword_args_to_positional(args, arg_kinds, arg_names, signature)
+                arg_values = self.keyword_args_to_positional(arg_values,
+                                                            arg_kinds,
+                                                            arg_names,
+                                                            signature)
                 arg_types = [self.type_to_rtype(arg_type) for arg_type in signature.arg_types]
-                arg_regs = self.coerce_native_call_args(args, arg_types, base.line)
+                arg_regs = self.coerce_native_call_args(arg_values, arg_types, base.line)
                 target_type = self.type_to_rtype(signature.ret_type)
 
                 return self.add(MethodCall(target_type, base, name, arg_regs, line))
 
         # Try to do a special-cased method call
-        target = self.translate_special_method_call(base, name, args, return_rtype, line)
+        target = self.translate_special_method_call(base, name, arg_values, return_rtype, line)
         if target:
             return target
 
         # Fall back to Python method call
-        return self.py_method_call(base, name, args, base.line, arg_kinds, arg_names)
+        return self.py_method_call(base, name, arg_values, base.line, arg_kinds, arg_names)
 
     def get_native_method_signature(self, typ: Type, name: str) -> Optional[CallableType]:
         if isinstance(typ, Instance):
