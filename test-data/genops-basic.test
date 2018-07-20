@@ -1468,6 +1468,15 @@ L0:
     r6 = None
     return r6
 
+[case testStarArgs]
+from typing import Tuple
+def f(a: int, b: int, c: int) -> Tuple[int, int, int]:
+    return a, b, c
+def g() -> Tuple[int, int, int]:
+    return f(*[1, 2, 3])
+[out]
+nope
+
 [case testListComprehension]
 from typing import List
 
