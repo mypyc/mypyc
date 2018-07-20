@@ -2265,6 +2265,13 @@ Lol(a=1, b=[])
 [case testTupleAttr]
 from typing import Tuple
 class C:
-    d: Tuple[Tuple[int, int], int, str, object]
+    a: int
+    b: Tuple[Tuple[Tuple[int, int], int], int, str, object]
+def f() -> None:
+    c = C()
+    c.a = 1
+    c.b = (((1, 2), 2), 1, "hi", "hi2")
 [file driver.py]
+from native import f
+f()
 [out]

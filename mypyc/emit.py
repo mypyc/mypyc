@@ -1,7 +1,7 @@
 """Utilities for emitting C code."""
 
 from collections import OrderedDict
-from typing import List, Set, Dict, Optional
+from typing import List, Set, Dict, Optional, List
 
 from mypyc.common import REG_PREFIX, STATIC_PREFIX, TYPE_PREFIX, NATIVE_PREFIX
 from mypyc.ops import (
@@ -176,18 +176,23 @@ class Emitter:
         name = 'tuple_undefined_' + id
         if name not in context.statics:
             struct_name = self.tuple_struct_name(rtuple)
-            undefined_values = []
-            for item in rtuple.types:
-                if not isinstance(item, RTuple):
-                    undefined_values.append(self.c_undefined_value(item))
-                else:
-                    # TODO this needs to be recursive
-                    undefined_values.append(
-                        '{{ {} }}'.format(', '.join(map(self.c_undefined_value, item.types))))
-            values = ', '.join(undefined_values)
-            init = 'struct {} {} = {{ {} }};'.format(struct_name, name, values)
+            values = self.tuple_undefined_value_helper(rtuple)
+            init = 'struct {} {} = {{ {} }};'.format(struct_name, name, ''.join(values))
             context.statics[name] = init
         return name
+
+    def tuple_undefined_value_helper(self, rtuple: RTuple) -> List[str]:
+        res = []
+        for item in rtuple.types:
+            if not isinstance(item, RTuple):
+                res.append(self.c_undefined_value(item))
+            else:
+                sub_list = self.tuple_undefined_value_helper(item)
+                res.append('{ ')
+                res.extend(sub_list)
+                res.append(' }')
+            res.append(', ')
+        return res[:-1]
 
     # Higher-level operations
 
