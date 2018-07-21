@@ -1832,3 +1832,60 @@ def AgainProperty.next__BaseProperty_glue(self):
 L0:
     r0 = self.next
     return r0
+
+[case testPropertyTraitSubclassing]
+from mypy_extensions import trait
+@trait
+class SubclassedTrait:
+    @property
+    def this(self) -> SubclassedTrait:
+        return self
+
+    @property
+    def boxed(self) -> object:
+        return 3
+
+class DerivingObject(SubclassedTrait):
+    @property
+    def this(self) -> DerivingObject:
+        return self
+
+    @property
+    def boxed(self) -> int:
+        return 5
+[out]
+def SubclassedTrait.boxed(self):
+    self :: SubclassedTrait
+    r0 :: int
+    r1 :: object
+L0:
+    r0 = 3
+    r1 = box(int, r0)
+    return r1
+def SubclassedTrait.this(self):
+    self :: SubclassedTrait
+L0:
+    return self
+def DerivingObject.boxed(self):
+    self :: DerivingObject
+    r0 :: int
+L0:
+    r0 = 5
+    return r0
+def DerivingObject.boxed__SubclassedTrait_glue(self):
+    self :: DerivingObject
+    r0 :: int
+    r1 :: object
+L0:
+    r0 = self.boxed
+    r1 = box(int, r0)
+    return r1
+def DerivingObject.this(self):
+    self :: DerivingObject
+L0:
+    return self
+def DerivingObject.this__SubclassedTrait_glue(self):
+    self, r0 :: DerivingObject
+L0:
+    r0 = self.this
+    return r0

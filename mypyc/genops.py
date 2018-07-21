@@ -527,7 +527,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                         and not is_same_method_signature(class_ir.method_types[name],
                                                          cls.method_types[name])):
                     if fdef.is_property:
-                        f = self.gen_glue_property(cls.method_types[name], class_ir, cls, name,
+                        f = self.gen_glue_property(cls.method_types[name], func_ir, class_ir, cls,
                                                    fdef.line)
                     else:
                         f = self.gen_glue_method(cls.method_types[name], func_ir, class_ir, cls,
@@ -615,7 +615,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                       cls.name, self.module_name,
                       FuncSignature(rt_args, ret_type), blocks, env)
 
-    def gen_glue_property(self, sig: FuncSignature, target: FuncIR cls: ClassIR, base: ClassIR,
+    def gen_glue_property(self, sig: FuncSignature, target: FuncIR, cls: ClassIR, base: ClassIR,
                           line: int) -> FuncIR:
         """Similarly to methods, properties of derived types can be covariantly subtyped. Thus,
         properties also require glue. However, this only requires the return type to change.
@@ -632,7 +632,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.add(Return(retbox))
 
         blocks, env, return_type, _ = self.leave()
-        return FuncIR(prop_name + '__' + base.name + '_glue',
+        return FuncIR(target.name + '__' + base.name + '_glue',
                       cls.name, self.module_name,
                       FuncSignature([rt_arg], return_type), blocks, env)
 
