@@ -1239,43 +1239,44 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 arg_kinds: Optional[List[int]] = None,
                 arg_names: Optional[List[Optional[str]]] = None) -> Value:
         """Use py_call_op or py_call_with_kwargs_op for function call."""
+        # If all arguments are positional, we can use py_call_op.
         if (arg_kinds is None) or all(kind == ARG_POS for kind in arg_kinds):
             return self.primitive_op(py_call_op, [function] + arg_values, line)
-        else:
-            assert arg_names is not None
 
-            pos_arg_values = []
-            kw_arg_key_value_pairs = []
-            star_arg_values = []
-            star2_arg_values = []
-            for value, kind, name in zip(arg_values, arg_kinds, arg_names):
-                if kind == ARG_POS:
-                    pos_arg_values.append(value)
-                elif kind == ARG_NAMED:
-                    assert name is not None
-                    key = self.load_static_unicode(name)
-                    kw_arg_key_value_pairs.append((key, value))
-                elif kind == ARG_STAR:
-                    star_arg_values.append(value)
-                elif kind == ARG_STAR2:
-                    star2_arg_values.append(value)
-                else:
-                    assert False, ("Argument kind should not be possible:", kind)
+        # Otherwise fallback to py_call_with_kwargs_op.
+        assert arg_names is not None
 
-            pos_args_list = self.primitive_op(new_list_op, pos_arg_values, line)
-            for star_arg_value in star_arg_values:
-                self.primitive_op(list_extend_op, [pos_args_list, star_arg_value], line)
-            pos_args_tuple = self.primitive_op(list_tuple_op, [pos_args_list], line)
+        pos_arg_values = []
+        kw_arg_key_value_pairs = []
+        star_arg_values = []
+        star2_arg_values = []
+        for value, kind, name in zip(arg_values, arg_kinds, arg_names):
+            if kind == ARG_POS:
+                pos_arg_values.append(value)
+            elif kind == ARG_NAMED:
+                assert name is not None
+                key = self.load_static_unicode(name)
+                kw_arg_key_value_pairs.append((key, value))
+            elif kind == ARG_STAR:
+                star_arg_values.append(value)
+            elif kind == ARG_STAR2:
+                star2_arg_values.append(value)
+            else:
+                assert False, ("Argument kind should not be possible:", kind)
 
-            kw_args_dict = self.make_dict(kw_arg_key_value_pairs, line)
-            # NOTE: mypy currently only supports a single ** arg, but python supports multiple.
-            # This code supports multiple primarily to make the logic easier to follow.
-            for star2_arg_value in star2_arg_values:
-                self.primitive_op(dict_update_op, [kw_args_dict, star2_arg_value], line)
+        pos_args_list = self.primitive_op(new_list_op, pos_arg_values, line)
+        for star_arg_value in star_arg_values:
+            self.primitive_op(list_extend_op, [pos_args_list, star_arg_value], line)
+        pos_args_tuple = self.primitive_op(list_tuple_op, [pos_args_list], line)
 
-            return self.primitive_op(py_call_with_kwargs_op,
-                                     [function, pos_args_tuple, kw_args_dict],
-                                     line)
+        kw_args_dict = self.make_dict(kw_arg_key_value_pairs, line)
+        # NOTE: mypy currently only supports a single ** arg, but python supports multiple.
+        # This code supports multiple primarily to make the logic easier to follow.
+        for star2_arg_value in star2_arg_values:
+            self.primitive_op(dict_update_op, [kw_args_dict, star2_arg_value], line)
+
+        return self.primitive_op(
+            py_call_with_kwargs_op, [function, pos_args_tuple, kw_args_dict], line)
 
     def py_method_call(self,
                        obj: Value,
