@@ -1047,113 +1047,83 @@ def call_python_function_with_keyword_arg(x):
     r0 :: int
     r1 :: object
     r2 :: str
-    r3, r4 :: object
-    r5 :: str
-    r6, r7 :: object
-    r8 :: str
-    r9 :: object
-    r10 :: str
-    r11 :: list
-    r12 :: tuple
-    r13 :: dict
-    r14 :: object
-    r15 :: bool
-    r16 :: object
-    r17 :: int
+    r3 :: object
+    r4 :: str
+    r5 :: list
+    r6 :: tuple
+    r7 :: dict
+    r8 :: object
+    r9 :: bool
+    r10 :: object
+    r11 :: int
 L0:
     r0 = 2
     r1 = builtins.module :: static
     r2 = unicode_0 :: static  ('int')
     r3 = getattr r1, r2
-    r4 = builtins.module :: static
-    r5 = unicode_1 :: static  ('list')
-    r6 = getattr r4, r5
-    r7 = builtins.module :: static
-    r8 = unicode_2 :: static  ('dict')
-    r9 = getattr r7, r8
-    r10 = unicode_3 :: static  ('base')
-    r11 = [x]
-    r12 = tuple r11 :: list
-    r13 = {}
-    r14 = box(int, r0)
-    r15 = r13.__setitem__(r10, r14) :: dict
-    r16 = py_call_with_kwargs(r3, r12, r13)
-    r17 = unbox(int, r16)
-    return r17
+    r4 = unicode_1 :: static  ('base')
+    r5 = [x]
+    r6 = tuple r5 :: list
+    r7 = {}
+    r8 = box(int, r0)
+    r9 = r7.__setitem__(r4, r8) :: dict
+    r10 = py_call_with_kwargs(r3, r6, r7)
+    r11 = unbox(int, r10)
+    return r11
 def call_python_method_with_keyword_args(xs, first, second):
     xs :: list
     first, second, r0 :: int
     r1 :: str
-    r2, r3 :: object
-    r4 :: str
-    r5, r6 :: object
-    r7 :: str
+    r2 :: object
+    r3 :: str
+    r4 :: object
+    r5 :: list
+    r6 :: tuple
+    r7 :: dict
     r8 :: object
-    r9 :: str
+    r9 :: bool
     r10 :: object
-    r11 :: list
-    r12 :: tuple
-    r13 :: dict
+    r11 :: None
+    r12 :: int
+    r13 :: str
     r14 :: object
-    r15 :: bool
-    r16 :: object
-    r17 :: None
-    r18 :: int
-    r19 :: str
-    r20, r21 :: object
-    r22 :: str
-    r23, r24 :: object
-    r25 :: str
-    r26 :: object
-    r27, r28 :: str
-    r29 :: list
-    r30 :: tuple
-    r31 :: dict
-    r32 :: object
-    r33 :: bool
-    r34 :: object
-    r35 :: bool
-    r36 :: object
-    r37 :: None
+    r15, r16 :: str
+    r17 :: list
+    r18 :: tuple
+    r19 :: dict
+    r20 :: object
+    r21 :: bool
+    r22 :: object
+    r23 :: bool
+    r24 :: object
+    r25 :: None
 L0:
     r0 = 0
-    r1 = unicode_4 :: static  ('insert')
+    r1 = unicode_2 :: static  ('insert')
     r2 = getattr xs, r1
-    r3 = builtins.module :: static
-    r4 = unicode_1 :: static  ('list')
-    r5 = getattr r3, r4
-    r6 = builtins.module :: static
-    r7 = unicode_2 :: static  ('dict')
-    r8 = getattr r6, r7
-    r9 = unicode_5 :: static  ('x')
-    r10 = box(int, r0)
-    r11 = [r10]
-    r12 = tuple r11 :: list
-    r13 = {}
-    r14 = box(int, first)
-    r15 = r13.__setitem__(r9, r14) :: dict
-    r16 = py_call_with_kwargs(r2, r12, r13)
-    r17 = cast(None, r16)
-    r18 = 1
-    r19 = unicode_4 :: static  ('insert')
-    r20 = getattr xs, r19
-    r21 = builtins.module :: static
-    r22 = unicode_1 :: static  ('list')
-    r23 = getattr r21, r22
-    r24 = builtins.module :: static
-    r25 = unicode_2 :: static  ('dict')
-    r26 = getattr r24, r25
-    r27 = unicode_5 :: static  ('x')
-    r28 = unicode_6 :: static  ('i')
-    r29 = []
-    r30 = tuple r29 :: list
-    r31 = {}
-    r32 = box(int, second)
-    r33 = r31.__setitem__(r27, r32) :: dict
-    r34 = box(int, r18)
-    r35 = r31.__setitem__(r28, r34) :: dict
-    r36 = py_call_with_kwargs(r20, r30, r31)
-    r37 = cast(None, r36)
+    r3 = unicode_3 :: static  ('x')
+    r4 = box(int, r0)
+    r5 = [r4]
+    r6 = tuple r5 :: list
+    r7 = {}
+    r8 = box(int, first)
+    r9 = r7.__setitem__(r3, r8) :: dict
+    r10 = py_call_with_kwargs(r2, r6, r7)
+    r11 = cast(None, r10)
+    r12 = 1
+    r13 = unicode_2 :: static  ('insert')
+    r14 = getattr xs, r13
+    r15 = unicode_3 :: static  ('x')
+    r16 = unicode_4 :: static  ('i')
+    r17 = []
+    r18 = tuple r17 :: list
+    r19 = {}
+    r20 = box(int, second)
+    r21 = r19.__setitem__(r15, r20) :: dict
+    r22 = box(int, r12)
+    r23 = r19.__setitem__(r16, r22) :: dict
+    r24 = py_call_with_kwargs(r14, r18, r19)
+    r25 = cast(None, r24)
     return xs
 
 [case testObjectAsBoolean]
@@ -1523,18 +1493,13 @@ def g():
     r3 :: tuple[int, int, int]
     r4 :: object
     r5 :: str
-    r6, r7 :: object
-    r8 :: str
-    r9, r10 :: object
-    r11 :: str
-    r12, r13, r14 :: object
-    r15 :: list
-    r16 :: str
-    r17 :: object
-    r18 :: tuple
-    r19 :: dict
-    r20 :: object
-    r21 :: tuple[int, int, int]
+    r6 :: object
+    r7 :: list
+    r8, r9 :: object
+    r10 :: tuple
+    r11 :: dict
+    r12 :: object
+    r13 :: tuple[int, int, int]
 L0:
     r0 = 1
     r1 = 2
@@ -1543,39 +1508,26 @@ L0:
     r4 = __main__.globals :: static
     r5 = unicode_0 :: static  ('f')
     r6 = r4[r5] :: dict
-    r7 = builtins.module :: static
-    r8 = unicode_1 :: static  ('list')
-    r9 = getattr r7, r8
-    r10 = builtins.module :: static
-    r11 = unicode_2 :: static  ('dict')
-    r12 = getattr r10, r11
-    r13 = box(tuple[int, int, int], r3)
-    r14 = py_call(r9, r13)
-    r15 = []
-    r16 = unicode_3 :: static  ('extend')
-    r17 = py_method_call(r15, r16, r14)
-    r18 = tuple r15 :: list
-    r19 = {}
-    r20 = py_call_with_kwargs(r6, r18, r19)
-    r21 = unbox(tuple[int, int, int], r20)
-    return r21
+    r7 = []
+    r8 = box(tuple[int, int, int], r3)
+    r9 = r7.extend(r8) :: list
+    r10 = tuple r7 :: list
+    r11 = {}
+    r12 = py_call_with_kwargs(r6, r10, r11)
+    r13 = unbox(tuple[int, int, int], r12)
+    return r13
 def h():
     r0, r1, r2 :: int
     r3 :: tuple[int, int]
     r4 :: object
     r5 :: str
     r6, r7 :: object
-    r8 :: str
+    r8 :: list
     r9, r10 :: object
-    r11 :: str
-    r12, r13, r14, r15 :: object
-    r16 :: list
-    r17 :: str
-    r18 :: object
-    r19 :: tuple
-    r20 :: dict
-    r21 :: object
-    r22 :: tuple[int, int, int]
+    r11 :: tuple
+    r12 :: dict
+    r13 :: object
+    r14 :: tuple[int, int, int]
 L0:
     r0 = 1
     r1 = 2
@@ -1584,23 +1536,15 @@ L0:
     r4 = __main__.globals :: static
     r5 = unicode_0 :: static  ('f')
     r6 = r4[r5] :: dict
-    r7 = builtins.module :: static
-    r8 = unicode_1 :: static  ('list')
-    r9 = getattr r7, r8
-    r10 = builtins.module :: static
-    r11 = unicode_2 :: static  ('dict')
-    r12 = getattr r10, r11
-    r13 = box(tuple[int, int], r3)
-    r14 = py_call(r9, r13)
-    r15 = box(int, r0)
-    r16 = [r15]
-    r17 = unicode_3 :: static  ('extend')
-    r18 = py_method_call(r16, r17, r14)
-    r19 = tuple r16 :: list
-    r20 = {}
-    r21 = py_call_with_kwargs(r6, r19, r20)
-    r22 = unbox(tuple[int, int, int], r21)
-    return r22
+    r7 = box(int, r0)
+    r8 = [r7]
+    r9 = box(tuple[int, int], r3)
+    r10 = r8.extend(r9) :: list
+    r11 = tuple r8 :: list
+    r12 = {}
+    r13 = py_call_with_kwargs(r6, r11, r12)
+    r14 = unbox(tuple[int, int, int], r13)
+    return r14
 
 [case testStar2Args]
 from typing import Tuple
@@ -1633,17 +1577,13 @@ def g():
     r12 :: bool
     r13 :: object
     r14 :: str
-    r15, r16 :: object
-    r17 :: str
-    r18, r19 :: object
-    r20 :: str
-    r21, r22 :: object
-    r23 :: list
-    r24 :: tuple
-    r25 :: dict
-    r26 :: bool
-    r27 :: object
-    r28 :: tuple[int, int, int]
+    r15 :: object
+    r16 :: list
+    r17 :: tuple
+    r18 :: dict
+    r19 :: bool
+    r20 :: object
+    r21 :: tuple[int, int, int]
 L0:
     r0 = unicode_0 :: static  ('a')
     r1 = 1
@@ -1661,20 +1601,13 @@ L0:
     r13 = __main__.globals :: static
     r14 = unicode_3 :: static  ('f')
     r15 = r13[r14] :: dict
-    r16 = builtins.module :: static
-    r17 = unicode_4 :: static  ('list')
-    r18 = getattr r16, r17
-    r19 = builtins.module :: static
-    r20 = unicode_5 :: static  ('dict')
-    r21 = getattr r19, r20
-    r22 = py_call(r21, r6)
-    r23 = []
-    r24 = tuple r23 :: list
-    r25 = {}
-    r26 = r25.update(r22) :: dict
-    r27 = py_call_with_kwargs(r15, r24, r25)
-    r28 = unbox(tuple[int, int, int], r27)
-    return r28
+    r16 = []
+    r17 = tuple r16 :: list
+    r18 = {}
+    r19 = r18.update(r6) :: dict
+    r20 = py_call_with_kwargs(r15, r17, r18)
+    r21 = unbox(tuple[int, int, int], r20)
+    return r21
 def h():
     r0 :: int
     r1 :: str
@@ -1689,16 +1622,12 @@ def h():
     r10 :: object
     r11 :: str
     r12, r13 :: object
-    r14 :: str
-    r15, r16 :: object
-    r17 :: str
-    r18, r19, r20 :: object
-    r21 :: list
-    r22 :: tuple
-    r23 :: dict
-    r24 :: bool
-    r25 :: object
-    r26 :: tuple[int, int, int]
+    r14 :: list
+    r15 :: tuple
+    r16 :: dict
+    r17 :: bool
+    r18 :: object
+    r19 :: tuple[int, int, int]
 L0:
     r0 = 1
     r1 = unicode_1 :: static  ('b')
@@ -1713,21 +1642,14 @@ L0:
     r10 = __main__.globals :: static
     r11 = unicode_3 :: static  ('f')
     r12 = r10[r11] :: dict
-    r13 = builtins.module :: static
-    r14 = unicode_4 :: static  ('list')
-    r15 = getattr r13, r14
-    r16 = builtins.module :: static
-    r17 = unicode_5 :: static  ('dict')
-    r18 = getattr r16, r17
-    r19 = py_call(r18, r5)
-    r20 = box(int, r0)
-    r21 = [r20]
-    r22 = tuple r21 :: list
-    r23 = {}
-    r24 = r23.update(r19) :: dict
-    r25 = py_call_with_kwargs(r12, r22, r23)
-    r26 = unbox(tuple[int, int, int], r25)
-    return r26
+    r13 = box(int, r0)
+    r14 = [r13]
+    r15 = tuple r14 :: list
+    r16 = {}
+    r17 = r16.update(r5) :: dict
+    r18 = py_call_with_kwargs(r12, r15, r16)
+    r19 = unbox(tuple[int, int, int], r18)
+    return r19
 
 [case testFunctionCallWithDefaultArgs]
 def f(x: int, y: int = 3, z: str = "test") -> None:

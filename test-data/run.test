@@ -1522,6 +1522,7 @@ def test_star_args() -> None:
     assert g(*(1, 2, 3)) == (1, 2, 3)
     assert g(*(1,), *[2, 3]) == (1, 2, 3)
     assert g(*(), *(1,), *(), *(2,), *(3,), *()) == (1, 2, 3)
+    assert g(*range(3)) == (0, 1, 2)
 
 [file driver.py]
 import native
