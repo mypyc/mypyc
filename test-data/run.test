@@ -287,6 +287,34 @@ print(f((1,2,3,4)))
 [out]
 2
 
+[case testFunctionCallWithDefaultArgs]
+from typing import Tuple, List
+def f(x: int, y: int = 3, s: str = "test") -> Tuple[int, str]:
+    def inner() -> int:
+        return x + y
+    return inner(), s
+def g() -> None:
+    assert f(2) == (5, "test")
+    assert f(s = "123", x = -2) == (1, "123")
+[file driver.py]
+from native import g
+g()
+
+[case testMethodCallWithDefaultArgs]
+from typing import Tuple, List
+class A:
+    def f(self, x: int, y: int = 3, s: str = "test") -> Tuple[int, str]:
+        def inner() -> int:
+            return x + y
+        return inner(), s
+def g() -> None:
+    a = A()
+    assert a.f(2) == (5, "test")
+    assert a.f(s = "123", x = -2) == (1, "123")
+[file driver.py]
+from native import g
+g()
+
 [case testPycall]
 import testmodule
 
@@ -513,6 +541,30 @@ assert f(l) == 10
 assert f(l) == 1
 g(l, [11, 12])
 assert l == [11, 12]
+
+[case testMethodCallWithKeywordArgs]
+from typing import Tuple
+import testmodule
+class A:
+    def echo(self, a: int, b: int, c: int) -> Tuple[int, int, int]:
+        return a, b, c
+def test_native_method_call_with_kwargs() -> None:
+    a = A()
+    assert a.echo(1, c=3, b=2) == (1, 2, 3)
+    assert a.echo(c = 3, a = 1, b = 2) == (1, 2, 3)
+def test_module_method_call_with_kwargs() -> None:
+    a = testmodule.A()
+    assert a.echo(1, c=3, b=2) == (1, 2, 3)
+    assert a.echo(c = 3, a = 1, b = 2) == (1, 2, 3)
+[file testmodule.py]
+from typing import Tuple
+class A:
+    def echo(self, a: int, b: int, c: int) -> Tuple[int, int, int]:
+        return a, b, c
+[file driver.py]
+import native
+native.test_native_method_call_with_kwargs()
+native.test_module_method_call_with_kwargs()
 
 [case testException]
 from typing import List
@@ -1419,6 +1471,46 @@ assert d == 5.0
 assert e() == 5.0
 assert f == 5.0
 
+[case testKeywordArgs]
+from typing import Tuple
+import testmodule
+
+def g(a: int, b: int, c: int) -> Tuple[int, int, int]:
+    return a, b, c
+
+def test_call_native_function_with_keyword_args() -> None:
+    assert g(1, c = 3, b = 2) == (1, 2, 3)
+    assert g(c = 3, a = 1, b = 2) == (1, 2, 3)
+
+def test_call_module_function_with_keyword_args() -> None:
+    assert testmodule.g(1, c = 3, b = 2) == (1, 2, 3)
+    assert testmodule.g(c = 3, a = 1, b = 2) == (1, 2, 3)
+
+def test_call_python_function_with_keyword_args() -> None:
+    assert int("11", base=2) == 3
+    assert int(base=2, x="11") == 3
+
+def test_call_lambda_function_with_keyword_args() -> None:
+    g = testmodule.get_lambda_function()
+    assert g(1, c = 3, b = 2) == (1, 2, 3)
+    assert g(c = 3, a = 1, b = 2) == (1, 2, 3)
+
+[file testmodule.py]
+from typing import Tuple
+
+def g(a: int, b: int, c: int) -> Tuple[int, int, int]:
+    return a, b, c
+
+def get_lambda_function():
+    return (lambda a, b, c: (a, b, c))
+
+[file driver.py]
+import native
+native.test_call_native_function_with_keyword_args()
+native.test_call_module_function_with_keyword_args()
+native.test_call_python_function_with_keyword_args()
+native.test_call_lambda_function_with_keyword_args()
+
 [case testArbitraryLvalues]
 from typing import List, Dict, Any
 
@@ -2019,3 +2111,76 @@ Represents a sequence of values. Updates itself by next, which is a new value.
 Represents a sequence of values. Updates itself by next, which is a new value.
 3
 3
+
+[case testNativeIndex]
+from typing import Any
+class Item:
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+class NonBoxedThing:
+    def __getitem__(self, index: Item) -> Item:
+        return Item("2 * " + index.value + " + 1")
+
+class BoxedThing:
+    def __getitem__(self, index: int) -> int:
+        return 2 * index + 1
+
+def index_into(x : Any, y : Any) -> Any:
+    return x[y]
+
+def internal_index_into() -> None:
+    x = BoxedThing()
+    print (x[3])
+    y = NonBoxedThing()
+    z = Item("3")
+    print(y[z].value)
+
+[file driver.py]
+from native import Item, BoxedThing, NonBoxedThing, index_into, internal_index_into
+x = BoxedThing()
+y = 3
+print(x[y], index_into(x, y))
+
+z = NonBoxedThing()
+w = Item("3")
+print(z[w].value, index_into(z, w).value)
+
+internal_index_into()
+[out]
+7 7
+2 * 3 + 1 2 * 3 + 1
+7
+2 * 3 + 1
+
+[case testTypeAlias]
+from typing import Tuple, List, Dict, NewType, NamedTuple
+class A:
+    pass
+
+T = List[A]
+U = List[Tuple[int, str]]
+Z = List[List[int]]
+D = Dict[int, List[int]]
+N = NewType('N', int)
+G = Tuple[int, str]
+def foo(x: N) -> int:
+    return x
+foo(N(10))
+z = N(10)
+Lol = NamedTuple('Lol', (('a', int), ('b', T)))
+x = Lol(1, [])
+def take_lol(x: Lol) -> int:
+    return x.a
+
+[file driver.py]
+from native import *
+print(T, U, Z, D)
+print(x)
+print(z)
+print(take_lol(x))
+[out]
+typing.List[native.A] typing.List[typing.Tuple[int, str]] typing.List[typing.List[int]] typing.Dict[int, typing.List[int]]
+Lol(a=1, b=[])
+10
+1
