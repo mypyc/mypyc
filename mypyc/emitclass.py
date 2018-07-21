@@ -6,9 +6,7 @@ from typing import Optional, List, Tuple
 
 from mypyc.common import PREFIX, NATIVE_PREFIX, REG_PREFIX, DUNDER_PREFIX
 from mypyc.emit import Emitter
-from mypyc.emitfunc import (
-    native_function_header, generate_tuple_check_code
-)
+from mypyc.emitfunc import native_function_header
 from mypyc.ops import (
     ClassIR, FuncIR, RType, RTuple, Environment, object_rprimitive, FuncSignature,
     VTableMethod, VTableAttr, VTableEntries
@@ -201,7 +199,8 @@ def generate_native_getters_and_setters(cl: ClassIR,
                 attr_expr = 'self->{}'.format(attr)
                 emitter.emit_line(
                     'if ({}) {{'.format(
-                        generate_tuple_check_code(rtype, attr_expr, emitter.c_undefined_value)))
+                        emitter.tuple_check_cond(
+                            rtype, attr_expr, emitter.c_undefined_value, '==')))
             else:
                 emitter.emit_line(
                     'if (self->{} == {}) {{'.format(attr, emitter.c_undefined_value(rtype)))
@@ -225,7 +224,7 @@ def generate_native_getters_and_setters(cl: ClassIR,
                 attr_expr = 'self->{}'.format(attr)
                 emitter.emit_line(
                     'if ({}) {{'
-                    .format(generate_tuple_check_code(
+                    .format(emitter.tuple_check_cond(
                         rtype, attr_expr, emitter.c_undefined_value, "!=")))
             else:
                 emitter.emit_line('if (self->{} != {}) {{'
@@ -486,7 +485,7 @@ def generate_getter(cl: ClassIR,
         attr_expr = 'self->{}'.format(attr)
         emitter.emit_line(
             'if ({}) {{'.format(
-                generate_tuple_check_code(rtype, attr_expr, emitter.c_undefined_value)))
+                emitter.tuple_check_cond(rtype, attr_expr, emitter.c_undefined_value, '==')))
     else:
         emitter.emit_line('if (self->{} == {}) {{'.format(attr, emitter.c_undefined_value(rtype)))
     emitter.emit_line('PyErr_SetString(PyExc_AttributeError,')
@@ -515,7 +514,7 @@ def generate_setter(cl: ClassIR,
             emitter.emit_line(
                 'if ({}) {{'
                 .format(
-                    generate_tuple_check_code(rtype, attr_expr, emitter.c_undefined_value, '!=')))
+                    emitter.tuple_check_cond(rtype, attr_expr, emitter.c_undefined_value, '!=')))
         else:
             emitter.emit_line(
                 'if (self->{} != {}) {{'.format(attr, emitter.c_undefined_value(rtype)))

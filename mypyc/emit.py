@@ -1,7 +1,7 @@
 """Utilities for emitting C code."""
 
 from collections import OrderedDict
-from typing import List, Set, Dict, Optional, List
+from typing import List, Set, Dict, Optional, List, Callable
 
 from mypyc.common import REG_PREFIX, STATIC_PREFIX, TYPE_PREFIX, NATIVE_PREFIX
 from mypyc.ops import (
@@ -169,6 +169,23 @@ class Emitter:
         result.append('')
 
         return result
+
+    def tuple_check_cond(
+            self,
+            rtuple: RTuple,
+            tuple_expr_in_c: str,
+            c_compare_type_func: Callable[[RType], str],
+            compare: str) -> str:
+        item_expr_in_c = tuple_expr_in_c + '.f0'
+        item_type = rtuple.types[0]
+        while isinstance(item_type, RTuple):
+            item_type = item_type.types[0]
+            item_expr_in_c += '.f0'
+        return '{} {} {}'.format(
+            item_expr_in_c,
+            compare,
+            c_compare_type_func(item_type)
+        )
 
     def tuple_undefined_value(self, rtuple: RTuple) -> str:
         context = self.context
@@ -477,8 +494,8 @@ class Emitter:
             if len(rtype.types) == 0:
                 return  # empty tuples can't fail.
             else:
-                self.emit_line('if ({}.f0 == {}) {{'.format(value,
-                                                            self.c_error_value(rtype.types[0])))
+                cond = self.tuple_check_cond(rtype, value, self.c_error_value, '==')
+                self.emit_line('if ({}) {{'.format(cond))
         self.emit_lines(failure, '}')
 
     def emit_gc_visit(self, target: str, rtype: RType) -> None:
