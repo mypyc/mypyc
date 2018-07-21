@@ -27,10 +27,7 @@ def generate_wrapper_function(fn: FuncIR, emitter: Emitter) -> None:
         arg = real_args.pop(0)
         emitter.emit_line('PyObject *obj_{} = self;'.format(arg.name))
 
-    optional_args = []
-    for arg in fn.args:
-        if arg.optional:
-            optional_args.append(arg)
+    optional_args = [arg for arg in fn.args if arg.optional]
 
     arg_names = ''.join('"{}", '.format(arg.name) for arg in real_args)
     emitter.emit_line('static char *kwlist[] = {{{}0}};'.format(arg_names))
