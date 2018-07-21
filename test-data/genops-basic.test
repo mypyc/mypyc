@@ -1782,7 +1782,7 @@ class PropertyHolder:
         self.right = right
         self.is_add = is_add
     def twice_value(self) -> int:
-        return self.value
+        return 2 * self.value
 [out]
 def PropertyHolder.__init__(self, left, right, is_add):
     self :: PropertyHolder
@@ -1797,10 +1797,12 @@ L0:
     return r3
 def PropertyHolder.twice_value(self):
     self :: PropertyHolder
-    r0 :: int
+    r0, r1, r2 :: int
 L0:
-    r0 = self.value
-    return r0
+    r0 = 2
+    r1 = self.value
+    r2 = r0 * r1 :: int
+    return r2
 def PropertyHolder.value(self):
     self :: PropertyHolder
     r0 :: bool
