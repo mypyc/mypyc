@@ -78,8 +78,18 @@ def build_shared_lib_for_modules(cpath: str, modules: List[str],
     out_file = shared_lib_name(modules)
     name = os.path.splitext(os.path.basename(cpath))[0]
     lib_path = build_c_extension(cpath, name, dirname)
-    out_path = os.path.join(os.path.split(lib_path)[0], out_file)
+    out_path = os.path.join(dirname, out_file)
     shutil.copy(lib_path, out_path)
+    # OS X libraries have names built into them, so change the name to what we want
+    # and eliminate the relative path while we are at it.
+    if sys.platform == 'darwin':
+        try:
+            subprocess.check_output(['install_name_tool', '-id',
+                                     os.path.basename(out_path),
+                                     out_path],
+                                    stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as err:
+            raise BuildError(err.output)
     return out_path
 
 

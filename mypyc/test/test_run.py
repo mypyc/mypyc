@@ -2,6 +2,7 @@
 
 import os.path
 import subprocess
+import sys
 from typing import List
 
 from mypy import build
@@ -126,7 +127,8 @@ class TestRun(MypycDataSuite):
             path = [os.path.dirname(native_lib_path), os.path.join(PREFIX, 'extensions')]
             env['PYTHONPATH'] = ':'.join(path)
             env['MYPYC_RUN_BENCH'] = '1' if bench else '0'
-            env['LD_LIBRARY_PATH'] = os.getcwd()
+            lib_env = 'DYLD_LIBRARY_PATH' if sys.platform == 'darwin' else 'LD_LIBRARY_PATH'
+            env[lib_env] = workdir
 
             proc = subprocess.Popen(['python', driver_path], stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, env=env)
