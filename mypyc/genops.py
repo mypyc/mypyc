@@ -1380,8 +1380,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def missing_args_to_error_values(self,
                                      args: List[Optional[Value]],
                                      types: List[Type]) -> List[Value]:
-        """Generate LoadErrorValues for missing arguments. These get resolved to default values
-        if they exist for the function in question. See gen_arg_default."""
+        """Generate LoadErrorValues for missing arguments.
+
+        These get resolved to default values if they exist for the function in question. See
+        gen_arg_default.
+        """
         ret_args = []  # type: List[Value]
         for reg, arg_type in zip(args, types):
             if reg is None:
