@@ -199,7 +199,7 @@ def generate_native_getters_and_setters(cl: ClassIR,
                 attr_expr = 'self->{}'.format(attr)
                 emitter.emit_line(
                     'if ({}) {{'.format(
-                        emitter.tuple_check_cond(
+                        emitter.tuple_undefined_check_cond(
                             rtype, attr_expr, emitter.c_undefined_value, '==')))
             else:
                 emitter.emit_line(
@@ -224,7 +224,7 @@ def generate_native_getters_and_setters(cl: ClassIR,
                 attr_expr = 'self->{}'.format(attr)
                 emitter.emit_line(
                     'if ({}) {{'
-                    .format(emitter.tuple_check_cond(
+                    .format(emitter.tuple_undefined_check_cond(
                         rtype, attr_expr, emitter.c_undefined_value, "!=")))
             else:
                 emitter.emit_line('if (self->{} != {}) {{'
@@ -485,7 +485,8 @@ def generate_getter(cl: ClassIR,
         attr_expr = 'self->{}'.format(attr)
         emitter.emit_line(
             'if ({}) {{'.format(
-                emitter.tuple_check_cond(rtype, attr_expr, emitter.c_undefined_value, '==')))
+                emitter.tuple_undefined_check_cond(
+                    rtype, attr_expr, emitter.c_undefined_value, '==')))
     else:
         emitter.emit_line('if (self->{} == {}) {{'.format(attr, emitter.c_undefined_value(rtype)))
     emitter.emit_line('PyErr_SetString(PyExc_AttributeError,')
@@ -514,7 +515,8 @@ def generate_setter(cl: ClassIR,
             emitter.emit_line(
                 'if ({}) {{'
                 .format(
-                    emitter.tuple_check_cond(rtype, attr_expr, emitter.c_undefined_value, '!=')))
+                    emitter.tuple_undefined_check_cond(
+                        rtype, attr_expr, emitter.c_undefined_value, '!=')))
         else:
             emitter.emit_line(
                 'if (self->{} != {}) {{'.format(attr, emitter.c_undefined_value(rtype)))

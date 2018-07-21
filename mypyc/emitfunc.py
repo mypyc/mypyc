@@ -101,10 +101,10 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
             compare = '!=' if op.negated else '=='
             if isinstance(typ, RTuple):
                 # TODO: What about empty tuple?
-                cond = self.emitter.tuple_check_cond(typ,
-                                            self.reg(op.left),
-                                            self.c_error_value,
-                                            compare)
+                cond = self.emitter.tuple_undefined_check_cond(typ,
+                                                               self.reg(op.left),
+                                                               self.c_error_value,
+                                                               compare)
             else:
                 cond = '{} {} {}'.format(self.reg(op.left),
                                          compare,

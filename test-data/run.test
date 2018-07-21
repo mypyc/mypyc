@@ -2265,13 +2265,10 @@ Lol(a=1, b=[])
 [case testTupleAttr]
 from typing import Tuple
 class C:
-    a: int
     b: Tuple[Tuple[Tuple[int, int], int], int, str, object]
 def f() -> None:
     c = C()
-    c.a = 1
     c.b = (((1, 2), 2), 1, "hi", "hi2")
-    print(c.a)
     print(c.b)
 
 def g() -> None:
@@ -2288,6 +2285,5 @@ from native import f, g
 f()
 g()
 [out]
-1
 (((1, 2), 2), 1, 'hi', 'hi2')
 caught the exception
