@@ -957,21 +957,77 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         }
         return op_map.get(op)
 
-    def in_place_op(self, target: AssignmentTarget, rvalue_reg: Value, op: str, line: int) -> None:
+    def in_place_op_register(self, target: AssignmentTarget, rvalue_reg: Value, op: str, line: int) -> None:
+       target_value = self.read_from_target(target, line)
+       if isinstance(target.type, RInstance):
+           method_name = self.translate_in_place_op(op)
+           assert method_name is not None, "can't find method for op %s" % op
+           self.add(MethodCall(void_rtype,
+                               target_value,
+                               method_name,
+                               [rvalue_reg],
+                               line))
+       elif isinstance(target.type, RPrimitive):
+            res = self.binary_op(target_value, rvalue_reg, op + '=', line)
+            res = self.coerce(res, target.type, res.line)
+            self.add(Assign(target.register, res, res.line))
+       else:
+           assert False, "Unsupported assignment target"
+
+    def in_place_op_attr(self, target: AssignmentTarget, rvalue_reg: Value, op: str, line: int) -> None:
+        method_name = self.translate_in_place_op(op)
+        assert method_name is not None, "can't find method for op %s" % op
         target_value = self.read_from_target(target, line)
         if isinstance(target_value.type, RInstance):
-            method_name = self.translate_in_place_op(op)
-            assert method_name is not None, "can't find method for op %s" % op
             self.add(MethodCall(void_rtype,
                                 target_value,
                                 method_name,
                                 [rvalue_reg],
                                 line))
         elif isinstance(target_value.type, RPrimitive):
-            res = self.binary_op(target_value, rvalue_reg, op, line)
-            self.assign_to_target(target, res, res.line)
+            res = self.binary_op(target_value, rvalue_reg, op + '=', line)
+            if isinstance(target.obj_type, RInstance):
+                res = self.coerce(res, target.type, line)
+                self.add(SetAttr(target.obj, target.attr, res, res.line))
+            else:
+                key = self.load_static_unicode(target.attr)
+                boxed_reg = self.box(res)
+                self.add(PrimitiveOp([target.obj, key, boxed_reg], py_setattr_op, res.line))
         else:
-            assert False, "halp"
+            assert False, "Unsupported assignment target"
+
+    def in_place_op_index(self, target: AssignmentTarget, rvalue_reg: Value, op: str, line: int) -> None:
+        method_name = self.translate_in_place_op(op)
+        assert method_name is not None, "can't find method for op %s" % op
+        target_value = self.read_from_target(target, line)
+        if isinstance(target_value.type, RInstance):
+            self.add(MethodCall(void_rtype,
+                                target_value,
+                                method_name,
+                                [rvalue_reg],
+                                line))
+        elif isinstance(target_value.type, RPrimitive):
+            res = self.binary_op(target_value, rvalue_reg, op + '=', line)
+            target_reg2 = self.translate_special_method_call(
+                   target.base,
+                   '__setitem__',
+                   [target.index, res],
+                   None,
+                   res.line)
+            assert target_reg2 is not None, target.base.type
+        else:
+            assert False, "Unsupported assignment target"
+
+    def in_place_op(self, target: AssignmentTarget, rvalue_reg: Value, op: str, line: int) -> None:
+       if isinstance(target, AssignmentTargetRegister):
+           self.in_place_op_register(target, rvalue_reg, op, line)
+       elif isinstance(target, AssignmentTargetAttr):
+           self.in_place_op_attr(target, rvalue_reg, op, line)
+       elif isinstance(target, AssignmentTargetIndex):
+           self.in_place_op_index(target, rvalue_reg, op, line)
+       else:
+           assert False, 'Unsupported assignment target'
+
 
     def visit_operator_assignment_stmt(self, stmt: OperatorAssignmentStmt) -> Value:
         """Operator assignment statement such as x += 1"""
