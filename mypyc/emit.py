@@ -171,11 +171,8 @@ class Emitter:
         return result
 
     def tuple_check_cond(
-            self,
-            rtuple: RTuple,
-            tuple_expr_in_c: str,
-            c_compare_type_func: Callable[[RType], str],
-            compare: str) -> str:
+            self, rtuple: RTuple, tuple_expr_in_c: str,
+            c_compare_type_func: Callable[[RType], str], compare: str) -> str:
         item_expr_in_c = tuple_expr_in_c + '.f0'
         item_type = rtuple.types[0]
         while isinstance(item_type, RTuple):
