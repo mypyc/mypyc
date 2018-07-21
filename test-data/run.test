@@ -1568,6 +1568,26 @@ def test_star_and_star2_args() -> None:
 import native
 native.test_star_and_star2_args()
 
+[case testAllTheArgCombinations]
+from typing import Tuple
+def g(a: int, b: int, c: int, d: int = -1) -> Tuple[int, int, int, int]:
+    return a, b, c, d
+
+class C:
+    def g(self, a: int, b: int, c: int, d: int = -1) -> Tuple[int, int, int, int]:
+        return a, b, c, d
+
+def test_all_the_arg_combinations() -> None:
+    assert g(1, *(2,), **{'c': 3}) == (1, 2, 3, -1)
+    assert g(*[1], **{'b': 2, 'c': 3, 'd': 4}) == (1, 2, 3, 4)
+    c = C()
+    assert c.g(1, *(2,), **{'c': 3}) == (1, 2, 3, -1)
+    assert c.g(*[1], **{'b': 2, 'c': 3, 'd': 4}) == (1, 2, 3, 4)
+
+[file driver.py]
+import native
+native.test_all_the_arg_combinations()
+
 [case testArbitraryLvalues]
 from typing import List, Dict, Any
 
