@@ -1545,13 +1545,19 @@ native.test_star2_args()
 
 [case testStarAndStar2Args]
 from typing import Tuple
-
 def g(a: int, b: int, c: int) -> Tuple[int, int, int]:
     return a, b, c
+
+class C:
+    def g(self, a: int, b: int, c: int) -> Tuple[int, int, int]:
+        return a, b, c
 
 def test_star_and_star2_args() -> None:
     assert g(1, *(2,), **{'c': 3}) == (1, 2, 3)
     assert g(*[1], **{'b': 2, 'c': 3}) == (1, 2, 3)
+    c = C()
+    assert c.g(1, *(2,), **{'c': 3}) == (1, 2, 3)
+    assert c.g(*[1], **{'b': 2, 'c': 3}) == (1, 2, 3)
 
 [file driver.py]
 import native
