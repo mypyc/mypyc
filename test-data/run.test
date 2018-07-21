@@ -2268,14 +2268,14 @@ class C:
     b: Tuple[Tuple[Tuple[int, int], int], int, str, object]
 def f() -> None:
     c = C()
-    c.b = (((1, 2), 2), 1, "hi", "hi2")
+    c.b = (((1, 2), 2), 1, 'hi', 'hi2')
     print(c.b)
 
 def g() -> None:
     try:
         h()
     except Exception:
-        print("caught the exception")
+        print('caught the exception')
 
 def h() -> Tuple[Tuple[Tuple[int, int], int], int, str, object]:
     raise Exception('Intentional exception')
