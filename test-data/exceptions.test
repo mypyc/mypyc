@@ -285,8 +285,8 @@ L27:
 
 [case testDocstring1]
 def lol() -> None:
-	"""Hello"""
-	pass
+    """Hello"""
+    pass
 [out]
 L0:
     r0 = unicode_0 :: static  ('Hello')
