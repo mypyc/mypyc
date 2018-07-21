@@ -1264,10 +1264,16 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             else:
                 assert False, ("Argument kind should not be possible:", kind)
 
-        pos_args_list = self.primitive_op(new_list_op, pos_arg_values, line)
-        for star_arg_value in star_arg_values:
-            self.primitive_op(list_extend_op, [pos_args_list, star_arg_value], line)
-        pos_args_tuple = self.primitive_op(list_tuple_op, [pos_args_list], line)
+        if len(star_arg_values) == 0:
+            # We can directly construct a tuple if there are no star args.
+            pos_args_tuple = self.add(TupleSet(pos_arg_values, line))
+        else:
+            # Otherwise we construct a list and call extend it with the star args, since tuples
+            # don't have an extend method.
+            pos_args_list = self.primitive_op(new_list_op, pos_arg_values, line)
+            for star_arg_value in star_arg_values:
+                self.primitive_op(list_extend_op, [pos_args_list, star_arg_value], line)
+            pos_args_tuple = self.primitive_op(list_tuple_op, [pos_args_list], line)
 
         kw_args_dict = self.make_dict(kw_arg_key_value_pairs, line)
         # NOTE: mypy currently only supports a single ** arg, but python supports multiple.
