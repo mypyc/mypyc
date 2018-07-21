@@ -195,15 +195,7 @@ def generate_native_getters_and_setters(cl: ClassIR,
                                                   cl.struct_name(emitter.names)))
         emitter.emit_line('{')
         if rtype.is_refcounted:
-            if isinstance(rtype, RTuple):
-                attr_expr = 'self->{}'.format(attr)
-                emitter.emit_line(
-                    'if ({}) {{'.format(
-                        emitter.tuple_undefined_check_cond(
-                            rtype, attr_expr, emitter.c_undefined_value, '==')))
-            else:
-                emitter.emit_line(
-                    'if (self->{} == {}) {{'.format(attr, emitter.c_undefined_value(rtype)))
+            emit_undefined_check(rtype, emitter, attr, '==')
             emitter.emit_lines(
                 'PyErr_SetString(PyExc_AttributeError, "attribute {} of {} undefined");'.format(
                     repr(attr), repr(cl.name)),
@@ -220,15 +212,7 @@ def generate_native_getters_and_setters(cl: ClassIR,
                                                 emitter.ctype_spaced(rtype)))
         emitter.emit_line('{')
         if rtype.is_refcounted:
-            if isinstance(rtype, RTuple):
-                attr_expr = 'self->{}'.format(attr)
-                emitter.emit_line(
-                    'if ({}) {{'
-                    .format(emitter.tuple_undefined_check_cond(
-                        rtype, attr_expr, emitter.c_undefined_value, "!=")))
-            else:
-                emitter.emit_line('if (self->{} != {}) {{'
-                                  .format(attr, emitter.c_undefined_value(rtype)))
+            emit_undefined_check(rtype, emitter, attr, '!=')
             emitter.emit_dec_ref('self->{}'.format(attr), rtype)
             emitter.emit_line('}')
         emitter.emit_inc_ref('value'.format(attr), rtype)
@@ -481,14 +465,7 @@ def generate_getter(cl: ClassIR,
     emitter.emit_line('{}({} *self, void *closure)'.format(getter_name(cl, attr, emitter.names),
                                                            cl.struct_name(emitter.names)))
     emitter.emit_line('{')
-    if isinstance(rtype, RTuple):
-        attr_expr = 'self->{}'.format(attr)
-        emitter.emit_line(
-            'if ({}) {{'.format(
-                emitter.tuple_undefined_check_cond(
-                    rtype, attr_expr, emitter.c_undefined_value, '==')))
-    else:
-        emitter.emit_line('if (self->{} == {}) {{'.format(attr, emitter.c_undefined_value(rtype)))
+    emit_undefined_check(rtype, emitter, attr, '==')
     emitter.emit_line('PyErr_SetString(PyExc_AttributeError,')
     emitter.emit_line('    "attribute {} of {} undefined");'.format(repr(attr),
                                                                     repr(cl.name)))
@@ -510,16 +487,7 @@ def generate_setter(cl: ClassIR,
         cl.struct_name(emitter.names)))
     emitter.emit_line('{')
     if rtype.is_refcounted:
-        if isinstance(rtype, RTuple):
-            attr_expr = 'self->{}'.format(attr)
-            emitter.emit_line(
-                'if ({}) {{'
-                .format(
-                    emitter.tuple_undefined_check_cond(
-                        rtype, attr_expr, emitter.c_undefined_value, '!=')))
-        else:
-            emitter.emit_line(
-                'if (self->{} != {}) {{'.format(attr, emitter.c_undefined_value(rtype)))
+        emit_undefined_check(rtype, emitter, attr, '!=')
         emitter.emit_dec_ref('self->{}'.format(attr), rtype)
         emitter.emit_line('}')
     emitter.emit_line('if (value != NULL) {')
@@ -557,3 +525,14 @@ def generate_readonly_getter(cl: ClassIR,
         emitter.emit_line('return {}{}((PyObject *) self);'.format(NATIVE_PREFIX,
                                                                    func_ir.cname(emitter.names)))
     emitter.emit_line('}')
+
+def emit_undefined_check(rtype: RType, emitter: Emitter, attr: str, compare: str) ->None:
+    if isinstance(rtype, RTuple):
+        attr_expr = 'self->{}'.format(attr)
+        emitter.emit_line(
+            'if ({}) {{'.format(
+                emitter.tuple_undefined_check_cond(
+                    rtype, attr_expr, emitter.c_undefined_value, compare)))
+    else:
+        emitter.emit_line(
+            'if (self->{} {} {}) {{'.format(attr, compare, emitter.c_undefined_value(rtype)))

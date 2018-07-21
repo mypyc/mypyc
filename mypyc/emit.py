@@ -173,25 +173,18 @@ class Emitter:
 
     def tuple_undefined_check_cond(
             self, rtuple: RTuple, tuple_expr_in_c: str,
-            c_compare_type_func: Callable[[RType], str], compare: str) -> str:
-        # see tuple_c_declaration() above
-        if len(rtuple.types) == 0:
-            return '{} {} {}'.format(
-                tuple_expr_in_c + '.dummy_var_to_avoid_empty_struct',
-                compare,
-                c_compare_type_func(int_rprimitive)
-            )
+            c_type_compare_val: Callable[[RType], str], compare: str) -> str:
+        item_type = rtuple.types[0]
+        if not isinstance(item_type, RTuple):
+            return '{}.f0 {} {}'\
+                .format(tuple_expr_in_c, compare, c_type_compare_val(item_type))
+        elif isinstance(item_type, RTuple) and len(item_type.types) == 0:
+            # empty tuple
+            return '{}.dummy_var_to_avoid_empty_struct {} {}'\
+                .format(tuple_expr_in_c, compare, c_type_compare_val(int_rprimitive))
         else:
-            item_expr_in_c = tuple_expr_in_c + '.f0'
-            item_type = rtuple.types[0]
-            while isinstance(item_type, RTuple):
-                item_type = item_type.types[0]
-                item_expr_in_c += '.f0'
-            return '{} {} {}'.format(
-                item_expr_in_c,
-                compare,
-                c_compare_type_func(item_type)
-            )
+            return self.tuple_undefined_check_cond(
+                item_type, tuple_expr_in_c + '.f0', c_type_compare_val, compare)
 
     def tuple_undefined_value(self, rtuple: RTuple) -> str:
         context = self.context
