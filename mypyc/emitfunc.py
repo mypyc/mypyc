@@ -11,7 +11,6 @@ from mypyc.ops import (
     EmitterInterface, Unreachable, is_int_rprimitive, NAMESPACE_STATIC, NAMESPACE_TYPE,
     RaiseStandardError,
 )
-from typing import Callable
 from mypyc.namegen import NameGenerator
 
 

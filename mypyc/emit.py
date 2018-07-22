@@ -176,12 +176,12 @@ class Emitter:
             c_type_compare_val: Callable[[RType], str], compare: str) -> str:
         item_type = rtuple.types[0]
         if not isinstance(item_type, RTuple):
-            return '{}.f0 {} {}'\
-                .format(tuple_expr_in_c, compare, c_type_compare_val(item_type))
+            return '{}.f0 {} {}'.format(
+                tuple_expr_in_c, compare, c_type_compare_val(item_type))
         elif isinstance(item_type, RTuple) and len(item_type.types) == 0:
             # empty tuple
-            return '{}.dummy_var_to_avoid_empty_struct {} {}'\
-                .format(tuple_expr_in_c, compare, c_type_compare_val(int_rprimitive))
+            return '{}.dummy_var_to_avoid_empty_struct {} {}'.format(
+                tuple_expr_in_c, compare, c_type_compare_val(int_rprimitive))
         else:
             return self.tuple_undefined_check_cond(
                 item_type, tuple_expr_in_c + '.f0', c_type_compare_val, compare)
