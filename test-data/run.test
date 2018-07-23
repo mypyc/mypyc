@@ -2385,3 +2385,48 @@ g()
 [out]
 (((1, 2), 2), 1, 'hi', 'hi2')
 caught the exception
+
+[case testYieldThreeTimes]
+from typing import Generator
+def yield_twice_and_return() -> Generator:
+    yield 1
+    yield 2
+    return 4
+    yield 3
+
+[file driver.py]
+from native import yield_twice_and_return
+
+generator = yield_twice_and_return()
+assert next(generator) == 1
+assert next(generator) == 2
+assert next(generator) == 4
+try:
+    next(generator)
+except StopIteration:
+    print('StopIteration')
+
+[out]
+StopIteration
+
+[case testYieldLoop]
+from typing import Generator
+def yield_loop() -> Generator:
+    print('inside func')
+    i = 0
+    while i < 5:
+        print('inside loop')
+        return i
+        yield i
+        i += 1
+
+[file driver.py]
+from native import yield_loop
+
+generator = yield_loop()
+assert next(generator) == 0
+assert next(generator) == 1
+# assert next(generator) == 2
+# assert next(generator) == 3
+# assert next(generator) == 4
+# assert next(generator) == None

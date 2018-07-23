@@ -1154,6 +1154,7 @@ class RaiseStandardError(RegisterOp):
 
     VALUE_ERROR = 'ValueError'
     ASSERTION_ERROR = 'AssertionError'
+    STOP_ITERATION = 'StopIteration'
 
     def __init__(self, class_name: str, message: Optional[str], line: int) -> None:
         super().__init__(line)

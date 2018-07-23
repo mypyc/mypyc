@@ -27,7 +27,7 @@ from mypyc.analysis import (
 )
 from mypyc.ops import (
     FuncIR, BasicBlock, Assign, RegisterOp, DecRef, IncRef, Branch, Goto, Environment,
-    Return, Op, Cast, Box, RType, Value, Register, AssignmentTargetRegister
+    Return, Op, Call, Cast, Box, RType, Value, Register, AssignmentTargetRegister
 )
 
 
@@ -178,6 +178,13 @@ def after_branch_decrefs(label: BasicBlock,
     target_pre_live = pre_live[label, 0]
     decref = source_live_regs - target_pre_live - source_borrowed
     if decref:
+
+        to_remove = set()
+        for reg in decref:
+            if reg not in env.indexes:
+                to_remove.add(reg)
+        decref -= to_remove
+
         return tuple(reg
                      for reg in sorted(decref, key=lambda r: env.indexes[r])
                      if reg.type.is_refcounted and reg not in omitted)

@@ -62,6 +62,9 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     call_fn = cl.get_method('__call__')
     call_name = '{}{}'.format(PREFIX, call_fn.cname(emitter.names)) if call_fn else '0'
 
+    next_fn = cl.get_method('__next__')
+    next_name = '{}{}'.format(NATIVE_PREFIX, next_fn.cname(emitter.names)) if next_fn else '0'
+
     # TODO: Add remaining dunder methods
     index_fn = cl.get_method('__getitem__')
     if index_fn:
@@ -124,7 +127,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
             0,                         /* tp_richcompare */
             0,                         /* tp_weaklistoffset */
             0,                         /* tp_iter */
-            0,                         /* tp_iternext */
+            {next_name},               /* tp_iternext */
             {methods_name},            /* tp_methods */
             0,                         /* tp_members */
             {getseters_name},          /* tp_getset */
@@ -145,6 +148,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
                     dealloc_name=dealloc_name,
                     tp_call=call_name,
                     new_name=new_name,
+                    next_name=next_name,
                     methods_name=methods_name,
                     getseters_name=getseters_name,
                     as_mapping_name=as_mapping_name,

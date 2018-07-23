@@ -1041,11 +1041,6 @@ def call_python_method_with_keyword_args(xs: List[int], first: int, second: int)
     xs.insert(x=second, i=1)
     return xs
 
-def outer() -> None:
-    def inner_yield() -> Generator:
-        yield 1
-    return None
-
 [out]
 def call_python_function_with_keyword_arg(x):
     x :: str
@@ -1125,6 +1120,106 @@ L0:
     r23 = py_call_with_kwargs(r13, r22, r17)
     r24 = cast(None, r23)
     return xs
+
+[case testYieldGenops]
+from typing import Generator
+
+def yield_loop() -> Generator:
+    i = 0
+    while i < 5:
+        return i
+        yield i
+        i += 1
+
+# def outer() -> Generator:
+#     def inner() -> None:
+#         pass
+#     yield 1
+
+[out]
+def yield_loop():
+    r0 :: yield_loop__env
+    r1 :: yield_loop__gen
+    r2 :: bool
+    r3 :: int
+    r4 :: bool
+L0:
+    r0 = yield_loop__env()
+    r1 = yield_loop__gen()
+    r1.__mypyc_env__ = r0; r2 = is_error
+    r3 = 0
+    r0.__mypyc_next_label__ = r3; r4 = is_error
+    return r1
+def yield_loop__gen.__next__(self):
+    self :: yield_loop__gen
+    r0 :: yield_loop__env
+    r1, r2 :: int
+    r3 :: bool
+    r4, r5 :: int
+    r6 :: bool
+    r7 :: int
+    r8 :: object
+    r9 :: int
+    r10 :: bool
+    r11 :: int
+    r12 :: object
+    r13 :: int
+    r14 :: bool
+    r15, r16, r17 :: int
+    r18 :: bool
+    r19 :: None
+    r20 :: int
+    r21 :: bool
+    r22 :: int
+    r23 :: bool
+    r24 :: int
+    r25, r26 :: bool
+L0:
+    r0 = self.__mypyc_env__
+    r1 = r0.__mypyc_next_label__
+    goto L7
+L1:
+    r2 = 0
+    r0.i = r2; r3 = is_error
+L2:
+    r4 = r0.i
+    r5 = 5
+    r6 = r4 < r5 :: int
+    if r6 goto L3 else goto L6 :: bool
+L3:
+    r7 = r0.i
+    r8 = box(int, r7)
+    r9 = -1
+    r0.__mypyc_next_label__ = r9; r10 = is_error
+    return r8
+L4:
+    r11 = r0.i
+    r12 = box(int, r11)
+    r13 = 1
+    r0.__mypyc_next_label__ = r13; r14 = is_error
+    return r12
+L5:
+    r15 = 1
+    r16 = r0.i
+    r17 = r16 + r15 :: int
+    r0.i = r17; r18 = is_error
+    goto L2
+L6:
+    r19 = None
+    r20 = -1
+    r0.__mypyc_next_label__ = r20; r21 = is_error
+    return r19
+L7:
+    r22 = 0
+    r23 = r1 == r22 :: int
+    if r23 goto L1 else goto L8 :: bool
+L8:
+    r24 = 1
+    r25 = r1 == r24 :: int
+    if r25 goto L5 else goto L9 :: bool
+L9:
+    raise StopIteration
+    unreachable
 
 [case testObjectAsBoolean]
 from typing import List
