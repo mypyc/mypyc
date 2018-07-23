@@ -3,11 +3,13 @@
 
 from typing import (
     TypeVar, Generic, List, Iterator, Iterable, Sized, Dict, Optional, Tuple, Any,
-    overload,
+    overload, Mapping, Union, Callable
 )
 
 T = TypeVar('T')
 S = TypeVar('S')
+K = TypeVar('K') # for keys in mapping
+V = TypeVar('V') # for values in mapping
 
 class object:
     def __init__(self) -> None: pass
@@ -49,7 +51,7 @@ class float:
     def __add__(self, n: float) -> float: pass
     def __sub__(self, n: float) -> float: pass
     def __mul__(self, n: float) -> float: pass
-    def __div__(self, n: float) -> float: pass
+    def __truediv__(self, n: float) -> float: pass
 
 class bytes:
     def __init__(self, x: object) -> None: pass
@@ -82,15 +84,16 @@ class list(Generic[T], Iterable[T], Sized):
     def insert(self, i: int, x: T) -> None: pass
     def sort(self) -> None: pass
 
-class dict(Generic[T, S]):
-    def __getitem__(self, x: T) -> S: pass
-    def __setitem__(self, x: T, y: S) -> None: pass
-    def __delitem__(self, x: T) -> None: pass
-    def __contains__(self, x: T) -> bool: pass
-    def __iter__(self) -> Iterator[T]: pass
-    def update(self, x: Dict[T, S]) -> None: pass
-    def pop(self, x: int) -> T: pass
-    def keys(self) -> list[T]: pass
+class dict(Mapping[K, V]):
+    def __getitem__(self, key: K) -> V: pass
+    def __setitem__(self, k: K, v: V) -> None: pass
+    def __delitem__(self, k: K) -> None: pass
+    def __contains__(self, item: object) -> bool: pass
+    def __iter__(self) -> Iterator[K]: pass
+    def __len__(self) -> int: pass
+    def update(self, a: Mapping[K, V]) -> None: pass
+    def pop(self, x: int) -> K: pass
+    def keys(self) -> List[K]: pass
 
 class set(Generic[T]):
     def __init__(self, i: Optional[Iterable[T]] = None) -> None: pass
@@ -104,6 +107,21 @@ class set(Generic[T]):
 
 class slice: pass
 
+class property:
+    def __init__(self, fget: Optional[Callable[[Any], Any]] = ...,
+                 fset: Optional[Callable[[Any, Any], None]] = ...,
+                 fdel: Optional[Callable[[Any], None]] = ...,
+                 doc: Optional[str] = ...) -> None: ...
+    def getter(self, fget: Callable[[Any], Any]) -> property: ...
+    def setter(self, fset: Callable[[Any, Any], None]) -> property: ...
+    def deleter(self, fdel: Callable[[Any], None]) -> property: ...
+    def __get__(self, obj: Any, type: Optional[type] = ...) -> Any: ...
+    def __set__(self, obj: Any, value: Any) -> None: ...
+    def __delete__(self, obj: Any) -> None: ...
+    def fget(self) -> Any: ...
+    def fset(self, value: Any) -> None: ...
+    def fdel(self) -> None: ...
+
 class BaseException: pass
 
 class Exception(BaseException):
@@ -116,6 +134,10 @@ class LookupError(Exception): pass
 class KeyError(LookupError): pass
 
 class IndexError(LookupError): pass
+
+class RuntimeError(Exception): pass
+
+class NotImplementedError(RuntimeError): pass
 
 
 def id(o: object) -> int: pass
