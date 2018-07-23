@@ -995,11 +995,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def visit_while_stmt(self, s: WhileStmt) -> None:
         body, next, top, else_block = BasicBlock(), BasicBlock(), BasicBlock(), BasicBlock()
-
-        if s.else_body is not None:
-            normal_loop_exit = else_block
-        else:
-            normal_loop_exit = next
+        normal_loop_exit = else_block if s.else_body is not None else next
 
         self.push_loop_stack(top, next)
 
@@ -1012,14 +1008,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Add branch to the top at the end of the body.
         self.add(Goto(top))
 
+        self.pop_loop_stack()
+
         if s.else_body is not None:
             self.activate_block(else_block)
             self.accept(s.else_body)
-            self.add(Goto(next))
+            self.add_leave(next)
 
         self.activate_block(next)
-
-        self.pop_loop_stack()
 
     def visit_for_stmt(self, s: ForStmt) -> None:
         def body() -> None:
@@ -1044,10 +1040,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         else_block = BasicBlock()
 
         # Determine where we want to exit, if our condition check fails.
-        if else_insts is not None:
-            normal_loop_exit = else_block
-        else:
-            normal_loop_exit = exit_block
+        normal_loop_exit = else_block if else_insts is not None else exit_block
 
         if (isinstance(expr, CallExpr)
                 and isinstance(expr.callee, RefExpr)
@@ -1082,12 +1075,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
             # Go back to loop condition check.
             self.add(Goto(condition_block))
-
-            if else_insts is not None:
-                self.activate_block(else_block)
-                else_insts()
-                self.add(Goto(exit_block))
-            self.activate_block(exit_block)
 
             self.pop_loop_stack()
 
@@ -1125,15 +1112,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.add(Assign(index_reg, self.binary_op(index_reg, one_reg, '+', line)))
             self.add(Goto(condition_block))
 
-            if else_insts is not None:
-                self.activate_block(else_block)
-                else_insts()
-                self.add(Goto(exit_block))
-            self.activate_block(exit_block)
-
             self.pop_loop_stack()
 
         else:
+            error_check_block = BasicBlock()
+
             self.push_loop_stack(increment_block, exit_block)
 
             # Define registers to contain the expression, along with the iterator that will be used
@@ -1147,7 +1130,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # checks only for NULL (an exception does not necessarily have to be raised).
             self.goto_and_activate(increment_block)
             next_reg = self.add(PrimitiveOp([iter_reg], next_op, line))
-            self.add(Branch(next_reg, normal_loop_exit, body_block, Branch.IS_ERROR))
+            self.add(Branch(next_reg, error_check_block, body_block, Branch.IS_ERROR))
 
             # Create a new block for the body of the loop. Set the previous branch to go here if
             # the conditional evaluates to false. Assign the value obtained from __next__ to the
@@ -1158,19 +1141,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             body_insts()
             self.add(Goto(increment_block))
 
-            if else_insts is not None:
-                self.activate_block(else_block)
-                else_insts()
-                self.add(Goto(exit_block))
-
             # Create a new block for when the loop is finished. Set the branch to go here if the
             # conditional evaluates to true. If an exception was raised during the loop, then
             # err_reg wil be set to True. If no_err_occurred_op returns False, then the exception
             # will be propagated using the ERR_FALSE flag.
-            self.activate_block(exit_block)
+            self.activate_block(error_check_block)
             self.add(PrimitiveOp([], no_err_occurred_op, line))
+            self.add(Goto(normal_loop_exit))
 
             self.pop_loop_stack()
+
+        if else_insts is not None:
+            self.activate_block(else_block)
+            else_insts()
+            self.add_leave(exit_block)
+        self.activate_block(exit_block)
 
     def visit_break_stmt(self, node: BreakStmt) -> None:
         self.nonlocal_control[-1].gen_break(self)
