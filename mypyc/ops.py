@@ -1208,6 +1208,10 @@ class FuncDecl:
         self.class_name = class_name
         self.module_name = module_name
         self.sig = sig
+        if class_name is None:
+            self.bound_sig = None  # type: Optional[FuncSignature]
+        else:
+            self.bound_sig = FuncSignature(sig.args[1:], sig.ret_type)
 
     def cname(self, names: NameGenerator) -> str:
         name = self.name
@@ -1383,16 +1387,23 @@ class ClassIR:
                 return ir.attributes[name]
             if name in ir.property_types:
                 return ir.property_types[name]
-        assert False, '%r has no attribute %r' % (self.name, name)
+        raise KeyError('%r has no attribute %r' % (self.name, name))
 
     def method_decl(self, name: str) -> FuncDecl:
         for ir in self.mro:
             if name in ir.method_decls:
                 return ir.method_decls[name]
-        assert False, '%r has no method %r' % (self.name, name)
+        raise KeyError('%r has no attribute %r' % (self.name, name))
 
     def method_sig(self, name: str) -> FuncSignature:
         return self.method_decl(name).sig
+
+    def has_method(self, name: str) -> bool:
+        try:
+            self.method_decl(name)
+        except KeyError:
+            return False
+        return True
 
     def name_prefix(self, names: NameGenerator) -> str:
         return names.private_name(self.module_name, self.name)

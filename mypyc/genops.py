@@ -630,7 +630,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 for var, type in fake_vars]  # type: List[Value]
         self.ret_types[-1] = sig.ret_type
 
-        args = self.coerce_native_call_args(args, sig, line)
+        args = self.coerce_native_call_args(args, target.sig, line)
         retval = self.add(MethodCall(args[0], target.name, args[1:], line))
         retval = self.coerce(retval, sig.ret_type, line)
         self.add(Return(retval))
@@ -1554,8 +1554,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # If the base type is one of ours, do a MethodCall
         base_rtype = self.type_to_rtype(base_type)
         if isinstance(base_rtype, RInstance):
-            decl = base_rtype.class_ir.method_decl(name)
-            if decl is not None:
+            if base_rtype.class_ir.has_method(name):
+                decl = base_rtype.class_ir.method_decl(name)
                 if arg_kinds is None:
                     assert arg_names is None, "arg_kinds not present but arg_names is"
                     arg_kinds = [ARG_POS for _ in arg_values]
@@ -1564,10 +1564,12 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     assert arg_names is not None, "arg_kinds present but arg_names is not"
 
                 # Normalize keyword args to positionals.
+                assert decl.bound_sig
                 arg_values_with_nones = self.keyword_args_to_positional(
-                    arg_values, arg_kinds, arg_names, decl.sig)
-                arg_values = self.missing_args_to_error_values(arg_values_with_nones, decl.sig)
-                arg_values = self.coerce_native_call_args(arg_values, decl.sig, base.line)
+                    arg_values, arg_kinds, arg_names, decl.bound_sig)
+                arg_values = self.missing_args_to_error_values(arg_values_with_nones,
+                                                               decl.bound_sig)
+                arg_values = self.coerce_native_call_args(arg_values, decl.bound_sig, base.line)
 
                 return self.add(MethodCall(base, name, arg_values, line))
 
