@@ -2385,3 +2385,12 @@ g()
 [out]
 (((1, 2), 2), 1, 'hi', 'hi2')
 caught the exception
+
+[case forwardReference]
+class A:
+    b: 'B'
+class B: pass
+
+[file driver.py]
+from native import A, B
+A()
