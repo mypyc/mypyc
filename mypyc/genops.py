@@ -630,12 +630,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 for var, type in fake_vars]  # type: List[Value]
         self.ret_types[-1] = sig.ret_type
 
-        arg_types = [arg.type for arg in target.sig.args]
-        args = self.coerce_native_call_args(args, arg_types, line)
-        retval = self.add(MethodCall(args[0],
-                                     target.name,
-                                     args[1:],
-                                     line))
+        args = self.coerce_native_call_args(args, sig, line)
+        retval = self.add(MethodCall(args[0], target.name, args[1:], line))
         retval = self.coerce(retval, sig.ret_type, line)
         self.add(Return(retval))
 
@@ -1392,11 +1388,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def coerce_native_call_args(self,
                                 args: Sequence[Value],
-                                arg_types: Sequence[RType],
+                                sig: FuncSignature,
                                 line: int) -> List[Value]:
         coerced_arg_regs = []
-        for reg, arg_type in zip(args, arg_types):
-            coerced_arg_regs.append(self.coerce(reg, arg_type, line))
+        for reg, arg in zip(args, sig.args):
+            coerced_arg_regs.append(self.coerce(reg, arg.type, line))
         return coerced_arg_regs
 
     def visit_call_expr(self, expr: CallExpr) -> Value:
@@ -1448,28 +1444,22 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             if target:
                 return target
 
-        # Don't rely on the inferred callee type, since it may have type
-        # variable substitutions that aren't valid at runtime (due to type
-        # erasure). Instead pick the declared signature of the native function
-        # as the true signature.
-        signature = self.get_native_signature(callee)
-
         # Standard native call if signature and fullname are good and all arguments are positional
         # or named.
-        if (signature is not None
+        if (callee.node is not None
                 and callee.fullname is not None
+                and callee.node in self.mapper.func_to_decl
                 and all(kind in (ARG_POS, ARG_NAMED) for kind in expr.arg_kinds)):
+            decl = self.mapper.func_to_decl[callee.node]
+
             # Normalize keyword args to positionals.
             arg_values_with_nones = self.keyword_args_to_positional(
-                arg_values, expr.arg_kinds, expr.arg_names, signature)
+                arg_values, expr.arg_kinds, expr.arg_names, decl.sig)
             # Put in errors for missing args, potentially to be filled in with default args later.
-            arg_values = self.missing_args_to_error_values(arg_values_with_nones,
-                                                           signature.arg_types)
+            arg_values = self.missing_args_to_error_values(arg_values_with_nones, decl.sig)
 
-            arg_types = [self.type_to_rtype(arg_type) for arg_type in signature.arg_types]
-            arg_values = self.coerce_native_call_args(arg_values, arg_types, expr.line)
-            ret_type = self.type_to_rtype(signature.ret_type)
-            return self.add(Call(ret_type, callee.fullname, arg_values, expr.line))
+            arg_values = self.coerce_native_call_args(arg_values, decl.sig, expr.line)
+            return self.add(Call(decl.sig.ret_type, callee.fullname, arg_values, expr.line))
 
         # Fall back to a Python call
         function = self.accept(callee)
@@ -1478,16 +1468,16 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def missing_args_to_error_values(self,
                                      args: List[Optional[Value]],
-                                     types: List[Type]) -> List[Value]:
+                                     sig: FuncSignature) -> List[Value]:
         """Generate LoadErrorValues for missing arguments.
 
         These get resolved to default values if they exist for the function in question. See
         gen_arg_default.
         """
         ret_args = []  # type: List[Value]
-        for reg, arg_type in zip(args, types):
+        for reg, arg in zip(args, sig.args):
             if reg is None:
-                reg = LoadErrorValue(self.type_to_rtype(arg_type))
+                reg = LoadErrorValue(arg.type)
                 reg.is_borrowed = True
                 self.add(reg)
             ret_args.append(reg)
@@ -1568,7 +1558,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # inferred signature can have type variable substitutions which
             # aren't valid at runtime due to type erasure.
             signature = self.get_native_method_signature(base_type, name)
-            if signature and base_rtype.class_ir.method_decl(name) is not None:
+            decl = base_rtype.class_ir.method_decl(name)
+            if signature and decl is not None:
                 if arg_kinds is None:
                     assert arg_names is None, "arg_kinds not present but arg_names is"
                     arg_kinds = [ARG_POS for _ in arg_values]
@@ -1578,12 +1569,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
                 # Normalize keyword args to positionals.
                 arg_values_with_nones = self.keyword_args_to_positional(
-                    arg_values, arg_kinds, arg_names, signature)
-                arg_values = self.missing_args_to_error_values(arg_values_with_nones,
-                                                               signature.arg_types)
-
-                arg_types = [self.type_to_rtype(arg_type) for arg_type in signature.arg_types]
-                arg_values = self.coerce_native_call_args(arg_values, arg_types, base.line)
+                    arg_values, arg_kinds, arg_names, decl.sig)
+                arg_values = self.missing_args_to_error_values(arg_values_with_nones, decl.sig)
+                arg_values = self.coerce_native_call_args(arg_values, decl.sig, base.line)
 
                 return self.add(MethodCall(base, name, arg_values, line))
 
@@ -2837,12 +2825,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                    args: List[Value],
                                    arg_kinds: List[int],
                                    arg_names: List[Optional[str]],
-                                   signature: CallableType) -> List[Optional[Value]]:
+                                   sig: FuncSignature) -> List[Optional[Value]]:
         # NOTE: This doesn't support default argument values, *args or **kwargs.
+        sig_arg_kinds = [arg.kind for arg in sig.args]
+        sig_arg_names = [arg.name for arg in sig.args]
         formal_to_actual = map_actuals_to_formals(arg_kinds,
                                                   arg_names,
-                                                  signature.arg_kinds,
-                                                  signature.arg_names,
+                                                  sig_arg_kinds,
+                                                  sig_arg_names,
                                                   lambda n: AnyType(TypeOfAny.special_form))
         assert all(len(lst) <= 1 for lst in formal_to_actual)
         return [None if len(lst) == 0 else args[lst[0]] for lst in formal_to_actual]
