@@ -8,7 +8,7 @@ from mypy.test.helpers import assert_string_arrays_equal
 from mypyc.ops import (
     Environment, BasicBlock, FuncIR, RuntimeArg, RType, Goto, Return, LoadInt, Assign,
     IncRef, DecRef, Branch, Call, Unbox, Box, RTuple, TupleGet, GetAttr, PrimitiveOp,
-    RegisterOp,
+    RegisterOp, FuncDecl,
     ClassIR, RInstance, SetAttr, Op, Value, int_rprimitive, bool_rprimitive,
     list_rprimitive, dict_rprimitive, object_rprimitive, FuncSignature,
 )
@@ -273,7 +273,7 @@ class TestGenerateFunction(unittest.TestCase):
 
     def test_simple(self) -> None:
         self.block.ops.append(Return(self.reg))
-        fn = FuncIR('myfunc', None, 'mod', FuncSignature([self.arg], int_rprimitive),
+        fn = FuncIR(FuncDecl('myfunc', None, 'mod', FuncSignature([self.arg], int_rprimitive)),
                     [self.block], self.env)
         emitter = Emitter(EmitterContext(['mod']))
         generate_native_function(fn, emitter, 'prog.py', 'prog')
@@ -292,7 +292,7 @@ class TestGenerateFunction(unittest.TestCase):
         op = LoadInt(5)
         self.block.ops.append(op)
         self.env.add_op(op)
-        fn = FuncIR('myfunc', None, 'mod', FuncSignature([self.arg], list_rprimitive),
+        fn = FuncIR(FuncDecl('myfunc', None, 'mod', FuncSignature([self.arg], list_rprimitive)),
                     [self.block], self.env)
         emitter = Emitter(EmitterContext(['mod']))
         generate_native_function(fn, emitter, 'prog.py', 'prog')

@@ -1192,36 +1192,57 @@ class FuncSignature:
         return 'FuncSignature(args=%r, ret=%r)' % (self.args, self.ret_type)
 
 
-class FuncIR:
-    """Intermediate representation of a function with contextual information."""
-
+class FuncDecl:
     def __init__(self,
                  name: str,
                  class_name: Optional[str],
                  module_name: str,
-                 sig: FuncSignature,
-                 blocks: List[BasicBlock],
-                 env: Environment) -> None:
+                 sig: FuncSignature) -> None:
         self.name = name
         self.class_name = class_name
         self.module_name = module_name
-        self.blocks = blocks
-        self.env = env
         self.sig = sig
-
-    @property
-    def args(self) -> Sequence[RuntimeArg]:
-        return self.sig.args
-
-    @property
-    def ret_type(self) -> RType:
-        return self.sig.ret_type
 
     def cname(self, names: NameGenerator) -> str:
         name = self.name
         if self.class_name:
             name += '_' + self.class_name
         return names.private_name(self.module_name, name)
+
+
+class FuncIR:
+    """Intermediate representation of a function with contextual information."""
+
+    def __init__(self,
+                 decl: FuncDecl,
+                 blocks: List[BasicBlock],
+                 env: Environment) -> None:
+        self.decl = decl
+        self.blocks = blocks
+        self.env = env
+
+    @property
+    def args(self) -> Sequence[RuntimeArg]:
+        return self.decl.sig.args
+
+    @property
+    def ret_type(self) -> RType:
+        return self.decl.sig.ret_type
+
+    @property
+    def class_name(self) -> Optional[str]:
+        return self.decl.class_name
+
+    @property
+    def sig(self) -> FuncSignature:
+        return self.decl.sig
+
+    @property
+    def name(self) -> str:
+        return self.decl.name
+
+    def cname(self, names: NameGenerator) -> str:
+        return self.decl.cname(names)
 
     def __str__(self) -> str:
         return '\n'.join(format_func(self))
@@ -1304,6 +1325,7 @@ class ClassIR:
         self.name = name
         self.module_name = module_name
         self.is_trait = is_trait
+        self.ctor = None  # type: Optional[FuncDecl]
         # Properties are accessed like attributes, but have behaivor like method calls.
         # They don't belong in the methods dictionary, since we don't want to expose them to
         # Python's method API. But we want to put them into our own vtable as methods, so that

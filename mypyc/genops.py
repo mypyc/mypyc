@@ -59,6 +59,7 @@ from mypyc.ops import (
     VTableAttr, VTableMethod, VTableEntries,
     NAMESPACE_TYPE, RaiseStandardError, LoadErrorValue,
     NO_TRACEBACK_LINE_NO,
+    FuncDecl,
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import (
@@ -103,8 +104,14 @@ def build_ir(modules: List[MypyFile],
         mapper.type_to_ir[cdef.info] = class_ir
 
     # Populate structural information in class IR.
-    for _, cdef in classes:
-        prepare_class_def(cdef, mapper)
+    for module_name, cdef in classes:
+        prepare_class_def(module_name, cdef, mapper)
+
+    # Collect all the functions also
+    for module in modules:
+        for node in module.defs:
+            if isinstance(node, FuncDef):  # TODO: what else??
+                prepare_func_def(module.fullname(), None, node, mapper)
 
     # Generate IR for all modules.
     module_names = [mod.fullname() for mod in modules]
@@ -222,6 +229,7 @@ class Mapper:
 
     def __init__(self) -> None:
         self.type_to_ir = {}  # type: Dict[TypeInfo, ClassIR]
+        self.func_to_decl = {}  # type: Dict[SymbolNode, FuncDecl]
         # Maps integer, float, and unicode literals to a static name
         self.literals = {}  # type: LiteralsMap
 
@@ -306,7 +314,13 @@ class Mapper:
         return self.literals[key]
 
 
-def prepare_class_def(cdef: ClassDef, mapper: Mapper) -> None:
+def prepare_func_def(module_name: str, class_name: Optional[str],
+                     fdef: FuncDef, mapper: Mapper) -> None:
+    decl = FuncDecl(fdef.name(), class_name, module_name, mapper.fdef_to_sig(fdef))
+    mapper.func_to_decl[fdef] = decl
+
+
+def prepare_class_def(module_name: str, cdef: ClassDef, mapper: Mapper) -> None:
     ir = mapper.type_to_ir[cdef.info]
     info = cdef.info
     for name, node in info.names.items():
@@ -314,6 +328,7 @@ def prepare_class_def(cdef: ClassDef, mapper: Mapper) -> None:
             assert node.node.type, "Class member missing type"
             ir.attributes[name] = mapper.type_to_rtype(node.node.type)
         elif isinstance(node.node, FuncDef):
+            prepare_func_def(module_name, cdef.name, node.node, mapper)
             ir.method_types[name] = mapper.fdef_to_sig(node.node)
         elif isinstance(node.node, Decorator):
             # meaningful decorators (@property, @abstractmethod) are removed from this list by mypy
@@ -327,6 +342,15 @@ def prepare_class_def(cdef: ClassDef, mapper: Mapper) -> None:
                 ir.property_types[name] = sig.ret_type
             else:
                 ir.method_types[name] = mapper.fdef_to_sig(node.node.func)
+            prepare_func_def(module_name, cdef.name, node.node.func, mapper)
+
+    # Set up a constructor decl
+    init_node = cdef.info['__init__'].node
+    if not ir.is_trait and isinstance(init_node, FuncDef):
+        init_sig = mapper.fdef_to_sig(init_node)
+        ctor_sig = FuncSignature(init_sig.args[1:], RInstance(ir))
+        ir.ctor = FuncDecl(cdef.name, None, module_name, ctor_sig)
+        mapper.func_to_decl[cdef.info] = ir.ctor
 
     # Set up the parent class
     assert all(base.type in mapper.type_to_ir for base in info.bases
@@ -504,7 +528,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Generate special function representing module top level.
         blocks, env, ret_type, _ = self.leave()
         sig = FuncSignature([], none_rprimitive)
-        func_ir = FuncIR(TOP_LEVEL_NAME, None, self.module_name, sig, blocks, env)
+        func_ir = FuncIR(FuncDecl(TOP_LEVEL_NAME, None, self.module_name, sig), blocks, env)
         self.functions.append(func_ir)
 
     def visit_class_def(self, cdef: ClassDef) -> None:
@@ -620,9 +644,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.add(Return(retval))
 
         blocks, env, ret_type, _ = self.leave()
-        return FuncIR(target.name + '__' + base.name + '_glue',
-                      cls.name, self.module_name,
-                      FuncSignature(rt_args, ret_type), blocks, env)
+        return FuncIR(
+            FuncDecl(target.name + '__' + base.name + '_glue',
+                     cls.name, self.module_name,
+                     FuncSignature(rt_args, ret_type)),
+            blocks, env)
 
     def gen_glue_property(self, sig: FuncSignature, target: FuncIR, cls: ClassIR, base: ClassIR,
                           line: int) -> FuncIR:
@@ -641,9 +667,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.add(Return(retbox))
 
         blocks, env, return_type, _ = self.leave()
-        return FuncIR(target.name + '__' + base.name + '_glue',
-                      cls.name, self.module_name,
-                      FuncSignature([rt_arg], return_type), blocks, env)
+        return FuncIR(
+            FuncDecl(target.name + '__' + base.name + '_glue',
+                     cls.name, self.module_name, FuncSignature([rt_arg], return_type)),
+            blocks, env)
 
     def gen_arg_default(self) -> None:
         """Generate blocks for arguments that have default values.
@@ -726,7 +753,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             func_ir = self.add_call_to_callable_class(blocks, sig, env, fn_info)
             func_reg = self.instantiate_callable_class(fn_info)  # type: Optional[Value]
         else:
-            func_ir = FuncIR(fn_info.name, class_name, self.module_name, sig, blocks, env)
+            assert isinstance(fitem, FuncDef)
+            func_ir = FuncIR(self.mapper.func_to_decl[fitem], blocks, env)
             func_reg = None
 
         return (func_ir, func_reg)
@@ -2665,7 +2693,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         function becomes a class method.
         """
         sig = FuncSignature((RuntimeArg('self', object_rprimitive),) + sig.args, sig.ret_type)
-        call = FuncIR('__call__', fn_info.callable_class.name, self.module_name, sig, blocks, env)
+        call = FuncIR(FuncDecl('__call__', fn_info.callable_class.name, self.module_name, sig),
+                      blocks, env)
         fn_info.callable_class.methods['__call__'] = call
         return call
 
