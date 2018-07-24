@@ -632,8 +632,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         arg_types = [arg.type for arg in target.sig.args]
         args = self.coerce_native_call_args(args, arg_types, line)
-        retval = self.add(MethodCall(target.ret_type,
-                                     args[0],
+        retval = self.add(MethodCall(args[0],
                                      target.name,
                                      args[1:],
                                      line))
@@ -1569,7 +1568,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # inferred signature can have type variable substitutions which
             # aren't valid at runtime due to type erasure.
             signature = self.get_native_method_signature(base_type, name)
-            if signature:
+            if signature and base_rtype.class_ir.method_decl(name) is not None:
                 if arg_kinds is None:
                     assert arg_names is None, "arg_kinds not present but arg_names is"
                     arg_kinds = [ARG_POS for _ in arg_values]
@@ -1585,9 +1584,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
                 arg_types = [self.type_to_rtype(arg_type) for arg_type in signature.arg_types]
                 arg_values = self.coerce_native_call_args(arg_values, arg_types, base.line)
-                target_type = self.type_to_rtype(signature.ret_type)
 
-                return self.add(MethodCall(target_type, base, name, arg_values, line))
+                return self.add(MethodCall(base, name, arg_values, line))
 
         # Try to do a special-cased method call
         target = self.translate_special_method_call(base, name, arg_values, return_rtype, line)

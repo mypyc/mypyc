@@ -754,7 +754,6 @@ class MethodCall(RegisterOp):
 
     # TODO: extract the ret type from the receiver
     def __init__(self,
-                 ret_type: RType,
                  obj: Value,
                  method: str,
                  args: List[Value],
@@ -765,7 +764,10 @@ class MethodCall(RegisterOp):
         self.args = args
         assert isinstance(obj.type, RInstance), "Methods can only be called on instances"
         self.receiver_type = obj.type
-        self.type = ret_type
+        method_ir = self.receiver_type.class_ir.method_sig(method)
+        assert method_ir is not None, "{} doesn't have method {}".format(
+            self.receiver_type.name, method)
+        self.type = method_ir.ret_type
 
     def to_str(self, env: Environment) -> str:
         args = ', '.join(env.format('%r', arg) for arg in self.args)
