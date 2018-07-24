@@ -1554,12 +1554,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # If the base type is one of ours, do a MethodCall
         base_rtype = self.type_to_rtype(base_type)
         if isinstance(base_rtype, RInstance):
-            # Look up the declared signature of the method, since the
-            # inferred signature can have type variable substitutions which
-            # aren't valid at runtime due to type erasure.
-            signature = self.get_native_method_signature(base_type, name)
             decl = base_rtype.class_ir.method_decl(name)
-            if signature and decl is not None:
+            if decl is not None:
                 if arg_kinds is None:
                     assert arg_names is None, "arg_kinds not present but arg_names is"
                     arg_kinds = [ARG_POS for _ in arg_values]
@@ -1582,14 +1578,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         # Fall back to Python method call
         return self.py_method_call(base, name, arg_values, base.line, arg_kinds, arg_names)
-
-    def get_native_method_signature(self, typ: Type, name: str) -> Optional[CallableType]:
-        if isinstance(typ, Instance):
-            method = typ.type.get(name)
-            if method and isinstance(method.node, FuncDef) and isinstance(method.node.type,
-                                                                          CallableType):
-                return bind_self(method.node.type)
-        return None
 
     def translate_cast_expr(self, expr: CastExpr) -> Value:
         src = self.accept(expr.expr)
