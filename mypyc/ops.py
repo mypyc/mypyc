@@ -18,7 +18,7 @@ from typing import (
 )
 from collections import OrderedDict
 
-from mypy.nodes import Block, SymbolNode, Var, FuncDef
+from mypy.nodes import Block, SymbolNode, Var, FuncDef, ARG_POS, ARG_OPT, ARG_NAMED_OPT
 
 from mypyc.namegen import NameGenerator
 from mypyc.common import TOP_LEVEL_NAME
@@ -1175,10 +1175,14 @@ class RaiseStandardError(RegisterOp):
 
 
 class RuntimeArg:
-    def __init__(self, name: str, typ: RType, optional: bool = False) -> None:
+    def __init__(self, name: str, typ: RType, kind: int = ARG_POS) -> None:
         self.name = name
         self.type = typ
-        self.optional = optional
+        self.kind = kind
+
+    @property
+    def optional(self) -> bool:
+        return self.kind == ARG_OPT or self.kind == ARG_NAMED_OPT
 
     def __repr__(self) -> str:
         return 'RuntimeArg(name=%s, type=%s, optional=%r)' % (self.name, self.type, self.optional)

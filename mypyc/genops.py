@@ -292,7 +292,7 @@ class Mapper:
     def fdef_to_sig(self, fdef: FuncDef) -> FuncSignature:
         assert isinstance(fdef.type, CallableType)
         args = [RuntimeArg(arg.variable.name(), self.type_to_rtype(fdef.type.arg_types[i]),
-                arg.initializer is not None)
+                arg.kind)
                 for i, arg in enumerate(fdef.arguments)]
         ret = self.type_to_rtype(fdef.type.ret_type)
         return FuncSignature(args, ret)
