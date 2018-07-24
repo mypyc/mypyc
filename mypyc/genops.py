@@ -1242,14 +1242,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.add(TupleGet(base, expr.index.value, expr.line))
 
         index_reg = self.accept(expr.index)
-        # Index exprs can be type applications, in which case the type
-        # is missing from the table. Handle that by getting an Any.
-        return self.gen_method_call(self.types.get(expr.base, AnyType(TypeOfAny.special_form)),
-                                    base,
-                                    '__getitem__',
-                                    [index_reg],
-                                    self.node_type(expr),
-                                    expr.line)
+        return self.gen_method_call(
+            base, '__getitem__', [index_reg], self.node_type(expr), expr.line)
 
     def visit_int_expr(self, expr: IntExpr) -> Value:
         if expr.value > MAX_SHORT_INT:
@@ -1500,8 +1494,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             args = [self.accept(arg) for arg in expr.args]
             assert callee.expr in self.types
             obj = self.accept(callee.expr)
-            return self.gen_method_call(self.types[callee.expr],
-                                        obj,
+            return self.gen_method_call(obj,
                                         callee.name,
                                         args,
                                         self.node_type(expr),
@@ -1510,7 +1503,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                         expr.arg_names)
 
     def gen_method_call(self,
-                        base_type: Type,
                         base: Value,
                         name: str,
                         arg_values: List[Value],
@@ -1525,10 +1517,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.py_method_call(base, name, arg_values, base.line, arg_kinds, arg_names)
 
         # If the base type is one of ours, do a MethodCall
-        base_rtype = self.type_to_rtype(base_type)
-        if isinstance(base_rtype, RInstance):
-            if base_rtype.class_ir.has_method(name):
-                decl = base_rtype.class_ir.method_decl(name)
+        if isinstance(base.type, RInstance):
+            if base.type.class_ir.has_method(name):
+                decl = base.type.class_ir.method_decl(name)
                 if arg_kinds is None:
                     assert arg_names is None, "arg_kinds not present but arg_names is"
                     arg_kinds = [ARG_POS for _ in arg_values]
