@@ -1325,7 +1325,11 @@ class ClassIR:
         self.name = name
         self.module_name = module_name
         self.is_trait = is_trait
-        self.ctor = None  # type: Optional[FuncDecl]
+        if is_trait:
+            self.ctor = None  # type: Optional[FuncDecl]
+        else:
+            # Default empty ctor
+            self.ctor = FuncDecl(name, None, module_name, FuncSignature([], RInstance(self)))
         # Properties are accessed like attributes, but have behaivor like method calls.
         # They don't belong in the methods dictionary, since we don't want to expose them to
         # Python's method API. But we want to put them into our own vtable as methods, so that
@@ -1337,7 +1341,7 @@ class ClassIR:
         self.attributes = OrderedDict()  # type: OrderedDict[str, RType]
         # We populate method_types with the signatures of every method before
         # we generate methods, and we rely on this information being present.
-        self.method_types = OrderedDict()  # type: OrderedDict[str, FuncSignature]
+        self.method_decls = OrderedDict()  # type: OrderedDict[str, FuncDecl]
         self.methods = OrderedDict()  # type: OrderedDict[str, FuncIR]
         # Glue methods for boxing/unboxing when a class changes the type
         # while overriding a method. Maps from (parent class overrided, method)
@@ -1375,11 +1379,14 @@ class ClassIR:
                 return ir.property_types[name]
         assert False, '%r has no attribute %r' % (self.name, name)
 
-    def method_sig(self, name: str) -> FuncSignature:
+    def method_decl(self, name: str) -> FuncDecl:
         for ir in self.mro:
-            if name in ir.method_types:
-                return ir.method_types[name]
+            if name in ir.method_decls:
+                return ir.method_decls[name]
         assert False, '%r has no method %r' % (self.name, name)
+
+    def method_sig(self, name: str) -> FuncSignature:
+        return self.method_decl(name).sig
 
     def name_prefix(self, names: NameGenerator) -> str:
         return names.private_name(self.module_name, self.name)

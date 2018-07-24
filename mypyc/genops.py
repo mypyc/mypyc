@@ -315,9 +315,10 @@ class Mapper:
 
 
 def prepare_func_def(module_name: str, class_name: Optional[str],
-                     fdef: FuncDef, mapper: Mapper) -> None:
+                     fdef: FuncDef, mapper: Mapper) -> FuncDecl:
     decl = FuncDecl(fdef.name(), class_name, module_name, mapper.fdef_to_sig(fdef))
     mapper.func_to_decl[fdef] = decl
+    return decl
 
 
 def prepare_class_def(module_name: str, cdef: ClassDef, mapper: Mapper) -> None:
@@ -328,21 +329,17 @@ def prepare_class_def(module_name: str, cdef: ClassDef, mapper: Mapper) -> None:
             assert node.node.type, "Class member missing type"
             ir.attributes[name] = mapper.type_to_rtype(node.node.type)
         elif isinstance(node.node, FuncDef):
-            prepare_func_def(module_name, cdef.name, node.node, mapper)
-            ir.method_types[name] = mapper.fdef_to_sig(node.node)
+            ir.method_decls[name] = prepare_func_def(module_name, cdef.name, node.node, mapper)
         elif isinstance(node.node, Decorator):
             # meaningful decorators (@property, @abstractmethod) are removed from this list by mypy
             assert node.node.decorators == []
             # TODO: do something about abstract methods here. Currently, they are handled just like
             # normal methods.
+            decl = prepare_func_def(module_name, cdef.name, node.node.func, mapper)
+            ir.method_decls[name] = decl
             if node.node.func.is_property:
                 assert node.node.func.type
-                sig = mapper.fdef_to_sig(node.node.func)
-                ir.method_types[name] = sig
-                ir.property_types[name] = sig.ret_type
-            else:
-                ir.method_types[name] = mapper.fdef_to_sig(node.node.func)
-            prepare_func_def(module_name, cdef.name, node.node.func, mapper)
+                ir.property_types[name] = decl.sig.ret_type
 
     # Set up a constructor decl
     init_node = cdef.info['__init__'].node
@@ -556,15 +553,15 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # If this overrides a parent class method with a different type, we need
             # to generate a glue method to mediate between them.
             for cls in class_ir.mro[1:]:
-                if (name in cls.method_types and name != '__init__'
-                        and not is_same_method_signature(class_ir.method_types[name],
-                                                         cls.method_types[name])):
+                if (name in cls.method_decls and name != '__init__'
+                        and not is_same_method_signature(class_ir.method_decls[name].sig,
+                                                         cls.method_decls[name].sig)):
                     if fdef.is_property:
-                        f = self.gen_glue_property(cls.method_types[name], func_ir, class_ir, cls,
-                                                   fdef.line)
+                        f = self.gen_glue_property(cls.method_decls[name].sig, func_ir, class_ir,
+                                                   cls, fdef.line)
                     else:
-                        f = self.gen_glue_method(cls.method_types[name], func_ir, class_ir, cls,
-                                                 fdef.line)
+                        f = self.gen_glue_method(cls.method_decls[name].sig, func_ir, class_ir,
+                                                 cls, fdef.line)
                     class_ir.glue_methods[(cls, name)] = f
                     self.functions.append(f)
 
