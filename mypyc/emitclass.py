@@ -148,7 +148,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
                     base_arg=base_arg,
                     ))
     emitter.emit_line()
-    if cl.ctor:
+    if not cl.is_trait:
         generate_setup_for_class(cl, setup_name, vtable_name, emitter)
         emitter.emit_line()
         generate_constructor_for_class(cl, cl.ctor, init_fn, setup_name, vtable_name, emitter)

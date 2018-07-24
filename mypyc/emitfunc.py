@@ -239,8 +239,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
     def visit_call(self, op: Call) -> None:
         dest = self.get_dest_assign(op)
         args = ', '.join(self.reg(arg) for arg in op.args)
-        module_name, name = op.fn.rsplit('.', 1)
-        cname = self.names.private_name(module_name, name)
+        cname = op.fn.cname(self.names)
         self.emit_line('%s%s%s(%s);' % (dest, NATIVE_PREFIX, cname, args))
 
     def visit_method_call(self, op: MethodCall) -> None:

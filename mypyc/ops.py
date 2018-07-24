@@ -725,16 +725,16 @@ class Call(RegisterOp):
     error_kind = ERR_MAGIC
 
     # TODO: take a FuncIR and extract the ret type
-    def __init__(self, ret_type: RType, fn: str, args: Sequence[Value], line: int) -> None:
+    def __init__(self, fn: 'FuncDecl', args: Sequence[Value], line: int) -> None:
         super().__init__(line)
         self.fn = fn
         self.args = list(args)
-        self.type = ret_type
+        self.type = fn.sig.ret_type
 
     def to_str(self, env: Environment) -> str:
         args = ', '.join(env.format('%r', arg) for arg in self.args)
         # TODO: Display long name?
-        short_name = self.fn.rpartition('.')[2]
+        short_name = self.fn.name
         s = '%s(%s)' % (short_name, args)
         if not self.is_void:
             s = env.format('%r = ', self) + s
@@ -1335,11 +1335,8 @@ class ClassIR:
         self.name = name
         self.module_name = module_name
         self.is_trait = is_trait
-        if is_trait:
-            self.ctor = None  # type: Optional[FuncDecl]
-        else:
-            # Default empty ctor
-            self.ctor = FuncDecl(name, None, module_name, FuncSignature([], RInstance(self)))
+        # Default empty ctor
+        self.ctor = FuncDecl(name, None, module_name, FuncSignature([], RInstance(self)))
         # Properties are accessed like attributes, but have behaivor like method calls.
         # They don't belong in the methods dictionary, since we don't want to expose them to
         # Python's method API. But we want to put them into our own vtable as methods, so that

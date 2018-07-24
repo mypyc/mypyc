@@ -1458,7 +1458,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             arg_values = self.missing_args_to_error_values(arg_values_with_nones, decl.sig)
 
             arg_values = self.coerce_native_call_args(arg_values, decl.sig, expr.line)
-            return self.add(Call(decl.sig.ret_type, callee.fullname, arg_values, expr.line))
+            return self.add(Call(decl, arg_values, expr.line))
 
         # Fall back to a Python call
         function = self.accept(callee)
@@ -2648,8 +2648,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         """Assigns a callable class to a register named after the given function definition."""
         fitem = fn_info.fitem
 
-        fullname = '{}.{}'.format(self.module_name, fn_info.callable_class.name)
-        func_reg = self.add(Call(RInstance(fn_info.callable_class), fullname, [], fitem.line))
+        func_reg = self.add(Call(fn_info.callable_class.ctor, [], fitem.line))
 
         # Set the callable class' environment attribute to point at the environment class
         # defined in the callable class' immediate outer scope.
@@ -2692,8 +2691,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def instantiate_env_class(self) -> Value:
         """Assigns an environment class to a register named after the given function definition."""
-        fullname = '{}.{}'.format(self.module_name, self.fn_info.env_class.name)
-        self.fn_info.env_reg = self.add(Call(RInstance(self.fn_info.env_class), fullname, [],
+        self.fn_info.env_reg = self.add(Call(self.fn_info.env_class.ctor, [],
                                              self.fn_info.fitem.line))
 
         if self.fn_info.is_nested:
