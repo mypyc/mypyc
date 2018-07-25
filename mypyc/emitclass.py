@@ -133,8 +133,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
             {init_name},               /* tp_init */
             0,                         /* tp_alloc */
             {new_name},                /* tp_new */
-        }};
-        static PyTypeObject *{type_struct};\
+        }};\
         """).format(type_struct=emitter.type_struct_name(cl),
                     struct_name=cl.struct_name(emitter.names),
                     name=name,
