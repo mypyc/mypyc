@@ -82,6 +82,7 @@ from mypyc.ops_exc import (
     error_catch_op, restore_exc_info_op, exc_matches_op, get_exc_value_op,
     get_exc_info_op, keep_propagating_op,
 )
+from mypyc.rt_subtype import is_runtime_subtype
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
 from mypyc.crash import catch_errors
@@ -1780,7 +1781,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     matching = desc
         if matching:
             target = self.primitive_op(matching, args, line)
-            if result_type and not is_same_type(target.type, result_type):
+            if result_type and not is_runtime_subtype(target.type, result_type):
                 if is_none_rprimitive(result_type):
                     # Special case None return. The actual result may actually be a bool
                     # and so we can't just coerce it.
@@ -2509,7 +2510,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return go(0, self.accept(e.operands[0]))
 
     def add_bool_branch(self, value: Value, true: BasicBlock, false: BasicBlock) -> None:
-        if is_same_type(value.type, int_rprimitive):
+        if is_runtime_subtype(value.type, int_rprimitive):
             zero = self.add(LoadInt(0))
             value = self.binary_op(value, zero, '!=', value.line)
         elif is_same_type(value.type, list_rprimitive):
@@ -3937,7 +3938,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         if src.type.is_unboxed and not target_type.is_unboxed:
             return self.box(src)
         if ((src.type.is_unboxed and target_type.is_unboxed)
-                and not is_same_type(src.type, target_type)):
+                and not is_runtime_subtype(src.type, target_type)):
             # To go from one unboxed type to another, we go through a boxed
             # in-between value, for simplicity.
             tmp = self.box(src)

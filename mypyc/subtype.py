@@ -3,6 +3,7 @@
 from mypyc.ops import (
     RType, RInstance, RPrimitive, RTuple, RVoid, RTypeVisitor, RUnion,
     is_bool_rprimitive, is_int_rprimitive, is_tuple_rprimitive, none_rprimitive,
+    is_unsafe_int_rprimitive,
     is_object_rprimitive
 )
 
@@ -42,6 +43,8 @@ class SubtypeVisitor(RTypeVisitor[bool]):
 
     def visit_rprimitive(self, left: RPrimitive) -> bool:
         if is_bool_rprimitive(left) and is_int_rprimitive(self.right):
+            return True
+        if is_unsafe_int_rprimitive(left) and is_int_rprimitive(self.right):
             return True
         return isinstance(self.right, RPrimitive) and left.name == self.right.name
 

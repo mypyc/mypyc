@@ -111,6 +111,9 @@ object_rprimitive = RPrimitive('builtins.object', is_unboxed=False, is_refcounte
 
 int_rprimitive = RPrimitive('builtins.int', is_unboxed=True, is_refcounted=True, ctype='CPyTagged')
 
+unsafe_int_rprimitive = RPrimitive('builtins._int', is_unboxed=True, is_refcounted=False,
+                                   ctype='CPyTagged')
+
 float_rprimitive = RPrimitive('builtins.float', is_unboxed=False, is_refcounted=True)
 
 bool_rprimitive = RPrimitive('builtins.bool', is_unboxed=True, is_refcounted=False, ctype='char')
@@ -131,7 +134,11 @@ tuple_rprimitive = RPrimitive('builtins.tuple', is_unboxed=False, is_refcounted=
 
 
 def is_int_rprimitive(rtype: RType) -> bool:
-    return isinstance(rtype, RPrimitive) and rtype.name == 'builtins.int'
+    return rtype is int_rprimitive
+
+
+def is_unsafe_int_rprimitive(rtype: RType) -> bool:
+    return rtype is unsafe_int_rprimitive
 
 
 def is_float_rprimitive(rtype: RType) -> bool:
