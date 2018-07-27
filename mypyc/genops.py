@@ -574,7 +574,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         func_ir, _ = self.gen_func_item(fdef, fdef.name(), class_ir.method_sig(fdef.name()),
                                         cdef.name)
         self.functions.append(func_ir)
-
         if fdef.is_property:
             class_ir.properties[name] = func_ir
         else:
@@ -607,7 +606,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 # Variable declaration with no body
                 if isinstance(stmt.rvalue, TempNode):
                     continue
-                assert False, "Class variables not supported yet"
+                assert len(stmt.lvalues) == 1
+                lvalue = stmt.lvalues[0]
+                assert isinstance(lvalue, NameExpr)
+
+                typ = self.load_native_type_object(cdef.fullname)
+                value = self.accept(stmt.rvalue)
+                self.primitive_op(
+                    py_setattr_op, [typ, self.load_static_unicode(lvalue.name), value], stmt.line)
             elif isinstance(stmt, ExpressionStmt) and isinstance(stmt.expr, StrExpr):
                 # Docstring. Ignore
                 pass
@@ -892,8 +898,22 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             retval = self.add(PrimitiveOp([], none_op, line=-1))
         self.nonlocal_control[-1].gen_return(self, retval)
 
+    def disallow_class_assignments(self, lvalues: List[Lvalue]) -> None:
+        # Some best-effort attempts to disallow assigning to class
+        # variables that aren't marked ClassVar, since we blatantly
+        # miscompile the interaction between instance and class
+        # variables.
+        for lvalue in lvalues:
+            if (isinstance(lvalue, MemberExpr)
+                    and isinstance(lvalue.expr, RefExpr)
+                    and isinstance(lvalue.expr.node, TypeInfo)):
+                var = lvalue.expr.node[lvalue.name].node
+                assert not isinstance(var, Var) or var.is_classvar, (
+                    "mypyc only supports assignment to classvars defined as ClassVar")
+
     def visit_assignment_stmt(self, stmt: AssignmentStmt) -> None:
         assert len(stmt.lvalues) >= 1
+        self.disallow_class_assignments(stmt.lvalues)
         if isinstance(stmt.rvalue, CallExpr) and isinstance(stmt.rvalue.analyzed, TypeVarExpr):
             # Just ignore type variable declarations -- they are a compile-time only thing.
             # TODO: It would be nice to actually construct TypeVar objects to match Python
@@ -914,6 +934,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.assign_to_target(target, rvalue_reg, line)
 
     def visit_operator_assignment_stmt(self, stmt: OperatorAssignmentStmt) -> None:
+        self.disallow_class_assignments([stmt.lvalue])
         target = self.get_assignment_target(stmt.lvalue)
         rreg = self.accept(stmt.rvalue)
         res = self.read_from_target(target, stmt.line)
@@ -1498,13 +1519,23 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         if isinstance(callee, MemberExpr):
             return self.translate_method_call(expr, callee)
+        elif isinstance(callee, SuperExpr):
+            return self.translate_super_method_call(expr, callee)
         else:
             return self.translate_call(expr, callee)
 
     def translate_call(self, expr: CallExpr, callee: Expression) -> Value:
-        """Translate a non-method call."""
-        assert isinstance(callee, RefExpr)  # TODO: Allow arbitrary callees
+        # The common case of calls is refexprs
+        if isinstance(callee, RefExpr):
+            return self.translate_refexpr_call(expr, callee)
 
+        function = self.accept(callee)
+        args = [self.accept(arg) for arg in expr.args]
+        return self.py_call(function, args, expr.line,
+                            arg_kinds=expr.arg_kinds, arg_names=expr.arg_names)
+
+    def translate_refexpr_call(self, expr: CallExpr, callee: RefExpr) -> Value:
+        """Translate a non-method call."""
         # Gen the argument values
         arg_values = [self.accept(arg) for arg in expr.args]
 
@@ -1601,6 +1632,19 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                         expr.line,
                                         expr.arg_kinds,
                                         expr.arg_names)
+
+    def translate_super_method_call(self, expr: CallExpr, callee: SuperExpr) -> Value:
+        if callee.info is None or callee.call.args:
+            return self.translate_call(expr, callee)
+        ir = self.mapper.type_to_ir[callee.info]
+        if not ir or ir.base is None or not ir.base.has_method(callee.name):
+            return self.translate_call(expr, callee)
+
+        decl = ir.base.method_decl(callee.name)
+        vself = next(iter(self.environment.indexes))  # grab first argument
+        arg_values = [vself] + [self.accept(arg) for arg in expr.args]
+        arg_values = self.coerce_native_call_args(arg_values, decl.sig, expr.line)
+        return self.add(Call(decl, arg_values, expr.line))
 
     def gen_method_call(self,
                         base: Value,
@@ -2381,6 +2425,18 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         else:
             assert False, 'Unsupported del operation'
 
+    def visit_super_expr(self, o: SuperExpr) -> Value:
+        sup_val = self.load_module_attr_by_fullname('builtins.super', o.line)
+        if o.call.args:
+            args = [self.accept(arg) for arg in o.call.args]
+        else:
+            assert o.info is not None
+            typ = self.load_native_type_object(o.info.fullname())
+            vself = next(iter(self.environment.indexes))  # grab first argument
+            args = [typ, vself]
+        res = self.py_call(sup_val, args, o.line)
+        return self.py_get_attr(res, o.name, o.line)
+
     # Unimplemented constructs
     # TODO: some of these are actually things that should never show up,
     # so properly sort those out.
@@ -2428,9 +2484,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         raise NotImplementedError
 
     def visit_star_expr(self, o: StarExpr) -> Value:
-        raise NotImplementedError
-
-    def visit_super_expr(self, o: SuperExpr) -> Value:
         raise NotImplementedError
 
     def visit_temp_node(self, o: TempNode) -> Value:
