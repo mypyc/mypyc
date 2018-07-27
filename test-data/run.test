@@ -2414,26 +2414,23 @@ from typing import Generator
 def yield_loop() -> Generator:
     i = 0
     while i < 5:
-        return i
+        if i == 3:
+            return i
         yield i
         i += 1
 
-def main() -> None:
-    generator = yield_loop()
-    next(generator)
-    next(generator)
-
 [file driver.py]
-from native import yield_loop, main
-main()
-# generator = yield_loop()
-# next(generator)
-# next(generator)
-# assert next(generator) == 0
-# assert next(generator) == 1
-# assert next(generator) == 2
-# assert next(generator) == 3
-# assert next(generator) == 4
-# assert next(generator) == None
+from native import yield_loop#, main
+
+generator = yield_loop()
+assert next(generator) == 0
+assert next(generator) == 1
+assert next(generator) == 2
+assert next(generator) == 3
+try:
+    next(generator)
+except StopIteration:
+    print('StopIteration')
 
 [out]
+StopIteration

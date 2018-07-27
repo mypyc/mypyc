@@ -135,12 +135,14 @@ class TestRun(MypycDataSuite):
             if 'MYPYC_RUN_GDB' in os.environ:
                 if platform.system() == 'Darwin':
                     subprocess.check_call(['lldb', '--', 'python', driver_path], env=env)
-                    assert False, "Test can't pass in lldb mode. (And remember to pass -s to pytest)"
+                    assert False, ("Test can't pass in lldb mode. (And remember to pass -s to "
+                                   "pytest)")
                 elif platform.system() == 'Linux':
                     subprocess.check_call(['gdb', '--args', 'python', driver_path], env=env)
-                    assert False, "Test can't pass in gdb mode. (And remember to pass -s to pytest)"
+                    assert False, ("Test can't pass in gdb mode. (And remember to pass -s to "
+                                   "pytest)")
                 else:
-                    assert False, 'Unknown OS'
+                    assert False, 'Unsupported OS'
 
             proc = subprocess.Popen(['python', driver_path], stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, env=env)

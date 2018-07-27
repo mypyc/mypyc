@@ -400,6 +400,7 @@ class FuncInfo(object):
         self.contains_nested = False
         self.is_generator = fitem.is_generator
         # TODO: add field for ret_type: RType = none_rprimitive
+        self.curr_env_reg = INVALID_VALUE  # type: Value
 
 
 class ClassInfo(object):
@@ -571,7 +572,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         name = fdef.name()
         class_ir = self.mapper.type_to_ir[cdef.info]
         func_ir, _ = self.gen_func_item(fdef, fdef.name(), class_ir.method_sig(fdef.name()),
-                                       cdef.name)
+                                        cdef.name)
         self.functions.append(func_ir)
 
         if fdef.is_property:
@@ -812,6 +813,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         if fn_info.is_generator:
             func_ir = self.add_next_to_generator_class(blocks, sig, env, fn_info)
+            for reg in func_ir.env.regs():
+                if isinstance(reg, Call):
+                    print('{}: {}'.format(reg, reg.to_str(func_ir.env)))
         else:
             func_ir, func_reg = self.gen_func_ir(blocks, sig, env, fn_info, class_name)
 
@@ -929,8 +933,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     # refers to the newly defined variable in that environment class. Add the
                     # target to the table containing class environment variables, as well as the
                     # current environment.
-                    if ((self.fn_info.contains_nested and self.is_free_variable(symbol)) or
-                            self.fn_info.is_generator):
+                    if self.fn_info.is_generator:
+                        self.fn_info.env_class.attributes[symbol.name()] = self.node_type(lvalue)
+                        target = AssignmentTargetAttr(self.fn_info.generator_class.curr_env_reg,
+                                                      symbol.name())
+                        return self.environment.add_target(symbol, target)
+
+                    if self.fn_info.contains_nested and self.is_free_variable(symbol):
                         self.fn_info.env_class.attributes[symbol.name()] = self.node_type(lvalue)
                         target = AssignmentTargetAttr(self.fn_info.callable_class.curr_env_reg,
                                                       symbol.name())
@@ -2855,7 +2864,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         generator_class = ClassIR(name, self.module_name)
         generator_class.attributes[ENV_ATTR_NAME] = RInstance(self.fn_info.env_class)
-        generator_class.attributes[NEXT_LABEL_ATTR_NAME] = int_rprimitive
         generator_class.mro = [generator_class]
 
         self.classes.append(generator_class)
