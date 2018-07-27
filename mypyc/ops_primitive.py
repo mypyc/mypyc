@@ -150,31 +150,23 @@ def name_ref_op(name: str,
     return desc
 
 
-def custom_func_op(name: str,
-                   arg_types: List[RType],
-                   result_type: RType,
-                   error_kind: int,
-                   emit: EmitCallback,
-                   format_str: Optional[str] = None,
-                   is_var_arg: bool = False) -> OpDescription:
-    typename = ''
-    if len(arg_types) == 1:
-        typename = ' :: %s' % short_name(arg_types[0].name)
-    if format_str is None:
-        format_str = '{dest} = %s %s%s' % (short_name(name),
-                                           ', '.join('{args[%d]}' % i
-                                                     for i in range(len(arg_types))),
-                                           typename)
-    return OpDescription('<custom>', arg_types, result_type, is_var_arg, error_kind, format_str,
-                         emit, 0)
-
-
 def custom_op(arg_types: List[RType],
               result_type: RType,
               error_kind: int,
-              format_str: str,
               emit: EmitCallback,
+              name: Optional[str] = None,
+              format_str: Optional[str] = None,
               is_var_arg: bool = False) -> OpDescription:
     """Create a one-off op that can't be automatically generated from the AST."""
+    if name is not None:
+        typename = ''
+        if len(arg_types) == 1:
+            typename = ' :: %s' % short_name(arg_types[0].name)
+        if format_str is None:
+            format_str = '{dest} = %s %s%s' % (short_name(name),
+                                           ', '.join('{args[%d]}' % i
+                                                     for i in range(len(arg_types))),
+                                           typename)
+    assert format_str is not None
     return OpDescription('<custom>', arg_types, result_type, is_var_arg, error_kind, format_str,
                          emit, 0)

@@ -287,7 +287,8 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
                     'PyErr_SetString(PyExc_{}, "{}");'.format(op.class_name, message))
             elif isinstance(op.value, Value):
                 self.emitter.emit_line(
-                    'PyErr_SetObject(PyExc_{}, {}{});'.format(op.class_name, REG_PREFIX, op.value.name))
+                    'PyErr_SetObject(PyExc_{}, {}{});'.format(op.class_name, REG_PREFIX,
+                                                              op.value.name))
             else:
                 assert False, 'op value type must be either str or Value'
         else:

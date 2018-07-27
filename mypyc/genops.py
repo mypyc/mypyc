@@ -494,10 +494,10 @@ class GeneratorNonlocalControl(BaseNonlocalControl):
         builder.assign_to_target(builder.fn_info.generator_class.next_label_target,
                                  builder.add(LoadInt(-1)),
                                  builder.fn_info.fitem.line)
-        builder.add(RaiseStandardError(RaiseStandardError.STOP_ITERATION, value, builder.fn_info.fitem.line))
+        # Raise a StopIteration containing a field for the value that should be returned.
+        builder.add(RaiseStandardError(RaiseStandardError.STOP_ITERATION, value,
+                                       builder.fn_info.fitem.line))
         builder.add(Unreachable())
-        # builder.add(Return(value))
-        # TODO: Raise STOP_ITERATION with value instead of return
 
 
 class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
@@ -821,9 +821,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         if fn_info.is_generator:
             func_ir = self.add_next_to_generator_class(blocks, sig, env, fn_info)
-            for reg in func_ir.env.regs():
-                if isinstance(reg, Call):
-                    print('{}: {}'.format(reg, reg.to_str(func_ir.env)))
+            self.functions.append(self.add_iter_to_generator_class(*self.gen_iter_func(fn_info)))
         else:
             func_ir, func_reg = self.gen_func_ir(blocks, sig, env, fn_info, class_name)
 
@@ -2924,6 +2922,25 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.classes.append(generator_class)
         self.fn_info.generator_class.ir = generator_class
         return generator_class
+
+    def gen_iter_func(self, fn_info: FuncInfo) -> Tuple[List[BasicBlock], Environment, FuncInfo]:
+        self.enter(fn_info)
+        self_target = self.environment.add_local_reg(Var('self'),
+                                                     RInstance(fn_info.generator_class.ir),
+                                                     is_arg=True)
+        self.add(Return(self.read_from_target(self_target, fn_info.fitem.line)))
+        blocks, env, _, fn_info = self.leave()
+        return (blocks, env, fn_info)
+
+    def add_iter_to_generator_class(self,
+                                    blocks: List[BasicBlock],
+                                    env: Environment,
+                                    fn_info: FuncInfo) -> FuncIR:
+        sig = FuncSignature((RuntimeArg('self', object_rprimitive),), object_rprimitive)
+        iter_fn_decl = FuncDecl('__iter__', fn_info.generator_class.ir.name, self.module_name, sig)
+        iter_fn_ir = FuncIR(iter_fn_decl, blocks, env)
+        fn_info.generator_class.ir.methods['__iter__'] = iter_fn_ir
+        return iter_fn_ir
 
     def add_next_to_generator_class(self,
                                     blocks: List[BasicBlock],

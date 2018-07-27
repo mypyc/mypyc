@@ -2394,16 +2394,20 @@ def yield_twice_and_return() -> Generator:
     return 4
     yield 3
 
-def yield_loop() -> Generator:
-    i = 0
-    while i < 5:
-        if i == 3:
-            return i
-        yield i
-        i += 1
+# def yield_loop() -> Generator:
+#     i = 0
+#     while i < 5:
+#         if i == 3:
+#             return i
+#         yield i
+#         i += 1
+
+# def main() -> None:
+#     for i in yield_twice_and_return():
+#         print(i)
 
 [file driver.py]
-from native import yield_twice_and_return, yield_loop
+from native import yield_twice_and_return#, #main#, yield_loop
 
 generator = yield_twice_and_return()
 assert next(generator) == 1
@@ -2417,17 +2421,27 @@ try:
 except StopIteration as e:
     assert e.value is None
 
-generator = yield_loop()
-assert next(generator) == 0
-assert next(generator) == 1
-assert next(generator) == 2
-try:
-    next(generator)
-except StopIteration as e:
-    assert e.value == 3
-try:
-    next(generator)
-except StopIteration as e:
-    assert e.value is None
+# main()
+
+# generator = yield_loop()
+# assert next(generator) == 0
+# assert next(generator) == 1
+# assert next(generator) == 2
+# try:
+#     next(generator)
+# except StopIteration as e:
+#     assert e.value == 3
+# try:
+#     next(generator)
+# except StopIteration as e:
+#     assert e.value is None
+
+for i in yield_twice_and_return():
+    print(i)
+
+# for i in yield_loop():
+#     print(i)
 
 [out]
+1
+2

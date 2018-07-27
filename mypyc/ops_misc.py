@@ -7,7 +7,7 @@ from mypyc.ops import (
     ERR_MAGIC, ERR_FALSE
 )
 from mypyc.ops_primitive import (
-    name_ref_op, simple_emit, binary_op, unary_op, func_op, method_op, custom_func_op, custom_op,
+    name_ref_op, simple_emit, binary_op, unary_op, func_op, method_op, custom_op,
     negative_int_emit,
 )
 
@@ -40,11 +40,11 @@ iter_op = func_op(name='builtins.iter',
 
 # Although the error_kind is set to be ERR_NEVER, this can actually return NULL, and thus it must
 # be checked using Branch.IS_ERROR.
-next_op = custom_func_op(name='builtins.next',
-                         arg_types=[object_rprimitive],
-                         result_type=object_rprimitive,
-                         error_kind=ERR_NEVER,
-                         emit=simple_emit('{dest} = PyIter_Next({args[0]});'))
+next_op = custom_op(name='builtins.next',
+                    arg_types=[object_rprimitive],
+                    result_type=object_rprimitive,
+                    error_kind=ERR_NEVER,
+                    emit=simple_emit('{dest} = PyIter_Next({args[0]});'))
 
 #
 # Fallback primitive operations that operate on 'object' operands
