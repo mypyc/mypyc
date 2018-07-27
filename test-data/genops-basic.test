@@ -1131,11 +1131,6 @@ def yield_loop() -> Generator:
         yield i
         i += 1
 
-# def outer() -> Generator:
-#     def inner() -> None:
-#         pass
-#     yield 1
-
 [out]
 def yield_loop():
     r0 :: yield_loop__env
@@ -1160,20 +1155,20 @@ def yield_loop__gen.__next__(self):
     r7 :: int
     r8 :: object
     r9 :: int
-    r10 :: bool
-    r11 :: int
-    r12 :: object
-    r13 :: int
-    r14 :: bool
-    r15, r16, r17 :: int
-    r18 :: bool
-    r19 :: None
-    r20 :: int
-    r21 :: bool
-    r22 :: int
-    r23 :: bool
+    r10, r11 :: bool
+    r12 :: int
+    r13 :: object
+    r14 :: int
+    r15 :: bool
+    r16, r17, r18 :: int
+    r19 :: bool
+    r20 :: None
+    r21 :: int
+    r22, r23 :: bool
     r24 :: int
-    r25, r26 :: bool
+    r25 :: bool
+    r26 :: int
+    r27, r28 :: bool
 L0:
     r0 = self.__mypyc_env__
     r1 = r0.__mypyc_next_label__
@@ -1191,32 +1186,34 @@ L3:
     r8 = box(int, r7)
     r9 = -1
     r0.__mypyc_next_label__ = r9; r10 = is_error
-    return r8
+    raise StopIteration(r8)
+    unreachable
 L4:
-    r11 = r0.i
-    r12 = box(int, r11)
-    r13 = 1
-    r0.__mypyc_next_label__ = r13; r14 = is_error
-    return r12
+    r12 = r0.i
+    r13 = box(int, r12)
+    r14 = 1
+    r0.__mypyc_next_label__ = r14; r15 = is_error
+    return r13
 L5:
-    r15 = 1
-    r16 = r0.i
-    r17 = r16 + r15 :: int
-    r0.i = r17; r18 = is_error
+    r16 = 1
+    r17 = r0.i
+    r18 = r17 + r16 :: int
+    r0.i = r18; r19 = is_error
     goto L2
 L6:
-    r19 = None
-    r20 = -1
-    r0.__mypyc_next_label__ = r20; r21 = is_error
-    return r19
+    r20 = None
+    r21 = -1
+    r0.__mypyc_next_label__ = r21; r22 = is_error
+    raise StopIteration(r20)
+    unreachable
 L7:
-    r22 = 0
-    r23 = r1 == r22 :: int
-    if r23 goto L1 else goto L8 :: bool
-L8:
-    r24 = 1
+    r24 = 0
     r25 = r1 == r24 :: int
-    if r25 goto L5 else goto L9 :: bool
+    if r25 goto L1 else goto L8 :: bool
+L8:
+    r26 = 1
+    r27 = r1 == r26 :: int
+    if r27 goto L5 else goto L9 :: bool
 L9:
     raise StopIteration
     unreachable

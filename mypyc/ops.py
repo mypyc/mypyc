@@ -1158,15 +1158,20 @@ class RaiseStandardError(RegisterOp):
     ASSERTION_ERROR = 'AssertionError'
     STOP_ITERATION = 'StopIteration'
 
-    def __init__(self, class_name: str, message: Optional[str], line: int) -> None:
+    def __init__(self, class_name: str, value: Optional[Union[str, Value]], line: int) -> None:
         super().__init__(line)
         self.class_name = class_name
-        self.message = message
+        self.value = value
         self.type = bool_rprimitive
 
     def to_str(self, env: Environment) -> str:
-        if self.message is not None:
-            return 'raise %s(%r)' % (self.class_name, self.message)
+        if self.value is not None:
+            if isinstance(self.value, str):
+                return 'raise %s(%r)' % (self.class_name, self.value)
+            elif isinstance(self.value, Value):
+                return env.format('raise %s(%r)', self.class_name, self.value)
+            else:
+                assert False, 'value type must be either str or Value'
         else:
             return 'raise %s' % self.class_name
 

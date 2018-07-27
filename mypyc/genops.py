@@ -494,7 +494,9 @@ class GeneratorNonlocalControl(BaseNonlocalControl):
         builder.assign_to_target(builder.fn_info.generator_class.next_label_target,
                                  builder.add(LoadInt(-1)),
                                  builder.fn_info.fitem.line)
-        builder.add(Return(value))
+        builder.add(RaiseStandardError(RaiseStandardError.STOP_ITERATION, value, builder.fn_info.fitem.line))
+        builder.add(Unreachable())
+        # builder.add(Return(value))
         # TODO: Raise STOP_ITERATION with value instead of return
 
 
