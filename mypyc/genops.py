@@ -58,7 +58,7 @@ from mypyc.ops import (
     VTableAttr, VTableMethod, VTableEntries,
     NAMESPACE_TYPE, RaiseStandardError, LoadErrorValue,
     NO_TRACEBACK_LINE_NO,
-    FuncDecl, FUNC_NORMAL, FUNC_STATICMETHOD, FUNC_CLASSMETHOD,
+    FuncDecl, FUNC_NORMAL, FUNC_STATICMETHOD, FUNC_CLASSMETHOD, RUnion
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import (
@@ -266,12 +266,15 @@ class Mapper:
         elif isinstance(typ, NoneTyp):
             return none_rprimitive
         elif isinstance(typ, UnionType):
-            assert len(typ.items) == 2 and any(isinstance(it, NoneTyp) for it in typ.items)
-            if isinstance(typ.items[0], NoneTyp):
-                value_type = typ.items[1]
+            if len(typ.items) == 2 and any(isinstance(it, NoneTyp) for it in typ.items):
+                if isinstance(typ.items[0], NoneTyp):
+                    value_type = typ.items[1]
+                else:
+                    value_type = typ.items[0]
+                return ROptional(self.type_to_rtype(value_type))
             else:
-                value_type = typ.items[0]
-            return ROptional(self.type_to_rtype(value_type))
+                return RUnion([self.type_to_rtype(item)
+                               for item in typ.items])
         elif isinstance(typ, AnyType):
             return object_rprimitive
         elif isinstance(typ, TypeType):

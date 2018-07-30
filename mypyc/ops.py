@@ -260,6 +260,32 @@ class ROptional(RType):
         return hash(('optional', self.value_type))
 
 
+class RUnion(RType):
+    """Optional[x]"""
+
+    is_unboxed = False
+
+    def __init__(self, items: List[RType]) -> None:
+        self.name = 'union'
+        self.items = items
+        self._ctype = 'PyObject *'
+
+    def accept(self, visitor: 'RTypeVisitor[T]') -> T:
+        return visitor.visit_runion(self)
+
+    def __repr__(self) -> str:
+        return '<RUnion %s>' % ', '.join(str(item) for item in self.items)
+
+    def __str__(self) -> str:
+        return 'union[%s]' % ', '.join(str(item) for item in self.items)
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, RUnion) and other.items == self.items
+
+    def __hash__(self) -> int:
+        return hash(('union', tuple(hash(item) for item in self.items)))
+
+
 class AssignmentTarget(object):
     type = None  # type: RType
 
@@ -1600,6 +1626,10 @@ class RTypeVisitor(Generic[T]):
 
     @abstractmethod
     def visit_roptional(self, typ: ROptional) -> T:
+        raise NotImplementedError
+
+    @abstractmethod
+    def visit_runion(self, typ: RUnion) -> T:
         raise NotImplementedError
 
     @abstractmethod

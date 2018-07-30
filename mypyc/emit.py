@@ -1,15 +1,15 @@
 """Utilities for emitting C code."""
 
 from collections import OrderedDict
-from typing import List, Set, Dict, Optional, List, Callable
+from typing import List, Set, Dict, Optional, List, Callable, Union
 
 from mypyc.common import REG_PREFIX, STATIC_PREFIX, TYPE_PREFIX, NATIVE_PREFIX
 from mypyc.ops import (
     Any, AssignmentTarget, Environment, BasicBlock, Value, Register, RType, RTuple, RInstance,
-    ROptional, RPrimitive, is_int_rprimitive, is_float_rprimitive, is_bool_rprimitive,
+    ROptional, RPrimitive, RUnion, is_int_rprimitive, is_float_rprimitive, is_bool_rprimitive,
     short_name, is_list_rprimitive, is_dict_rprimitive, is_set_rprimitive, is_tuple_rprimitive,
     is_none_rprimitive, is_object_rprimitive, object_rprimitive, is_str_rprimitive, ClassIR,
-    FuncIR, FuncDecl, int_rprimitive
+    FuncIR, FuncDecl, int_rprimitive, RUnion
 )
 from mypyc.namegen import NameGenerator
 from mypyc.sametype import is_same_type
@@ -79,9 +79,13 @@ class Emitter:
         for line in lines:
             self.emit_line(line)
 
-    def emit_label(self, label: BasicBlock) -> None:
+    def emit_label(self, label: Union[BasicBlock, str]) -> None:
+        if isinstance(label, str):
+            text = label
+        else:
+            text = self.label(label)
         # Extra semicolon prevents an error when the next line declares a tempvar
-        self.fragments.append('{}: ;\n'.format(self.label(label)))
+        self.fragments.append('{}: ;\n'.format(text))
 
     def emit_from_emitter(self, emitter: 'Emitter') -> None:
         self.fragments.extend(emitter.fragments)
@@ -94,6 +98,10 @@ class Emitter:
     def temp_name(self) -> str:
         self.context.temp_counter += 1
         return '__tmp%d' % self.context.temp_counter
+
+    def new_label(self) -> str:
+        self.context.temp_counter += 1
+        return '__LL%d' % self.context.temp_counter
 
     def static_name(self, id: str, module: Optional[str], prefix: str = STATIC_PREFIX) -> str:
         """Create name of a C static variable.
@@ -381,8 +389,31 @@ class Emitter:
                 'else {')
             self.emit_cast(src, dest, typ.value_type, custom_message=err)
             self.emit_line('}')
+        elif isinstance(typ, RUnion):
+            self.emit_union_cast(src, dest, typ, declare_dest, err, optional, src_type)
         else:
             assert False, 'Cast not implemented: %s' % typ
+
+    def emit_union_cast(self, src: str, dest: str, typ: RUnion, declare_dest: bool,
+                        err: str, optional: bool, src_type: Optional[RType]) -> None:
+        """Emit cast to a union type.
+
+        The arguments are similar to emit_cast.
+        """
+        if declare_dest:
+            self.emit_line('PyObject *{};'.format(dest))
+        good_label = self.new_label()
+        for item in typ.items:
+            self.emit_cast(src,
+                           dest,
+                           item,
+                           declare_dest=False,
+                           custom_message='',
+                           optional=optional)
+            self.emit_line('if ({} != NULL) goto {};'.format(good_label))
+        # Handle cast failure.
+        self.emit_line(err)
+        self.emit_label(good_label)
 
     def emit_arg_check(self, src: str, dest: str, typ: RType, check: str, optional: bool) -> None:
         if optional:
