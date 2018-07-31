@@ -293,14 +293,29 @@ L0:
     return r5
 def g2(o):
     o :: union[A, B]
-    r0 :: str
-    r1 :: object
-    r2 :: None
+    r0, r1 :: object
+    r2 :: bool
+    r3 :: A
+    r4 :: str
+    r5 :: B
+    r6 :: object
+    r7 :: None
 L0:
-    r0 = unicode_1 :: static  ('a')
-    r1 = getattr o, r0
-    r2 = None
-    return r2
+    r1 = __main__.A :: type
+    r2 = isinstance o, r1
+    if r2 goto L1 else goto L2 :: bool
+L1:
+    r3 = cast(A, o)
+    r4 = r3.a
+    r0 = r4
+    goto L3
+L2:
+    r5 = cast(B, o)
+    r6 = r5.a
+    r0 = r6
+L3:
+    r7 = None
+    return r7
 def g3(o, s):
     o :: union[A, B]
     s, r0 :: str

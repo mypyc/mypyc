@@ -2393,6 +2393,10 @@ class A:
     def __init__(self, x: int) -> None:
         self.x = x
 
+class B:
+    def __init__(self, x: object) -> None:
+        self.x = x
+
 def f(x: Union[A, str]) -> object:
     if isinstance(x, A):
         return x.x
@@ -2405,12 +2409,17 @@ def g(x: int) -> Union[A, int]:
     else:
         return x + 1
 
+def get(x: Union[A, B]) -> object:
+    return x.x
+
 [file driver.py]
-from native import A, f, g
+from native import A, B, f, g, get
 assert f('a') == 'ax'
 assert f(A(4)) == 4
 assert isinstance(g(0), A)
 assert g(2) == 3
+assert get(A(5)) == 5
+assert get(B('x')) == 'x'
 try:
     f(1)
 except TypeError:

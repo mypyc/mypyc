@@ -1412,10 +1412,58 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.load_module_attr(expr)
         else:
             obj = self.accept(expr.expr)
-            if isinstance(obj.type, RInstance):
-                return self.add(GetAttr(obj, expr.name, expr.line))
+            return self.get_attr(obj, expr.name, self.node_type(expr), expr.line)
+
+    def get_attr(self, obj: Value, attr: str, result_type: RType, line: int) -> Value:
+        if isinstance(obj.type, RInstance):
+            return self.add(GetAttr(obj, attr, line))
+        elif isinstance(obj.type, RUnion):
+            return self.union_get_attr(obj, obj.type, attr, result_type, line)
+        else:
+            return self.py_get_attr(obj, attr, line)
+
+    def union_get_attr(self,
+                       obj: Value,
+                       rtype: RUnion,
+                       attr: str,
+                       result_type: RType,
+                       line: int) -> Value:
+        fast_items = []
+        rest_items = []
+        for item in rtype.items:
+            if isinstance(item, RInstance):
+                fast_items.append(item)
             else:
-                return self.py_get_attr(obj, expr.name, expr.line)
+                rest_items.append(item)
+        exit_block = BasicBlock()
+        result = self.alloc_temp(result_type)
+        for i, item in enumerate(fast_items):
+            more_types = i < len(fast_items) - 1 or rest_items
+            if more_types:
+                op = self.isinstance(obj, item, line)
+                true_block, false_block = BasicBlock(), BasicBlock()
+                self.add_bool_branch(op, true_block, false_block)
+                self.activate_block(true_block)
+            coerced = self.coerce(obj, item, line)
+            temp = self.get_attr(coerced, attr, result_type, line)
+            temp2 = self.coerce(temp, result_type, line)
+            self.add(Assign(result, temp2))
+            self.goto(exit_block)
+            if more_types:
+                self.activate_block(false_block)
+        if rest_items:
+            # For everything else we use slow attribute lookup.
+            temp = self.py_get_attr(obj, attr, line)
+            temp2 = self.coerce(temp, result_type, line)
+            self.add(Assign(result, temp2))
+        self.activate_block(exit_block)
+        return result
+
+    def isinstance(self, obj: Value, rtype: RInstance, line: int) -> Value:
+        class_ir = rtype.class_ir
+        fullname = '%s.%s' % (class_ir.module_name, class_ir.name)
+        type_obj = self.load_native_type_object(fullname)
+        return self.primitive_op(fast_isinstance_op, [obj, type_obj], line)
 
     def py_get_attr(self, obj: Value, attr: str, line: int) -> Value:
         key = self.load_static_unicode(attr)
