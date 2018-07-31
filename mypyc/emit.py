@@ -410,7 +410,7 @@ class Emitter:
                            declare_dest=False,
                            custom_message='',
                            optional=optional)
-            self.emit_line('if ({} != NULL) goto {};'.format(good_label))
+            self.emit_line('if ({} != NULL) goto {};'.format(dest, good_label))
         # Handle cast failure.
         self.emit_line(err)
         self.emit_label(good_label)

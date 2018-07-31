@@ -246,3 +246,68 @@ L0:
     r1 = x[r0] :: list
     r2 = cast(union[int, str], r1)
     return r2
+
+[case testUnionTypeAttributeAccess]
+from typing import Union
+class A:
+    a: str
+    def f(self, x: int) -> None: pass
+class B:
+    a: object
+    def f(self, x: int) -> None: pass
+def g1(o: Union[A, B]) -> None:
+    o.f(1)
+def g2(o: Union[A, B]) -> None:
+    o.a
+def g3(o: Union[A, B], s: str) -> None:
+    o.a = s
+
+[out]
+def A.f(self, x):
+    self :: A
+    x :: int
+    r0 :: None
+L0:
+    r0 = None
+    return r0
+def B.f(self, x):
+    self :: B
+    x :: int
+    r0 :: None
+L0:
+    r0 = None
+    return r0
+def g1(o):
+    o :: union[A, B]
+    r0 :: int
+    r1 :: str
+    r2, r3 :: object
+    r4, r5 :: None
+L0:
+    r0 = 1
+    r1 = unicode_0 :: static  ('f')
+    r2 = box(int, r0)
+    r3 = py_method_call(o, r1, r2)
+    r4 = cast(None, r3)
+    r5 = None
+    return r5
+def g2(o):
+    o :: union[A, B]
+    r0 :: str
+    r1 :: object
+    r2 :: None
+L0:
+    r0 = unicode_1 :: static  ('a')
+    r1 = getattr o, r0
+    r2 = None
+    return r2
+def g3(o, s):
+    o :: union[A, B]
+    s, r0 :: str
+    r1 :: bool
+    r2 :: None
+L0:
+    r0 = unicode_1 :: static  ('a')
+    r1 = setattr o, r0, s
+    r2 = None
+    return r2

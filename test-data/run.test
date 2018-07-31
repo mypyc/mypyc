@@ -2385,3 +2385,35 @@ g()
 [out]
 (((1, 2), 2), 1, 'hi', 'hi2')
 caught the exception
+
+[case testUnion]
+from typing import Union
+
+class A:
+    def __init__(self, x: int) -> None:
+        self.x = x
+
+def f(x: Union[A, str]) -> object:
+    if isinstance(x, A):
+        return x.x
+    else:
+        return x + 'x'
+
+def g(x: int) -> Union[A, int]:
+    if x == 0:
+        return A(1)
+    else:
+        return x + 1
+
+[file driver.py]
+from native import A, f, g
+assert f('a') == 'ax'
+assert f(A(4)) == 4
+assert isinstance(g(0), A)
+assert g(2) == 3
+try:
+    f(1)
+except TypeError:
+    pass
+else:
+    assert False
