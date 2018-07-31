@@ -1220,7 +1220,10 @@ class FuncDecl:
         if class_name is None:
             self.bound_sig = None  # type: Optional[FuncSignature]
         else:
-            self.bound_sig = FuncSignature(sig.args[1:], sig.ret_type)
+            if kind == FUNC_STATICMETHOD:
+                self.bound_sig = sig
+            else:
+                self.bound_sig = FuncSignature(sig.args[1:], sig.ret_type)
 
     def cname(self, names: NameGenerator) -> str:
         name = self.name

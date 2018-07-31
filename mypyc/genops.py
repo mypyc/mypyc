@@ -208,7 +208,7 @@ def compute_vtable(cls: ClassIR) -> None:
     for t in [cls] + cls.traits:
         for fn in itertools.chain(t.properties.values(), t.methods.values()):
             # TODO: don't generate a new entry when we overload without changing the type
-            if fn == cls.get_method(fn.name) and fn.decl.kind == FUNC_NORMAL:
+            if fn == cls.get_method(fn.name):
                 cls.vtable[fn.name] = len(entries)
                 entries.append(VTableMethod(t, fn.name, fn))
 
@@ -1594,11 +1594,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         # If the base type is one of ours, do a MethodCall
         if isinstance(base.type, RInstance):
-            decl = (base.type.class_ir.method_decl(name)
-                    if base.type.class_ir.has_method(name) else None)
-            # We only do MethodCall to normal methods, not staticmethod/classmethods.
-            # This wouldn't be too hard to fix, though.
-            if decl and decl.kind == FUNC_NORMAL:
+            if base.type.class_ir.has_method(name):
+                decl = base.type.class_ir.method_decl(name)
                 if arg_kinds is None:
                     assert arg_names is None, "arg_kinds not present but arg_names is"
                     arg_kinds = [ARG_POS for _ in arg_values]
