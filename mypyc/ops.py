@@ -1200,16 +1200,23 @@ class FuncSignature:
         return 'FuncSignature(args=%r, ret=%r)' % (self.args, self.ret_type)
 
 
+FUNC_NORMAL = 0
+FUNC_STATICMETHOD = 1
+FUNC_CLASSMETHOD = 2
+
+
 class FuncDecl:
     def __init__(self,
                  name: str,
                  class_name: Optional[str],
                  module_name: str,
-                 sig: FuncSignature) -> None:
+                 sig: FuncSignature,
+                 kind: int = FUNC_NORMAL) -> None:
         self.name = name
         self.class_name = class_name
         self.module_name = module_name
         self.sig = sig
+        self.kind = kind
         if class_name is None:
             self.bound_sig = None  # type: Optional[FuncSignature]
         else:

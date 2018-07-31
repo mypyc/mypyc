@@ -58,7 +58,7 @@ from mypyc.ops import (
     VTableAttr, VTableMethod, VTableEntries,
     NAMESPACE_TYPE, RaiseStandardError, LoadErrorValue,
     NO_TRACEBACK_LINE_NO,
-    FuncDecl,
+    FuncDecl, FUNC_NORMAL, FUNC_STATICMETHOD, FUNC_CLASSMETHOD,
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import (
@@ -208,7 +208,7 @@ def compute_vtable(cls: ClassIR) -> None:
     for t in [cls] + cls.traits:
         for fn in itertools.chain(t.properties.values(), t.methods.values()):
             # TODO: don't generate a new entry when we overload without changing the type
-            if fn == cls.get_method(fn.name):
+            if fn == cls.get_method(fn.name) and fn.decl.kind == FUNC_NORMAL:
                 cls.vtable[fn.name] = len(entries)
                 entries.append(VTableMethod(t, fn.name, fn))
 
@@ -315,7 +315,9 @@ class Mapper:
 
 def prepare_func_def(module_name: str, class_name: Optional[str],
                      fdef: FuncDef, mapper: Mapper) -> FuncDecl:
-    decl = FuncDecl(fdef.name(), class_name, module_name, mapper.fdef_to_sig(fdef))
+    kind = FUNC_STATICMETHOD if fdef.is_static else (
+        FUNC_CLASSMETHOD if fdef.is_class else FUNC_NORMAL)
+    decl = FuncDecl(fdef.name(), class_name, module_name, mapper.fdef_to_sig(fdef), kind)
     mapper.func_to_decl[fdef] = decl
     return decl
 
@@ -1535,7 +1537,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             assert isinstance(callee.expr.node, TypeInfo)
             ir = self.mapper.type_to_ir[callee.expr.node]
             decl = ir.method_decl(callee.name)
-            args = [self.accept(arg) for arg in expr.args]
+            args = []
+            if decl.kind == FUNC_CLASSMETHOD:  # Add the class argument for class methods
+                args.append(self.load_native_type_object(callee.expr.node.fullname()))
+            args += [self.accept(arg) for arg in expr.args]
 
             return self.call(decl, args, expr.line)
 
@@ -1589,8 +1594,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         # If the base type is one of ours, do a MethodCall
         if isinstance(base.type, RInstance):
-            if base.type.class_ir.has_method(name):
-                decl = base.type.class_ir.method_decl(name)
+            decl = (base.type.class_ir.method_decl(name)
+                    if base.type.class_ir.has_method(name) else None)
+            # We only do MethodCall to normal methods, not staticmethod/classmethods.
+            # This wouldn't be too hard to fix, though.
+            if decl and decl.kind == FUNC_NORMAL:
                 if arg_kinds is None:
                     assert arg_names is None, "arg_kinds not present but arg_names is"
                     arg_kinds = [ARG_POS for _ in arg_values]
