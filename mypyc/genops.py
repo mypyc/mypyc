@@ -908,7 +908,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.enter(fn_info)
             self.setup_env_for_generator_class()
 
-        self.load_env_registers()
+        if not self.fn_info.is_generator:
+            self.load_env_registers()
         self.gen_arg_default()
 
         if self.fn_info.contains_nested:
@@ -2734,7 +2735,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def accept(self, node: Union[Statement, Expression]) -> Optional[Value]:
         try:
-            if isinstance(node, Expression):
+            if isinstance(node, Expression) and not isinstance(node, YieldExpr):
                 res = node.accept(self)
                 res = self.coerce(res, self.node_type(node), node.line)
                 return res
@@ -2886,7 +2887,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         else:
             for arg in fn_info.fitem.arguments:
                 assert arg.variable.type, "Function argument missing type"
-                if self.is_free_variable(arg.variable):
+                if self.is_free_variable(arg.variable) or fn_info.is_generator:
                     rtype = self.type_to_rtype(arg.variable.type)
                     if fn_info.is_nested:
                         self.add_var_to_env_class(arg.variable, rtype, fn_info.callable_class,
@@ -3065,7 +3066,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                     sig: FuncSignature,
                                     env: Environment,
                                     fn_info: FuncInfo) -> FuncIR:
-        sig = FuncSignature((RuntimeArg('self', object_rprimitive),) + sig.args, sig.ret_type)
+        sig = FuncSignature((RuntimeArg('self', object_rprimitive),), sig.ret_type)
         next_fn_decl = FuncDecl('__next__', fn_info.generator_class.ir.name, self.module_name, sig)
         next_fn_ir = FuncIR(next_fn_decl, blocks, env)
         fn_info.generator_class.ir.methods['__next__'] = next_fn_ir
