@@ -1176,7 +1176,7 @@ def yield_loop__gen.__next__(self):
 L0:
     r0 = self.__mypyc_env__
     r1 = r0.__mypyc_next_label__
-    goto L7
+    goto L9
 L1:
     r2 = 0
     r0.i = r2; r3 = is_error
@@ -1184,41 +1184,43 @@ L2:
     r4 = r0.i
     r5 = 5
     r6 = r4 < r5 :: int
-    if r6 goto L3 else goto L6 :: bool
+    if r6 goto L3 else goto L7 :: bool
 L3:
     r7 = r0.i
     r8 = box(int, r7)
     r9 = -1
     r0.__mypyc_next_label__ = r9; r10 = is_error
+L4:
     raise StopIteration(r8)
     unreachable
-L4:
+L5:
     r12 = r0.i
     r13 = box(int, r12)
     r14 = 1
     r0.__mypyc_next_label__ = r14; r15 = is_error
     return r13
-L5:
+L6:
     r16 = 1
     r17 = r0.i
     r18 = r17 + r16 :: int
     r0.i = r18; r19 = is_error
     goto L2
-L6:
+L7:
     r20 = None
     r21 = -1
     r0.__mypyc_next_label__ = r21; r22 = is_error
+L8:
     raise StopIteration(r20)
     unreachable
-L7:
+L9:
     r24 = 0
     r25 = r1 == r24 :: int
-    if r25 goto L1 else goto L8 :: bool
-L8:
+    if r25 goto L1 else goto L10 :: bool
+L10:
     r26 = 1
     r27 = r1 == r26 :: int
-    if r27 goto L5 else goto L9 :: bool
-L9:
+    if r27 goto L6 else goto L11 :: bool
+L11:
     raise StopIteration
     unreachable
 

@@ -1425,9 +1425,6 @@ class ClassIR:
         return None
 
 
-INVALID_CLASS = ClassIR('<INVALID_CLASS>', '')
-
-
 LiteralsMap = Dict[Tuple[Type[object], Union[int, float, str, bytes]], str]
 
 

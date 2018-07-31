@@ -40,7 +40,7 @@ iter_op = func_op(name='builtins.iter',
 
 # Although the error_kind is set to be ERR_NEVER, this can actually return NULL, and thus it must
 # be checked using Branch.IS_ERROR.
-next_op = custom_op(name='builtins.next',
+next_op = custom_op(name='next',
                     arg_types=[object_rprimitive],
                     result_type=object_rprimitive,
                     error_kind=ERR_NEVER,

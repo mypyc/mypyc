@@ -157,16 +157,17 @@ def custom_op(arg_types: List[RType],
               name: Optional[str] = None,
               format_str: Optional[str] = None,
               is_var_arg: bool = False) -> OpDescription:
-    """Create a one-off op that can't be automatically generated from the AST."""
-    if name is not None:
+    """Create a one-off op that can't be automatically generated from the AST. Note that if the
+    format_str argument is not provided, then a format_str is generated using the name argument.
+    The name argument only needs to be provided if the format_str argument is not provided.
+    """
+    if name is not None and format_str is None:
         typename = ''
         if len(arg_types) == 1:
             typename = ' :: %s' % short_name(arg_types[0].name)
-        if format_str is None:
-            format_str = '{dest} = %s %s%s' % (short_name(name),
-                                           ', '.join('{args[%d]}' % i
-                                                     for i in range(len(arg_types))),
-                                           typename)
+        format_str = '{dest} = %s %s%s' % (short_name(name),
+                                       ', '.join('{args[%d]}' % i for i in range(len(arg_types))),
+                                       typename)
     assert format_str is not None
     return OpDescription('<custom>', arg_types, result_type, is_var_arg, error_kind, format_str,
                          emit, 0)
