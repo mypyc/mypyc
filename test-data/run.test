@@ -2386,6 +2386,18 @@ g()
 (((1, 2), 2), 1, 'hi', 'hi2')
 caught the exception
 
+[case testYieldForLoop]
+from typing import Iterable
+
+def yield_for_loop() -> Iterable:
+    l = [range(5)]
+    for i in l:
+        yield i
+
+[file driver.py]
+from native import yield_for_loop
+
+
 [case testYield]
 from typing import Generator, Iterable, Union
 def yield_three_times() -> Iterable[int]:
@@ -2406,6 +2418,18 @@ def yield_while_loop() -> Generator:
             return i
         yield i
         i += 1
+
+def yield_for_loop() -> Iterable:
+    l = [i for i in range(3)]
+    for i in l:
+        yield i
+
+    d = {k: None for k in range(3)}
+    for k in d:
+        yield k
+
+    for i in range(5):
+        yield i
 
 def yield_with_except() -> Generator:
     yield 10
@@ -2429,7 +2453,7 @@ def complex_yield(a: int, b: str, c: float) -> Generator[Union[str, int], None, 
     return c
 
 [file driver.py]
-from native import yield_three_times, yield_twice_and_return, yield_while_loop, yield_with_except, complex_yield
+from native import yield_three_times, yield_twice_and_return, yield_while_loop, yield_for_loop, yield_with_except, complex_yield
 
 generator = yield_three_times()
 assert next(generator) == 1
@@ -2465,6 +2489,16 @@ try:
 except StopIteration as e:
     assert e.value is None
 
+generator = yield_for_loop()
+for i in range(2):
+    assert next(generator) == 0
+    assert next(generator) == 1
+    assert next(generator) == 2
+try:
+    next(generator)
+except StopIteration as e:
+    assert e.value is None
+
 generator = yield_with_except()
 assert next(generator) == 10
 try:
@@ -2480,6 +2514,10 @@ try:
     next(generator)
 except StopIteration as e:
     assert e.value == 1.0
+try:
+    next(generator)
+except StopIteration as e:
+    assert e.value is None
 
 for i in yield_twice_and_return():
     print(i)

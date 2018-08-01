@@ -42,7 +42,10 @@ from mypy.visitor import ExpressionVisitor, StatementVisitor
 from mypy.subtypes import is_named_instance
 from mypy.checkexpr import map_actuals_to_formals
 
-from mypyc.common import ENV_ATTR_NAME, NEXT_LABEL_ATTR_NAME, MAX_SHORT_INT, TOP_LEVEL_NAME
+from mypyc.common import (
+    ENV_ATTR_NAME, NEXT_LABEL_ATTR_NAME, INDEX_ATTR_NAME, ITERATOR_ATTR_NAME, LAMBDA_NAME,
+    MAX_SHORT_INT, TOP_LEVEL_NAME
+)
 from mypyc.freevariables import FreeVariablesVisitor
 from mypyc.ops import (
     BasicBlock, AssignmentTarget, AssignmentTargetRegister, AssignmentTargetIndex,
@@ -623,8 +626,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.modules = set(modules)
         self.callable_class_names = set()  # type: Set[str]
 
+        # These variables keep track of the number of lambdas, implicit indices, and implicit
+        # iterators instantiated so we avoid name conflicts. The indices and iterators are
+        # instantiated from for-loops.
         self.lambda_counter = 0
+        self.index_counter = 0
+        self.iterator_counter = 0
 
+        # These variables are populated from the first-pass FreeVariablesVisitor.
         self.free_variables = fvv.free_variables
         self.encapsulating_fitems = fvv.encapsulating_funcs
         self.nested_fitems = fvv.nested_funcs
@@ -1061,15 +1070,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     # target to the table containing class environment variables, as well as the
                     # current environment.
                     if self.fn_info.is_generator:
-                        self.fn_info.env_class.attributes[symbol.name()] = self.node_type(lvalue)
-                        target = AssignmentTargetAttr(self.fn_info.generator_class.curr_env_reg,
-                                                      symbol.name())
-                        return self.environment.add_target(symbol, target)
+                        return self.add_var_to_env_class(symbol, self.node_type(lvalue),
+                                                         self.fn_info.generator_class,
+                                                         reassign=False)
 
                     if self.fn_info.contains_nested and self.is_free_variable(symbol):
-                        self.fn_info.env_class.attributes[symbol.name()] = self.node_type(lvalue)
-                        target = AssignmentTargetAttr(self.fn_info.curr_env_reg, symbol.name())
-                        return self.environment.add_target(symbol, target)
+                        return self.add_var_to_env_class(symbol, self.node_type(lvalue),
+                                                         self.fn_info, reassign=False)
 
                     # Otherwise define a new local variable.
                     return self.environment.add_local_reg(symbol, self.node_type(lvalue))
@@ -1279,6 +1286,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Determine where we want to exit, if our condition check fails.
         normal_loop_exit = else_block if else_insts is not None else exit_block
 
+        assert isinstance(index, NameExpr)
         if (isinstance(expr, CallExpr)
                 and isinstance(expr.callee, RefExpr)
                 and expr.callee.fullname == 'builtins.range'):
@@ -1290,16 +1298,22 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # Special case for x in range(...)
             # TODO: Check argument counts and kinds; check the lvalue
             end = expr.args[0]
-            end_reg = self.accept(end)
 
             # Initialize loop index to 0.
-            index_target = self.assign(index, IntExpr(0))
+            if self.fn_info.is_generator:
+                assert index.node is not None
+                index_target = self.add_var_to_env_class(index.node, int_rprimitive,
+                                                         self.fn_info.generator_class)
+                self.assign_to_target(index_target, self.add(LoadInt(0)), line)
+            else:
+                index_target = self.assign(index, IntExpr(0))
             self.goto(condition_block)
 
             # Add loop condition check.
             self.activate_block(condition_block)
-            index_reg = self.read_from_target(index_target, line)
-            comparison = self.binary_op(index_reg, end_reg, '<', line)
+            end_reg = self.accept(end)
+            comparison = self.binary_op(self.read_from_target(index_target, line),
+                                        end_reg, '<', line)
             self.add_bool_branch(comparison, body_block, normal_loop_exit)
 
             self.activate_block(body_block)
@@ -1310,7 +1324,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # Increment index register.
             one_reg = self.add(LoadInt(1))
             self.assign_to_target(index_target,
-                                  self.binary_op(index_reg, one_reg, '+', line), line)
+                                  self.binary_op(self.read_from_target(index_target, line),
+                                  one_reg, '+', line), line)
 
             # Go back to loop condition check.
             self.goto(condition_block)
@@ -1320,27 +1335,44 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         elif is_list_rprimitive(self.node_type(expr)):
             self.push_loop_stack(increment_block, exit_block)
 
-            expr_reg = self.accept(expr)
-
-            index_reg = self.alloc_temp(int_rprimitive)
-            self.add(Assign(index_reg, self.add(LoadInt(0))))
-
-            one_reg = self.add(LoadInt(1))
+            if self.fn_info.is_generator:
+                expr_target = self.add_var_to_env_class(Var(expr.name), list_rprimitive,
+                                                        self.fn_info.generator_class)
+                index_target = self.add_var_to_env_class(Var('{}{}'.format(INDEX_ATTR_NAME, self.index_counter)),
+                                                         int_rprimitive, self.fn_info.generator_class)
+                self.index_counter += 1
+                self.assign_to_target(index_target, self.add(LoadInt(0)), line)
+            else:
+                expr_reg = self.accept(expr)
+                index_reg = self.alloc_temp(int_rprimitive)
+                self.add(Assign(index_reg, self.add(LoadInt(0))))
+                one_reg = self.add(LoadInt(1))
 
             condition_block = self.goto_new_block()
 
             # For compatibility with python semantics we recalculate the length
             # at every iteration.
-            len_reg = self.add(PrimitiveOp([expr_reg], list_len_op, line))
-
-            comparison = self.binary_op(index_reg, len_reg, '<', line)
+            if self.fn_info.is_generator:
+                len_reg = self.add(PrimitiveOp([self.read_from_target(expr_target, line)],
+                                               list_len_op, line))
+                comparison = self.binary_op(self.read_from_target(index_target, line),
+                                            len_reg, '<', line)
+            else:
+                len_reg = self.add(PrimitiveOp([expr_reg], list_len_op, line))
+                comparison = self.binary_op(index_reg, len_reg, '<', line)
             self.add_bool_branch(comparison, body_block, normal_loop_exit)
 
             self.activate_block(body_block)
             target_list_type = self.types[expr]
             assert isinstance(target_list_type, Instance)
             target_type = self.type_to_rtype(target_list_type.args[0])
-            value_box = self.add(PrimitiveOp([expr_reg, index_reg], list_get_item_op, line))
+
+            if self.fn_info.is_generator:
+                value_box = self.add(PrimitiveOp([self.read_from_target(expr_target, line),
+                                                  self.read_from_target(index_target, line)],
+                                                 list_get_item_op, line))
+            else:
+                value_box = self.add(PrimitiveOp([expr_reg, index_reg], list_get_item_op, line))
 
             self.assign_to_target(self.get_assignment_target(index),
                                   self.unbox_or_cast(value_box, target_type, line), line)
@@ -1348,7 +1380,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             body_insts()
 
             self.goto_and_activate(increment_block)
-            self.add(Assign(index_reg, self.binary_op(index_reg, one_reg, '+', line)))
+            if self.fn_info.is_generator:
+                self.assign_to_target(index_target,
+                                      self.binary_op(self.read_from_target(index_target, line),
+                                                     self.add(LoadInt(1)), '+', line),
+                                      line)
+            else:
+                self.add(Assign(index_reg, self.binary_op(index_reg, one_reg, '+', line)))
             self.goto(condition_block)
 
             self.pop_loop_stack()
@@ -1359,16 +1397,27 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.push_loop_stack(increment_block, exit_block)
 
             # Define registers to contain the expression, along with the iterator that will be used
-            # for the for-loop.
-            expr_reg = self.accept(expr)
-            iter_reg = self.add(PrimitiveOp([expr_reg], iter_op, line))
+            # for the for-loop. If we are inside of a generator function, instead store these inside
+            # the environment class.
+            if self.fn_info.is_generator:
+                expr_target = self.add_var_to_env_class(Var(expr.name), dict_rprimitive,
+                                                        self.fn_info.generator_class)
+                iter_target = self.add_var_to_env_class(Var(ITERATOR_ATTR_NAME), object_rprimitive,
+                                                        self.fn_info.generator_class)
+                self.assign_to_target(iter_target, self.add(PrimitiveOp([self.read_from_target(expr_target, line)], iter_op, line)), line)
+            else:
+                expr_reg = self.accept(expr)
+                iter_reg = self.add(PrimitiveOp([expr_reg], iter_op, line))
 
             # Create a block for where the __next__ function will be called on the iterator and
             # checked to see if the value returned is NULL, which would signal either the end of
             # the Iterable being traversed or an exception being raised. Note that Branch.IS_ERROR
             # checks only for NULL (an exception does not necessarily have to be raised).
             self.goto_and_activate(increment_block)
-            next_reg = self.add(PrimitiveOp([iter_reg], next_op, line))
+            if self.fn_info.is_generator:
+                next_reg = self.add(PrimitiveOp([self.read_from_target(iter_target, line)], next_op, line))
+            else:
+                next_reg = self.add(PrimitiveOp([iter_reg], next_op, line))
             self.add(Branch(next_reg, error_check_block, body_block, Branch.IS_ERROR))
 
             # Create a new block for the body of the loop. Set the previous branch to go here if
@@ -2391,7 +2440,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         fsig = FuncSignature(runtime_args, ret_type)
 
-        fname = '__mypyc_lambda_{}__'.format(self.lambda_counter)
+        fname = '{}{}'.format(LAMBDA_NAME, self.lambda_counter)
         func_ir, func_reg = self.gen_func_item(expr, fname, fsig)
         assert func_reg is not None
 
@@ -2834,7 +2883,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 curr_env_reg = self.load_outer_env(curr_env_reg, outer_env)
                 index -= 1
 
-    def add_var_to_env_class(self, var: Var, rtype: RType, base: Union[FuncInfo, ImplicitClass],
+    def add_var_to_env_class(self,
+                             var: SymbolNode,
+                             rtype: RType,
+                             base: Union[FuncInfo, ImplicitClass],
                              reassign: bool = False) -> AssignmentTarget:
         # First, define the variable name as an attribute of the environment class, and then
         # construct a target for that attribute.
