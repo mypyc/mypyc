@@ -530,7 +530,7 @@ def B.__mypyc_defaults_setup(self):
     r10, r11 :: bool
 L0:
     r0 = __main__.globals :: static
-    r1 = unicode_1 :: static  ('LOL')
+    r1 = unicode_3 :: static  ('LOL')
     r2 = r0[r1] :: dict
     r3 = cast(str, r2)
     self.y = r3; r4 = is_error
@@ -543,15 +543,57 @@ L0:
     r11 = True
     return r11
 def __top_level__():
-    r0 :: str
-    r1 :: object
-    r2 :: str
-    r3 :: bool
-    r4 :: None
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: str
+    r9 :: object
+    r10 :: str
+    r11 :: bool
+    r12 :: object
+    r13 :: tuple[object]
+    r14 :: object
+    r15 :: str
+    r16, r17, r18 :: object
+    r19 :: str
+    r20 :: dict
+    r21 :: bool
+    r22 :: None
 L0:
-    r0 = unicode_0 :: static  ('lol')
-    r1 = __main__.globals :: static
-    r2 = unicode_1 :: static  ('LOL')
-    r3 = r1.__setitem__(r2, r0) :: object
-    r4 = None
-    return r4
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = unicode_2 :: static  ('lol')
+    r9 = __main__.globals :: static
+    r10 = unicode_3 :: static  ('LOL')
+    r11 = r9.__setitem__(r10, r8) :: object
+    r12 = __main__.A :: type
+    r13 = (r12)
+    r14 = box(tuple[object], r13)
+    r15 = unicode_0 :: static  ('__main__')
+    r16 = __main__.B_template :: type
+    r17 = pytype_from_template(r16, r14, r15)
+    __main__.B = r17 :: type
+    r18 = __main__.globals :: static
+    r19 = unicode_4 :: static  ('B')
+    r20 = cast(dict, r18)
+    r21 = r20.__setitem__(r19, r17) :: dict
+    r22 = None
+    return r22
+
+[case testGenericTrivial]
+from typing import TypeVar, Generic
+T = TypeVar('T')
+class C(Generic[T]):
+    pass
+
+[out]

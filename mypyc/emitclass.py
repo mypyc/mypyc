@@ -103,7 +103,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     emit_line()
 
     emitter.emit_line(textwrap.dedent("""\
-        static PyTypeObject {type_struct}_template = {{
+        static PyTypeObject {type_struct}_template_ = {{
             PyVarObject_HEAD_INIT(&PyType_Type, 0)
             "{name}",                  /* tp_name */
             sizeof({struct_name}),     /* tp_basicsize */
@@ -142,7 +142,8 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
             {init_name},               /* tp_init */
             0,                         /* tp_alloc */
             {new_name},                /* tp_new */
-        }};\
+        }};
+        static PyTypeObject *{type_struct}_template = &{type_struct}_template_;\
         """).format(type_struct=emitter.type_struct_name(cl),
                     struct_name=cl.struct_name(emitter.names),
                     name=name,

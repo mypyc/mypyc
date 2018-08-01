@@ -150,10 +150,10 @@ class TestRun(MypycDataSuite):
             output = output.decode('utf8')
             outlines = output.splitlines()
 
-            heading('Generated C')
-            with open(cpath) as f:
-                print(f.read().rstrip())
-            heading('End C')
+            # heading('Generated C')
+            # with open(cpath) as f:
+            #     print(f.read().rstrip())
+            # heading('End C')
             if proc.returncode != 0:
                 print()
                 print('*** Exit status: %d' % proc.returncode)

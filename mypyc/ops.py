@@ -908,9 +908,10 @@ class LoadErrorValue(RegisterOp):
 
     error_kind = ERR_NEVER
 
-    def __init__(self, rtype: RType, line: int = -1) -> None:
+    def __init__(self, rtype: RType, line: int = -1, is_borrowed: bool = False) -> None:
         super().__init__(line)
         self.type = rtype
+        self.is_borrowed = is_borrowed
 
     def sources(self) -> List[Value]:
         return []
@@ -1015,6 +1016,39 @@ class LoadStatic(RegisterOp):
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_load_static(self)
+
+
+class InitStatic(RegisterOp):
+    """static = value :: static
+
+    Initialize a C static variable/pointer. See everything in LoadStatic.
+    """
+
+    error_kind = ERR_NEVER
+
+    def __init__(self,
+                 value: Value,
+                 identifier: str,
+                 module_name: Optional[str] = None,
+                 namespace: str = NAMESPACE_STATIC,
+                 line: int = -1) -> None:
+        super().__init__(line)
+        self.identifier = identifier
+        self.module_name = module_name
+        self.namespace = namespace
+        self.value = value
+
+    def sources(self) -> List[Value]:
+        return [self.value]
+
+    def to_str(self, env: Environment) -> str:
+        name = self.identifier
+        if self.module_name is not None:
+            name = '{}.{}'.format(self.module_name, name)
+        return env.format('%s = %r :: %s', name, self.value, self.namespace)
+
+    def accept(self, visitor: 'OpVisitor[T]') -> T:
+        return visitor.visit_init_static(self)
 
 
 class TupleSet(RegisterOp):
@@ -1340,10 +1374,12 @@ class ClassIR:
 
     This also describes the runtime structure of native instances.
     """
-    def __init__(self, name: str, module_name: str, is_trait: bool = False) -> None:
+    def __init__(self, name: str, module_name: str, is_trait: bool = False,
+                 is_generated: bool = True) -> None:
         self.name = name
         self.module_name = module_name
         self.is_trait = is_trait
+        self.is_generated = is_generated
         # Default empty ctor
         self.ctor = FuncDecl(name, None, module_name, FuncSignature([], RInstance(self)))
         # Properties are accessed like attributes, but have behaivor like method calls.
@@ -1491,6 +1527,10 @@ class OpVisitor(Generic[T]):
 
     @abstractmethod
     def visit_load_static(self, op: LoadStatic) -> T:
+        raise NotImplementedError
+
+    @abstractmethod
+    def visit_init_static(self, op: InitStatic) -> T:
         raise NotImplementedError
 
     @abstractmethod

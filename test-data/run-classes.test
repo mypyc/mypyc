@@ -499,6 +499,41 @@ yo!
 3
 yo!
 
+-- broken - we need to handle the layout conflicts for it to work
+[case testSubclassException-skip]
+class Failure(Exception):
+    pass
+
+def foo() -> None:
+    raise Failure
+
+[file driver.py]
+import native
+native.Failure()
+native.foo()
+
+[case testSubclassPy-skip]
+from b import B
+class A(B):
+    x: int
+    def foo(self, x: int) -> int:
+        print("hi", x)
+        return x+1
+[file b.py]
+class B:
+    def foo(self, x: int) -> int:
+        print("parent!")
+        return x-1
+    def bar(self) -> None:
+        self.z = 10
+        print("hello!")
+[file driver.py]
+import native
+a = native.A()
+a.foo(10)
+a.bar(10)
+assert False
+
 [case testClassVariable]
 from typing import ClassVar
 class A:
@@ -559,3 +594,14 @@ assert b.y == 'rofl'
 assert b.z is None
 # N.B: this doesn't match cpython
 assert not hasattr(b, 'bogus')
+
+[case testGenericTrivial]
+from typing import TypeVar, Generic
+T = TypeVar('T')
+class C(Generic[T]):
+    pass
+class D(C[int]):
+    pass
+
+[file driver.py]
+import native

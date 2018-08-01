@@ -69,24 +69,35 @@ static inline void CPy_FixupTraitVtable(CPyVTableItem *vtable, int count) {
 
 // Create a heap type based on a template non-heap type.
 // This is super hacky and maybe we should suck it up and use PyType_FromSpec instead.
-static inline PyTypeObject *CPyType_FromTemplate(PyTypeObject *template_,
-                                                 PyObject *modname) {
+static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
+                                             PyObject *bases,
+                                             PyObject *modname) {
     PyHeapTypeObject *t = (PyHeapTypeObject*)PyType_GenericAlloc(&PyType_Type, 0);
     memcpy((char *)t + sizeof(PyVarObject),
            (char *)template_ + sizeof(PyVarObject),
            sizeof(PyTypeObject) - sizeof(PyVarObject));
 
+    if (bases) {
+        Py_INCREF(bases);
+
+        PyTypeObject *metatype = _PyType_CalculateMetaclass(Py_TYPE(template_), bases);
+        Py_INCREF(metatype);
+        ((PyObject *)t)->ob_type = metatype;
+    }
+
+
     PyObject *name = PyUnicode_FromString(template_->tp_name);
     t->ht_name = name;
     Py_INCREF(name);
     t->ht_qualname = name;
+    t->ht_type.tp_bases = bases;
 
     if (PyType_Ready((PyTypeObject *)t) < 0)
         return NULL;
 
     PyObject_SetAttrString((PyObject *)t, "__module__", modname);
 
-    return (PyTypeObject *)t;
+    return (PyObject *)t;
 }
 
 // Get attribute value using vtable (may return an undefined value)
