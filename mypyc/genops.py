@@ -48,11 +48,11 @@ from mypyc.ops import (
     BasicBlock, AssignmentTarget, AssignmentTargetRegister, AssignmentTargetIndex,
     AssignmentTargetAttr, AssignmentTargetTuple, Environment, Op, LoadInt, RType, Value, Register,
     Return, FuncIR, Assign, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple, Unreachable,
-    TupleGet, TupleSet, ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, ROptional,
+    TupleGet, TupleSet, ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic,
     MethodCall, INVALID_VALUE, INVALID_CLASS, INVALID_FUNC_DEF, int_rprimitive, float_rprimitive,
     bool_rprimitive, list_rprimitive, is_list_rprimitive, dict_rprimitive, set_rprimitive,
     str_rprimitive, tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive,
-    exc_rtuple,
+    exc_rtuple, optional_value_type,
     PrimitiveOp, ControlOp, LoadErrorValue,
     ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap, FuncSignature,
     VTableAttr, VTableMethod, VTableEntries,
@@ -266,15 +266,8 @@ class Mapper:
         elif isinstance(typ, NoneTyp):
             return none_rprimitive
         elif isinstance(typ, UnionType):
-            if len(typ.items) == 2 and any(isinstance(it, NoneTyp) for it in typ.items):
-                if isinstance(typ.items[0], NoneTyp):
-                    value_type = typ.items[1]
-                else:
-                    value_type = typ.items[0]
-                return ROptional(self.type_to_rtype(value_type))
-            else:
-                return RUnion([self.type_to_rtype(item)
-                               for item in typ.items])
+            return RUnion([self.type_to_rtype(item)
+                           for item in typ.items])
         elif isinstance(typ, AnyType):
             return object_rprimitive
         elif isinstance(typ, TypeType):
@@ -1958,26 +1951,27 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             length = self.primitive_op(list_len_op, [value], value.line)
             zero = self.add(LoadInt(0))
             value = self.binary_op(length, zero, '!=', value.line)
-        elif isinstance(value.type, ROptional):
-            is_none = self.binary_op(value, self.add(PrimitiveOp([], none_op, value.line)),
-                                     'is not', value.line)
-            branch = Branch(is_none, true, false, Branch.BOOL_EXPR)
-            self.add(branch)
-            value_type = value.type.value_type
-            if isinstance(value_type, RInstance):
-                # Optional[X] where X is always truthy
-                # TODO: Support __bool__
-                pass
-            else:
-                # Optional[X] where X may be falsey and requires a check
-                branch.true = self.new_block()
-                # unbox_or_cast instead of coerce because we want the
-                # type to change even if it is a subtype.
-                remaining = self.unbox_or_cast(value, value.type.value_type, value.line)
-                self.add_bool_branch(remaining, true, false)
-            return
-        elif not is_same_type(value.type, bool_rprimitive):
-            value = self.primitive_op(bool_op, [value], value.line)
+        else:
+            value_type = optional_value_type(value.type)
+            if value_type is not None:
+                is_none = self.binary_op(value, self.add(PrimitiveOp([], none_op, value.line)),
+                                         'is not', value.line)
+                branch = Branch(is_none, true, false, Branch.BOOL_EXPR)
+                self.add(branch)
+                if isinstance(value_type, RInstance):
+                    # Optional[X] where X is always truthy
+                    # TODO: Support __bool__
+                    pass
+                else:
+                    # Optional[X] where X may be falsey and requires a check
+                    branch.true = self.new_block()
+                    # unbox_or_cast instead of coerce because we want the
+                    # type to change even if it is a subtype.
+                    remaining = self.unbox_or_cast(value, value_type, value.line)
+                    self.add_bool_branch(remaining, true, false)
+                return
+            elif not is_same_type(value.type, bool_rprimitive):
+                value = self.primitive_op(bool_op, [value], value.line)
         self.add(Branch(value, true, false, Branch.BOOL_EXPR))
 
     def visit_nonlocal_decl(self, o: NonlocalDecl) -> None:

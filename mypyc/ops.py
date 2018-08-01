@@ -234,34 +234,8 @@ class RInstance(RType):
         return '<RInstance %s>' % self.name
 
 
-class ROptional(RType):
-    """Optional[x]"""
-
-    is_unboxed = False
-
-    def __init__(self, value_type: RType) -> None:
-        self.name = 'optional'
-        self.value_type = value_type
-        self._ctype = 'PyObject *'
-
-    def accept(self, visitor: 'RTypeVisitor[T]') -> T:
-        return visitor.visit_roptional(self)
-
-    def __repr__(self) -> str:
-        return '<ROptional %s>' % self.value_type
-
-    def __str__(self) -> str:
-        return 'optional[%s]' % self.value_type
-
-    def __eq__(self, other: object) -> bool:
-        return isinstance(other, ROptional) and other.value_type == self.value_type
-
-    def __hash__(self) -> int:
-        return hash(('optional', self.value_type))
-
-
 class RUnion(RType):
-    """Optional[x]"""
+    """union[x, ..., y]"""
 
     is_unboxed = False
 
@@ -284,6 +258,19 @@ class RUnion(RType):
 
     def __hash__(self) -> int:
         return hash(('union', tuple(hash(item) for item in self.items)))
+
+
+def optional_value_type(rtype: RType) -> Optional[RType]:
+    if isinstance(rtype, RUnion) and len(rtype.items) == 2:
+        if rtype.items[0] == none_rprimitive:
+            return rtype.items[1]
+        elif rtype.items[1] == none_rprimitive:
+            return rtype.items[0]
+    return None
+
+
+def is_optional_type(rtype: RType) -> bool:
+    return optional_value_type(rtype) is not None
 
 
 class AssignmentTarget(object):
@@ -1622,10 +1609,6 @@ class RTypeVisitor(Generic[T]):
 
     @abstractmethod
     def visit_rinstance(self, typ: RInstance) -> T:
-        raise NotImplementedError
-
-    @abstractmethod
-    def visit_roptional(self, typ: ROptional) -> T:
         raise NotImplementedError
 
     @abstractmethod

@@ -9,7 +9,7 @@ def f(x: Optional[A]) -> int:
     return 2
 [out]
 def f(x):
-    x :: optional[A]
+    x :: union[A, None]
     r0 :: bool
     r1, r2 :: int
 L0:
@@ -33,7 +33,7 @@ def f(x: Optional[A]) -> int:
     return 2
 [out]
 def f(x):
-    x :: optional[A]
+    x :: union[A, None]
     r0, r1 :: bool
     r2, r3 :: int
 L0:
@@ -63,8 +63,8 @@ def f(x: Optional[A], y: Optional[A], z: Optional[int]) -> None:
     a.a = None
 [out]
 def f(x, y, z):
-    x, y :: optional[A]
-    z :: optional[int]
+    x, y :: union[A, None]
+    z :: union[int, None]
     r0 :: None
     r1 :: A
     r2 :: int
@@ -135,7 +135,7 @@ def f(x: Optional[A]) -> A:
     return y
 [out]
 def f(x):
-    x :: optional[A]
+    x :: union[A, None]
     r0, y :: A
     r1, r2 :: bool
     r3, r4 :: A
@@ -164,7 +164,7 @@ def f(y: int) -> None:
 def f(y):
     y :: int
     r0 :: None
-    x :: optional[int]
+    x :: union[int, None]
     r1 :: int
     r2 :: bool
     r3 :: object

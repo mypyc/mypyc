@@ -6,10 +6,10 @@ from typing import List, Set, Dict, Optional, List, Callable, Union
 from mypyc.common import REG_PREFIX, STATIC_PREFIX, TYPE_PREFIX, NATIVE_PREFIX
 from mypyc.ops import (
     Any, AssignmentTarget, Environment, BasicBlock, Value, Register, RType, RTuple, RInstance,
-    ROptional, RPrimitive, RUnion, is_int_rprimitive, is_float_rprimitive, is_bool_rprimitive,
+    RUnion, RPrimitive, RUnion, is_int_rprimitive, is_float_rprimitive, is_bool_rprimitive,
     short_name, is_list_rprimitive, is_dict_rprimitive, is_set_rprimitive, is_tuple_rprimitive,
     is_none_rprimitive, is_object_rprimitive, object_rprimitive, is_str_rprimitive, ClassIR,
-    FuncIR, FuncDecl, int_rprimitive, RUnion
+    FuncIR, FuncDecl, int_rprimitive, is_optional_type, optional_value_type
 )
 from mypyc.namegen import NameGenerator
 from mypyc.sametype import is_same_type
@@ -270,8 +270,9 @@ class Emitter:
 
     def pretty_name(self, typ: RType) -> str:
         pretty_name = typ.name
-        if isinstance(typ, ROptional):
-            pretty_name = '%s or None' % self.pretty_name(typ.value_type)
+        value_type = optional_value_type(typ)
+        if value_type is not None:
+            pretty_name = '%s or None' % self.pretty_name(value_type)
         return short_name(pretty_name)
 
     def emit_cast(self, src: str, dest: str, typ: RType, declare_dest: bool = False,
@@ -301,17 +302,19 @@ class Emitter:
                 self.pretty_name(typ))
 
         # Special case casting *from* optional
-        if (src_type and isinstance(src_type, ROptional) and not is_object_rprimitive(typ)
-                and is_same_type(src_type.value_type, typ)):
-            if declare_dest:
-                self.emit_line('PyObject *{};'.format(dest))
-            self.emit_arg_check(src, dest, typ, '({} != Py_None)'.format(src), optional)
-            self.emit_lines(
-                '    {} = {};'.format(dest, src),
-                'else {',
-                err,
-                '{} = NULL;'.format(dest),
-                '}')
+        if src_type and is_optional_type(src_type) and not is_object_rprimitive(typ):
+            value_type = optional_value_type(src_type)
+            assert value_type is not None
+            if is_same_type(value_type, typ):
+                if declare_dest:
+                    self.emit_line('PyObject *{};'.format(dest))
+                self.emit_arg_check(src, dest, typ, '({} != Py_None)'.format(src), optional)
+                self.emit_lines(
+                    '    {} = {};'.format(dest, src),
+                    'else {',
+                    err,
+                    '{} = NULL;'.format(dest),
+                    '}')
 
         # TODO: Verify refcount handling.
         elif (is_list_rprimitive(typ) or is_dict_rprimitive(typ) or is_set_rprimitive(typ) or
@@ -380,15 +383,6 @@ class Emitter:
             self.emit_line('{} = {};'.format(dest, src))
             if optional:
                 self.emit_line('}')
-        elif isinstance(typ, ROptional):
-            if declare_dest:
-                self.emit_line('PyObject *{};'.format(dest))
-            self.emit_arg_check(src, dest, typ, '({} == Py_None)'.format(src), optional)
-            self.emit_lines(
-                '    {} = {};'.format(dest, src),
-                'else {')
-            self.emit_cast(src, dest, typ.value_type, custom_message=err)
-            self.emit_line('}')
         elif isinstance(typ, RUnion):
             self.emit_union_cast(src, dest, typ, declare_dest, err, optional, src_type)
         else:
