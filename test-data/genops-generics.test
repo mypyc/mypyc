@@ -39,25 +39,6 @@ L0:
     y = r3
     r4 = None
     return r4
-def __top_level__():
-    r0 :: str
-    r1 :: object
-    r2 :: str
-    r3, r4, r5 :: object
-    r6 :: str
-    r7 :: bool
-    r8 :: None
-L0:
-    r0 = unicode_0 :: static  ('T')
-    r1 = __main__.globals :: static
-    r2 = unicode_1 :: static  ('TypeVar')
-    r3 = r1[r2] :: dict
-    r4 = py_call(r3, r0)
-    r5 = __main__.globals :: static
-    r6 = unicode_0 :: static  ('T')
-    r7 = r5.__setitem__(r6, r4) :: object
-    r8 = None
-    return r8
 
 [case testGenericAttrAndTypeApplication]
 from typing import TypeVar, Generic
@@ -90,54 +71,6 @@ L0:
     r7 = r4 + r6 :: int
     r8 = None
     return r8
-def __top_level__():
-    r0 :: str
-    r1 :: object
-    r2 :: str
-    r3, r4, r5 :: object
-    r6 :: str
-    r7 :: bool
-    r8 :: object
-    r9 :: str
-    r10, r11 :: object
-    r12 :: str
-    r13, r14 :: object
-    r15 :: tuple[object]
-    r16 :: object
-    r17 :: str
-    r18, r19, r20 :: object
-    r21 :: str
-    r22 :: dict
-    r23 :: bool
-    r24 :: None
-L0:
-    r0 = unicode_0 :: static  ('T')
-    r1 = __main__.globals :: static
-    r2 = unicode_1 :: static  ('TypeVar')
-    r3 = r1[r2] :: dict
-    r4 = py_call(r3, r0)
-    r5 = __main__.globals :: static
-    r6 = unicode_0 :: static  ('T')
-    r7 = r5.__setitem__(r6, r4) :: object
-    r8 = __main__.globals :: static
-    r9 = unicode_2 :: static  ('Generic')
-    r10 = r8[r9] :: dict
-    r11 = __main__.globals :: static
-    r12 = unicode_0 :: static  ('T')
-    r13 = r11[r12] :: dict
-    r14 = r10[r13] :: object
-    r15 = (r14)
-    r16 = box(tuple[object], r15)
-    r17 = unicode_3 :: static  ('__main__')
-    r18 = __main__.C_template :: type
-    r19 = pytype_from_template(r18, r16, r17)
-    __main__.C = r19 :: type
-    r20 = __main__.globals :: static
-    r21 = unicode_4 :: static  ('C')
-    r22 = cast(dict, r20)
-    r23 = r22.__setitem__(r21, r19) :: dict
-    r24 = None
-    return r24
 
 [case testGenericMethod]
 from typing import TypeVar, Generic
@@ -203,51 +136,3 @@ L0:
     x = r8
     r9 = None
     return r9
-def __top_level__():
-    r0 :: str
-    r1 :: object
-    r2 :: str
-    r3, r4, r5 :: object
-    r6 :: str
-    r7 :: bool
-    r8 :: object
-    r9 :: str
-    r10, r11 :: object
-    r12 :: str
-    r13, r14 :: object
-    r15 :: tuple[object]
-    r16 :: object
-    r17 :: str
-    r18, r19, r20 :: object
-    r21 :: str
-    r22 :: dict
-    r23 :: bool
-    r24 :: None
-L0:
-    r0 = unicode_0 :: static  ('T')
-    r1 = __main__.globals :: static
-    r2 = unicode_1 :: static  ('TypeVar')
-    r3 = r1[r2] :: dict
-    r4 = py_call(r3, r0)
-    r5 = __main__.globals :: static
-    r6 = unicode_0 :: static  ('T')
-    r7 = r5.__setitem__(r6, r4) :: object
-    r8 = __main__.globals :: static
-    r9 = unicode_2 :: static  ('Generic')
-    r10 = r8[r9] :: dict
-    r11 = __main__.globals :: static
-    r12 = unicode_0 :: static  ('T')
-    r13 = r11[r12] :: dict
-    r14 = r10[r13] :: object
-    r15 = (r14)
-    r16 = box(tuple[object], r15)
-    r17 = unicode_3 :: static  ('__main__')
-    r18 = __main__.C_template :: type
-    r19 = pytype_from_template(r18, r16, r17)
-    __main__.C = r19 :: type
-    r20 = __main__.globals :: static
-    r21 = unicode_4 :: static  ('C')
-    r22 = cast(dict, r20)
-    r23 = r22.__setitem__(r21, r19) :: dict
-    r24 = None
-    return r24
