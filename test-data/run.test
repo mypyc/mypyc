@@ -2392,10 +2392,14 @@ from typing import Union
 class A:
     def __init__(self, x: int) -> None:
         self.x = x
+    def f(self, y: int) -> int:
+        return y + self.x
 
 class B:
     def __init__(self, x: object) -> None:
         self.x = x
+    def f(self, y: object) -> object:
+        return y
 
 def f(x: Union[A, str]) -> object:
     if isinstance(x, A):
@@ -2412,14 +2416,19 @@ def g(x: int) -> Union[A, int]:
 def get(x: Union[A, B]) -> object:
     return x.x
 
+def call(x: Union[A, B]) -> object:
+    return x.f(5)
+
 [file driver.py]
-from native import A, B, f, g, get
+from native import A, B, f, g, get, call
 assert f('a') == 'ax'
 assert f(A(4)) == 4
 assert isinstance(g(0), A)
 assert g(2) == 3
 assert get(A(5)) == 5
 assert get(B('x')) == 'x'
+assert call(A(4)) == 9
+assert call(B('x')) == 5
 try:
     f(1)
 except TypeError:
