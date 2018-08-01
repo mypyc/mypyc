@@ -169,9 +169,9 @@ L4:
     r0.__mypyc_next_label__ = r9; r10 = is_error
     return r8
 L5:
-    r11 = 1
-    r12 = r0.i
-    r13 = r12 + r11 :: int
+    r11 = r0.i
+    r12 = 1
+    r13 = r11 += r12 :: int
     r0.i = r13; r14 = is_error
     goto L2
 L6:
@@ -595,9 +595,9 @@ L4:
     r0.__mypyc_next_label__ = r9; r10 = is_error
     return r8
 L5:
-    r11 = 1
-    r12 = r0.x
-    r13 = r12 + r11 :: int
+    r11 = r0.x
+    r12 = 1
+    r13 = r11 += r12 :: int
     r0.x = r13; r14 = is_error
     goto L2
 L6:
