@@ -84,7 +84,6 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
         if (!metatype)
             goto error;
         Py_INCREF(metatype);
-//        ((PyObject *)t)->ob_type = metatype;
     }
 
     PyHeapTypeObject *t = (PyHeapTypeObject*)PyType_GenericAlloc(metatype, 0);
@@ -113,6 +112,31 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
 
     if (init_subclass((PyTypeObject *)t, NULL))
         goto error;
+
+    // If there is a metaclass other than type, we would like to call
+    // its __new__ function. Unfortunately there doesn't seem to be a
+    // good way to mix a C extension class and creating it via a
+    // metaclass. We need to do it anyways, though, in order to
+    // support subclassing Generic[T] prior to Python 3.7.
+    //
+    // We solve this with a kind of atrocious hack: create a parallel
+    // class using the metaclass, and then merge its dict back into
+    // the original class. There are lots of cases where this won't really
+    // work, but for the case of GenericMeta setting a bunch of properties
+    // on the class we should be fine.
+    if (metatype != &PyType_Type) {
+        PyObject *ns = PyDict_New();
+        if (!ns) goto error;
+
+        PyTypeObject *extra = (PyTypeObject *)PyObject_CallFunctionObjArgs(
+            (PyObject *)metatype, name, bases, ns, NULL);
+        if (!extra) goto error;
+
+        if (PyDict_Merge(t->ht_type.tp_dict, extra->tp_dict, 0) != 0)
+            goto error;
+
+        Py_DECREF(extra);
+    }
 
     return (PyObject *)t;
 
