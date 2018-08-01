@@ -1348,32 +1348,42 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         self.for_loop_helper(s.index, s.expr, body, else_block if s.else_body else None, s.line)
 
-    def spill_if_needed(self, value: Value, line: int, can_assign: bool = False,
-                        is_temp: bool = False) -> Union[Value, AssignmentTarget]:
-        """
-        Moves a given Value instance into the environment class for generator functions. For
-        non-generator functions, either allocate a temporary Register (if the value is assignable)
-        or leave the Value instance as it is.
-
-        Returns an AssignmentTarget associated with the Value for generator functions and a Value
-        (possibly a Register) for non-generator functions.
-        """
-        if not self.fn_info.is_generator:
-            if not can_assign:
-                return value
-            # If the variable is assignable, then allocate a temporary register for it.
-            reg = self.alloc_temp(value.type)
-            self.assign(reg, value, line)
-            return reg
-
-        if is_temp:
-            name = '{}{}'.format(TEMP_ATTR_NAME, self.temp_counter)
-            self.temp_counter += 1
-        else:
-            name = value.name
+    def spill(self, value: Value, line: int) -> AssignmentTarget:
+        """Moves a given Value instance into the generator class' environment class."""
+        name = '{}{}'.format(TEMP_ATTR_NAME, self.temp_counter)
+        self.temp_counter += 1
         target = self.add_var_to_env_class(Var(name), value.type, self.fn_info.generator_class)
         self.assign(target, value, line)
         return target
+
+    def maybe_spill(self, value: Value, line: int) -> Union[Value, AssignmentTarget]:
+        """
+        Moves a given Value instance into the environment class for generator functions. For
+        non-generator functions, leaves the Value instance as it is.
+
+        Returns an AssignmentTarget associated with the Value for generator functions and the
+        original Value itself for non-generator functions.
+        """
+        if self.fn_info.is_generator:
+            return self.spill(value, line)
+        return value
+
+    def maybe_spill_assignable(self, value: Value,
+                               line: int) -> Union[Register, AssignmentTarget]:
+        """
+        Moves a given Value instance into the environment class for generator functions. For
+        non-generator functions, allocate a temporary Register.
+
+        Returns an AssignmentTarget associated with the Value for generator functions and an
+        assignable Register for non-generator functions.
+        """
+        if self.fn_info.is_generator:
+            return self.spill(value, line)
+
+        # Allocate a temporary register for the assignable value.
+        reg = self.alloc_temp(value.type)
+        self.assign(reg, value, line)
+        return reg
 
     def for_loop_helper(self, index: Lvalue, expr: Expression,
                         body_insts: GenFunc, else_insts: Optional[GenFunc], line: int) -> None:
@@ -1401,12 +1411,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # TODO: Check argument counts and kinds; check the lvalue
             end = expr.args[0]
             end_reg = self.accept(end)
-            end_target = self.spill_if_needed(end_reg, line, can_assign=False, is_temp=True)
+            end_target = self.maybe_spill(end_reg, line)
 
             # Initialize loop index to 0. Assert that the index target is assignable.
             index_target = self.get_assignment_target(
-                index)  # type: Union[Value, AssignmentTarget]
-            assert isinstance(index_target, (Register, AssignmentTarget))
+                index)  # type: Union[Register, AssignmentTarget]
             self.assign(index_target, self.add(LoadInt(0)), line)
             self.goto(condition_block)
 
@@ -1438,11 +1447,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # environment class.
             expr_reg = self.accept(expr)
             index_reg = self.add(LoadInt(0))
-            expr_target = self.spill_if_needed(expr_reg, line)
-            index_target = self.spill_if_needed(index_reg, line, can_assign=True, is_temp=True)
-
-            # The index target must be assignable.
-            assert isinstance(index_target, (Register, AssignmentTarget))
+            expr_target = self.maybe_spill(expr_reg, line)
+            index_target = self.maybe_spill_assignable(index_reg, line)
 
             condition_block = self.goto_new_block()
 
@@ -1483,8 +1489,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # environment class.
             expr_reg = self.accept(expr)
             iter_reg = self.add(PrimitiveOp([expr_reg], iter_op, line))
-            expr_target = self.spill_if_needed(expr_reg, line)
-            iter_target = self.spill_if_needed(iter_reg, line, is_temp=True)
+            expr_target = self.maybe_spill(expr_reg, line)
+            iter_target = self.maybe_spill(iter_reg, line)
 
             # Create a block for where the __next__ function will be called on the iterator and
             # checked to see if the value returned is NULL, which would signal either the end of

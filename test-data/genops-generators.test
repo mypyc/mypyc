@@ -274,17 +274,17 @@ L1:
     r0.l = r8; r9 = is_error
     r10 = r0.l
     r11 = 0
-    r0.r10 = r10; r12 = is_error
-    r0.__mypyc_temp__0 = r11; r13 = is_error
+    r0.__mypyc_temp__0 = r10; r12 = is_error
+    r0.__mypyc_temp__1 = r11; r13 = is_error
 L2:
-    r14 = r0.r10
+    r14 = r0.__mypyc_temp__0
     r15 = len r14 :: list
-    r16 = r0.__mypyc_temp__0
+    r16 = r0.__mypyc_temp__1
     r17 = r16 < r15 :: int
     if r17 goto L3 else goto L7 :: bool
 L3:
-    r18 = r0.r10
-    r19 = r0.__mypyc_temp__0
+    r18 = r0.__mypyc_temp__0
+    r19 = r0.__mypyc_temp__1
     r20 = r18[r19] :: list
     r21 = cast(object, r20)
     r0.i = r21; r22 = is_error
@@ -295,10 +295,10 @@ L4:
     return r23
 L5:
 L6:
-    r26 = r0.__mypyc_temp__0
+    r26 = r0.__mypyc_temp__1
     r27 = 1
     r28 = r26 + r27 :: int
-    r0.__mypyc_temp__0 = r28; r29 = is_error
+    r0.__mypyc_temp__1 = r28; r29 = is_error
     goto L2
 L7:
     r30 = None
@@ -376,12 +376,12 @@ L0:
 L1:
     r2 = {}
     r3 = 5
-    r0.__mypyc_temp__1 = r3; r4 = is_error
+    r0.__mypyc_temp__2 = r3; r4 = is_error
     r5 = 0
     r0.i = r5; r6 = is_error
 L2:
     r7 = r0.i
-    r8 = r0.__mypyc_temp__1
+    r8 = r0.__mypyc_temp__2
     r9 = r7 < r8 :: int
     if r9 goto L3 else goto L5 :: bool
 L3:
@@ -399,10 +399,10 @@ L5:
     r0.d = r2; r18 = is_error
     r19 = r0.d
     r20 = iter r19 :: object
-    r0.r19 = r19; r21 = is_error
-    r0.__mypyc_temp__2 = r20; r22 = is_error
+    r0.__mypyc_temp__3 = r19; r21 = is_error
+    r0.__mypyc_temp__4 = r20; r22 = is_error
 L6:
-    r23 = r0.__mypyc_temp__2
+    r23 = r0.__mypyc_temp__4
     r24 = next r23 :: object
     if is_error(r24) goto L10 else goto L7
 L7:
@@ -481,12 +481,12 @@ L0:
     goto L9
 L1:
     r2 = 5
-    r0.__mypyc_temp__3 = r2; r3 = is_error
+    r0.__mypyc_temp__5 = r2; r3 = is_error
     r4 = 0
     r0.i = r4; r5 = is_error
 L2:
     r6 = r0.i
-    r7 = r0.__mypyc_temp__3
+    r7 = r0.__mypyc_temp__5
     r8 = r6 < r7 :: int
     if r8 goto L3 else goto L7 :: bool
 L3:
