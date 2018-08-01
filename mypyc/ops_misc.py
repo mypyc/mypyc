@@ -275,7 +275,7 @@ type_op = func_op(
 pytype_from_template_op = custom_op(
     arg_types=[object_rprimitive, object_rprimitive, str_rprimitive],
     result_type=object_rprimitive,
-    error_kind=ERR_NEVER,
+    error_kind=ERR_MAGIC,
     format_str='{dest} = pytype_from_template({comma_args})',
     emit=simple_emit(
         '{dest} = CPyType_FromTemplate((PyTypeObject *){args[0]}, {args[1]}, {args[2]});'))

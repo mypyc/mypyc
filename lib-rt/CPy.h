@@ -5,6 +5,7 @@
 #include <Python.h>
 #include <frameobject.h>
 #include <assert.h>
+#include <pythonsupport.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,17 +73,30 @@ static inline void CPy_FixupTraitVtable(CPyVTableItem *vtable, int count) {
 static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
                                              PyObject *bases,
                                              PyObject *modname) {
-    PyHeapTypeObject *t = (PyHeapTypeObject*)PyType_GenericAlloc(&PyType_Type, 0);
+    PyTypeObject *metatype = Py_TYPE(template_);
+
+    PyObject *old_bases = bases;
+    if (bases) {
+        Py_INCREF(bases);
+        bases = update_bases(old_bases);
+
+        metatype = _PyType_CalculateMetaclass(metatype, bases);
+        if (!metatype)
+            goto error;
+        Py_INCREF(metatype);
+//        ((PyObject *)t)->ob_type = metatype;
+    }
+
+    PyHeapTypeObject *t = (PyHeapTypeObject*)PyType_GenericAlloc(metatype, 0);
+    if (!t)
+        goto error;
     memcpy((char *)t + sizeof(PyVarObject),
            (char *)template_ + sizeof(PyVarObject),
            sizeof(PyTypeObject) - sizeof(PyVarObject));
 
-    if (bases) {
-        Py_INCREF(bases);
-
-        PyTypeObject *metatype = _PyType_CalculateMetaclass(Py_TYPE(template_), bases);
-        Py_INCREF(metatype);
-        ((PyObject *)t)->ob_type = metatype;
+    if (bases != old_bases) {
+        PyObject_SetAttrString((PyObject *)t, "__orig_bases__", old_bases);
+        Py_DECREF(old_bases);
     }
 
     PyObject *name = PyUnicode_FromString(template_->tp_name);
@@ -91,12 +105,20 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
     t->ht_qualname = name;
     t->ht_type.tp_bases = bases;
 
+    // XXX: error handle
     if (PyType_Ready((PyTypeObject *)t) < 0)
-        return NULL;
+        goto error;
 
     PyObject_SetAttrString((PyObject *)t, "__module__", modname);
 
+    if (init_subclass((PyTypeObject *)t, NULL))
+        goto error;
+
     return (PyObject *)t;
+
+error:
+    // XXX get good
+    return NULL;
 }
 
 // Get attribute value using vtable (may return an undefined value)

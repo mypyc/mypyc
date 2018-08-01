@@ -615,10 +615,18 @@ assert not hasattr(b, 'bogus')
 [case testGenericTrivial]
 from typing import TypeVar, Generic
 T = TypeVar('T')
+print('yo')
 class C(Generic[T]):
     pass
-class D(C[int]):
-    pass
+# class D(C[int]):
+#     pass
 
 [file driver.py]
-import native
+from native import C#, D
+print(C.__dict__)
+print(C.mro())
+print(type(C))
+# print(D.__dict__)
+# print(D.mro())
+# print(type(D))
+# D()
