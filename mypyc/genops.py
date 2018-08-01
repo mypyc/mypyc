@@ -1428,32 +1428,65 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                        attr: str,
                        result_type: RType,
                        line: int) -> Value:
+        def get_item_attr(value: Value) -> Value:
+            return self.get_attr(value, attr, result_type, line)
+
+        return self.decompose_union_helper(obj, rtype, result_type, get_item_attr, line)
+
+    def decompose_union_helper(self,
+                               obj: Value,
+                               rtype: RUnion,
+                               result_type: RType,
+                               process_item: Callable[[Value], Value],
+                               line: int) -> Value:
+        """Generate isinstance() + specialized operations for union items.
+
+        Say, for Union[A, B] generate ops resembling this (pseudocode):
+
+            if isinstance(obj, A):
+                result = <result of process_item(cast(A, obj)>
+            else:
+                result = <result of process_item(cast(B, obj)>
+
+        Args:
+            obj: value with a union type
+            rtype: the union type
+            result_type: result of the operation
+            process_item: callback to generate op for a single union item (arg is coerced
+                to union item type)
+            line: line number
+        """
+        # TODO: Optimize cases where a single operation can handle multiple union items
+        #     (say a method is implemented in a common base class)
         fast_items = []
         rest_items = []
         for item in rtype.items:
             if isinstance(item, RInstance):
                 fast_items.append(item)
             else:
+                # For everything but RInstance we fall back to C API
                 rest_items.append(item)
         exit_block = BasicBlock()
         result = self.alloc_temp(result_type)
         for i, item in enumerate(fast_items):
             more_types = i < len(fast_items) - 1 or rest_items
             if more_types:
+                # We are not at the final item so we need one more branch
                 op = self.isinstance(obj, item, line)
                 true_block, false_block = BasicBlock(), BasicBlock()
                 self.add_bool_branch(op, true_block, false_block)
                 self.activate_block(true_block)
             coerced = self.coerce(obj, item, line)
-            temp = self.get_attr(coerced, attr, result_type, line)
+            temp = process_item(coerced)
             temp2 = self.coerce(temp, result_type, line)
             self.add(Assign(result, temp2))
             self.goto(exit_block)
             if more_types:
                 self.activate_block(false_block)
         if rest_items:
-            # For everything else we use slow attribute lookup.
-            temp = self.py_get_attr(obj, attr, line)
+            # For everything else we use generic operation.
+            coerced = self.coerce(obj, object_rprimitive, line)
+            temp = process_item(coerced)
             temp2 = self.coerce(temp, result_type, line)
             self.add(Assign(result, temp2))
         self.activate_block(exit_block)
@@ -1733,6 +1766,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 arg_values = self.coerce_native_call_args(arg_values, decl.bound_sig, base.line)
 
                 return self.add(MethodCall(base, name, arg_values, line))
+        elif isinstance(base.type, RUnion):
+            return self.union_method_call(base, base.type, name, arg_values, return_rtype, line,
+                                          arg_kinds, arg_names)
 
         # Try to do a special-cased method call
         target = self.translate_special_method_call(base, name, arg_values, return_rtype, line)
@@ -1741,6 +1777,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         # Fall back to Python method call
         return self.py_method_call(base, name, arg_values, base.line, arg_kinds, arg_names)
+
+    def union_method_call(self,
+                          base: Value,
+                          obj_type: RUnion,
+                          name: str,
+                          arg_values: List[Value],
+                          return_rtype: RType,
+                          line: int,
+                          arg_kinds: Optional[List[int]],
+                          arg_names: Optional[List[Optional[str]]]) -> Value:
+        def call_union_item(value: Value) -> Value:
+            return self.gen_method_call(value, name, arg_values, return_rtype, line,
+                                        arg_kinds, arg_names)
+
+        return self.decompose_union_helper(base, obj_type, return_rtype, call_union_item, line)
 
     def translate_cast_expr(self, expr: CastExpr) -> Value:
         src = self.accept(expr.expr)

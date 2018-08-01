@@ -247,59 +247,28 @@ L0:
     r2 = cast(union[int, str], r1)
     return r2
 
-[case testUnionTypeAttributeAccess]
+[case testUnionAttributeAccess]
 from typing import Union
 class A:
-    a: str
-    def f(self, x: int) -> None: pass
+    a: int
 class B:
     a: object
-    def f(self, x: int) -> None: pass
-def g1(o: Union[A, B]) -> None:
-    o.f(1)
-def g2(o: Union[A, B]) -> None:
-    o.a
-def g3(o: Union[A, B], s: str) -> None:
+def get(o: Union[A, B]) -> None:
+    z = o.a
+def set(o: Union[A, B], s: str) -> None:
     o.a = s
 
 [out]
-def A.f(self, x):
-    self :: A
-    x :: int
-    r0 :: None
-L0:
-    r0 = None
-    return r0
-def B.f(self, x):
-    self :: B
-    x :: int
-    r0 :: None
-L0:
-    r0 = None
-    return r0
-def g1(o):
-    o :: union[A, B]
-    r0 :: int
-    r1 :: str
-    r2, r3 :: object
-    r4, r5 :: None
-L0:
-    r0 = 1
-    r1 = unicode_0 :: static  ('f')
-    r2 = box(int, r0)
-    r3 = py_method_call(o, r1, r2)
-    r4 = cast(None, r3)
-    r5 = None
-    return r5
-def g2(o):
+def get(o):
     o :: union[A, B]
     r0, r1 :: object
     r2 :: bool
     r3 :: A
-    r4 :: str
-    r5 :: B
-    r6 :: object
-    r7 :: None
+    r4 :: int
+    r5 :: object
+    r6 :: B
+    r7, z :: object
+    r8 :: None
 L0:
     r1 = __main__.A :: type
     r2 = isinstance o, r1
@@ -307,22 +276,104 @@ L0:
 L1:
     r3 = cast(A, o)
     r4 = r3.a
-    r0 = r4
+    r5 = box(int, r4)
+    r0 = r5
     goto L3
 L2:
-    r5 = cast(B, o)
-    r6 = r5.a
-    r0 = r6
+    r6 = cast(B, o)
+    r7 = r6.a
+    r0 = r7
 L3:
-    r7 = None
-    return r7
-def g3(o, s):
+    z = r0
+    r8 = None
+    return r8
+def set(o, s):
     o :: union[A, B]
     s, r0 :: str
     r1 :: bool
     r2 :: None
 L0:
-    r0 = unicode_1 :: static  ('a')
+    r0 = unicode_0 :: static  ('a')
     r1 = setattr o, r0, s
     r2 = None
     return r2
+
+[case testUnionMethodCall]
+from typing import Union
+class A:
+    def f(self, x: int) -> int:
+        return x
+class B:
+    def f(self, x: object) -> object:
+        return x
+class C:
+    def f(self, x: object) -> int:
+        return 0
+def g(o: Union[A, B, C]) -> None:
+    z = o.f(1)
+
+[out]
+def A.f(self, x):
+    self :: A
+    x :: int
+L0:
+    return x
+def B.f(self, x):
+    self :: B
+    x :: object
+L0:
+    return x
+def C.f(self, x):
+    self :: C
+    x :: object
+    r0 :: int
+L0:
+    r0 = 0
+    return r0
+def g(o):
+    o :: union[A, B, C]
+    r0 :: int
+    r1, r2 :: object
+    r3 :: bool
+    r4 :: A
+    r5 :: int
+    r6, r7 :: object
+    r8 :: bool
+    r9 :: B
+    r10, r11 :: object
+    r12 :: C
+    r13 :: object
+    r14 :: int
+    r15, z :: object
+    r16 :: None
+L0:
+    r0 = 1
+    r2 = __main__.A :: type
+    r3 = isinstance o, r2
+    if r3 goto L1 else goto L2 :: bool
+L1:
+    r4 = cast(A, o)
+    r5 = r4.f(r0)
+    r6 = box(int, r5)
+    r1 = r6
+    goto L5
+L2:
+    r7 = __main__.B :: type
+    r8 = isinstance o, r7
+    if r8 goto L3 else goto L4 :: bool
+L3:
+    r9 = cast(B, o)
+    r10 = box(int, r0)
+    r11 = r9.f(r10)
+    r1 = r11
+    goto L5
+L4:
+    r12 = cast(C, o)
+    r13 = box(int, r0)
+    r14 = r12.f(r13)
+    r15 = box(int, r14)
+    r1 = r15
+L5:
+    z = r1
+    r16 = None
+    return r16
