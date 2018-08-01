@@ -73,20 +73,26 @@ static inline void CPy_FixupTraitVtable(CPyVTableItem *vtable, int count) {
 static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
                                              PyObject *bases,
                                              PyObject *modname) {
-    PyTypeObject *metatype = Py_TYPE(template_);
+    PyHeapTypeObject *t = NULL;
+    PyTypeObject *dummy_class = NULL;
+
+    PyTypeObject *metaclass = Py_TYPE(template_);
 
     PyObject *old_bases = bases;
     if (bases) {
         Py_INCREF(bases);
         bases = update_bases(old_bases);
 
-        metatype = _PyType_CalculateMetaclass(metatype, bases);
-        if (!metatype)
+        // Find the appropriate metaclass from our base classes. We
+        // care about this because Generic uses a metaclass prior to
+        // Python 3.7.
+        metaclass = _PyType_CalculateMetaclass(metaclass, bases);
+        if (!metaclass)
             goto error;
-        Py_INCREF(metatype);
     }
 
-    PyHeapTypeObject *t = (PyHeapTypeObject*)PyType_GenericAlloc(metatype, 0);
+    // Allocate the type and then copy the main stuff in.
+    t = (PyHeapTypeObject*)PyType_GenericAlloc(metaclass, 0);
     if (!t)
         goto error;
     memcpy((char *)t + sizeof(PyVarObject),
@@ -94,21 +100,24 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
            sizeof(PyTypeObject) - sizeof(PyVarObject));
 
     if (bases != old_bases) {
-        PyObject_SetAttrString((PyObject *)t, "__orig_bases__", old_bases);
-        Py_DECREF(old_bases);
+        if (PyObject_SetAttrString((PyObject *)t, "__orig_bases__", old_bases) < 0)
+            goto error;
     }
 
     PyObject *name = PyUnicode_FromString(template_->tp_name);
+    if (!name)
+        goto error;
     t->ht_name = name;
     Py_INCREF(name);
     t->ht_qualname = name;
+    Py_XINCREF(bases);
     t->ht_type.tp_bases = bases;
 
-    // XXX: error handle
     if (PyType_Ready((PyTypeObject *)t) < 0)
         goto error;
 
-    PyObject_SetAttrString((PyObject *)t, "__module__", modname);
+    if (PyObject_SetAttrString((PyObject *)t, "__module__", modname) < 0)
+        goto error;
 
     if (init_subclass((PyTypeObject *)t, NULL))
         goto error;
@@ -124,24 +133,32 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
     // the original class. There are lots of cases where this won't really
     // work, but for the case of GenericMeta setting a bunch of properties
     // on the class we should be fine.
-    if (metatype != &PyType_Type) {
+    if (metaclass != &PyType_Type) {
         PyObject *ns = PyDict_New();
         if (!ns) goto error;
 
-        PyTypeObject *extra = (PyTypeObject *)PyObject_CallFunctionObjArgs(
-            (PyObject *)metatype, name, bases, ns, NULL);
-        if (!extra) goto error;
-
-        if (PyDict_Merge(t->ht_type.tp_dict, extra->tp_dict, 0) != 0)
+        dummy_class = (PyTypeObject *)PyObject_CallFunctionObjArgs(
+            (PyObject *)metaclass, name, bases, ns, NULL);
+        Py_DECREF(ns);
+        if (!dummy_class)
             goto error;
 
-        Py_DECREF(extra);
+        if (PyDict_Merge(t->ht_type.tp_dict, dummy_class->tp_dict, 0) != 0)
+            goto error;
+
+        Py_DECREF(dummy_class);
     }
+
+    Py_XDECREF(bases);
+    Py_XDECREF(old_bases);
 
     return (PyObject *)t;
 
 error:
-    // XXX get good
+    Py_XDECREF(t);
+    Py_XDECREF(bases);
+    Py_XDECREF(old_bases);
+    Py_XDECREF(dummy_class);
     return NULL;
 }
 
