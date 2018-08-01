@@ -476,6 +476,26 @@ L0:
     z = r7
     r8 = None
     return r8
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testAssert]
 from typing import Optional
@@ -731,7 +751,7 @@ L0:
     r1 = 2
     r2 = Dummy(r0, r1)
     dummy = r2
-    r3 = unicode_4 :: static  ('x')
+    r3 = unicode_6 :: static  ('x')
     r4 = delattr dummy, r3
     r5 = None
     return r5
@@ -748,9 +768,29 @@ L0:
     r1 = 2
     r2 = Dummy(r0, r1)
     dummy = r2
-    r3 = unicode_4 :: static  ('x')
+    r3 = unicode_6 :: static  ('x')
     r4 = delattr dummy, r3
-    r5 = unicode_5 :: static  ('y')
+    r5 = unicode_7 :: static  ('y')
     r6 = delattr dummy, r5
     r7 = None
     return r7
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_4 :: static  ('__main__')
+    r2 = __main__.Dummy_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.Dummy = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_5 :: static  ('Dummy')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8

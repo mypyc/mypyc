@@ -62,11 +62,31 @@ L0:
     a = r4
     r5 = unbox(int, a)
     n = r5
-    r6 = unicode_0 :: static  ('a')
+    r6 = unicode_2 :: static  ('a')
     r7 = box(int, n)
     r8 = setattr a, r6, r7
     r9 = None
     return r9
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.C_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.C = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('C')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testCoerceAnyInOps]
 from typing import Any, List

@@ -764,6 +764,26 @@ L0:
     o = r4
     r5 = None
     return r5
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testDownCast]
 from typing import cast, List, Tuple
@@ -796,6 +816,26 @@ L0:
     t = r4
     r5 = None
     return r5
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testDownCastSpecialCases]
 from typing import cast, Optional, Tuple
@@ -826,6 +866,26 @@ L0:
     t = r3
     r4 = None
     return r4
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testSuccessfulCast]
 from typing import cast, Optional, Tuple, List, Dict
@@ -878,6 +938,26 @@ L0:
     d2 = d
     r1 = None
     return r1
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testGenericSetItem]
 from typing import Any
@@ -1279,6 +1359,26 @@ L3:
     return r5
 L4:
     unreachable
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testRaise]
 def foo() -> None:
@@ -1459,14 +1559,34 @@ def g(a):
     r4 :: str
     r5, r6 :: None
 L0:
-    r0 = unicode_0 :: static  ('a')
+    r0 = unicode_2 :: static  ('a')
     r1 = 0
     r2 = a.f(r1, r0)
     r3 = 1
-    r4 = unicode_1 :: static  ('b')
+    r4 = unicode_3 :: static  ('b')
     r5 = a.f(r3, r4)
     r6 = None
     return r6
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testStarArgs]
 from typing import Tuple
@@ -1713,7 +1833,7 @@ L1:
 L2:
     if is_error(z) goto L3 else goto L4
 L3:
-    r1 = unicode_0 :: static  ('test')
+    r1 = unicode_2 :: static  ('test')
     z = r1
 L4:
     r2 = None
@@ -1739,6 +1859,26 @@ L0:
     r8 = a.f(r6, r5, r7)
     r9 = None
     return r9
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testListComprehension]
 from typing import List
@@ -1994,6 +2134,26 @@ L0:
     r1 = self.value
     r2 = r0 * r1 :: int
     return r2
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.PropertyHolder_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.PropertyHolder = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('PropertyHolder')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testPropertyDerivedGen]
 from typing import Callable
@@ -2108,7 +2268,7 @@ def DerivedProperty.next(self):
 L0:
     r0 = self._incr_func
     r1 = self.value
-    r2 = unicode_0 :: static  ('_incr_func')
+    r2 = unicode_3 :: static  ('_incr_func')
     r3 = box(int, r1)
     r4 = py_method_call(self, r2, r3)
     r5 = unbox(int, r4)
@@ -2145,11 +2305,11 @@ def AgainProperty.next(self):
 L0:
     r0 = self._incr_func
     r1 = self.value
-    r2 = unicode_0 :: static  ('_incr_func')
+    r2 = unicode_3 :: static  ('_incr_func')
     r3 = box(int, r1)
     r4 = py_method_call(self, r2, r3)
     r5 = unbox(int, r4)
-    r6 = unicode_0 :: static  ('_incr_func')
+    r6 = unicode_3 :: static  ('_incr_func')
     r7 = box(int, r5)
     r8 = py_method_call(self, r6, r7)
     r9 = unbox(int, r8)
@@ -2187,6 +2347,64 @@ L0:
     r0 = self.bad_value
     r1 = box(int, r0)
     return r1
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: object
+    r9 :: tuple[object]
+    r10 :: object
+    r11 :: str
+    r12, r13, r14 :: object
+    r15 :: str
+    r16 :: dict
+    r17 :: bool
+    r18 :: object
+    r19 :: tuple[object]
+    r20 :: object
+    r21 :: str
+    r22, r23, r24 :: object
+    r25 :: str
+    r26 :: dict
+    r27 :: bool
+    r28 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.BaseProperty_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.BaseProperty = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('BaseProperty')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = __main__.BaseProperty :: type
+    r9 = (r8)
+    r10 = box(tuple[object], r9)
+    r11 = unicode_0 :: static  ('__main__')
+    r12 = __main__.DerivedProperty_template :: type
+    r13 = pytype_from_template(r12, r10, r11)
+    __main__.DerivedProperty = r13 :: type
+    r14 = __main__.globals :: static
+    r15 = unicode_2 :: static  ('DerivedProperty')
+    r16 = cast(dict, r14)
+    r17 = r16.__setitem__(r15, r13) :: dict
+    r18 = __main__.DerivedProperty :: type
+    r19 = (r18)
+    r20 = box(tuple[object], r19)
+    r21 = unicode_0 :: static  ('__main__')
+    r22 = __main__.AgainProperty_template :: type
+    r23 = pytype_from_template(r22, r20, r21)
+    __main__.AgainProperty = r23 :: type
+    r24 = __main__.globals :: static
+    r25 = unicode_4 :: static  ('AgainProperty')
+    r26 = cast(dict, r24)
+    r27 = r26.__setitem__(r25, r23) :: dict
+    r28 = None
+    return r28
 
 [case testPropertyTraitSubclassing]
 from mypy_extensions import trait
@@ -2244,6 +2462,45 @@ L0:
     r0 = self.boxed
     r1 = box(int, r0)
     return r1
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: object
+    r9 :: tuple[object]
+    r10 :: object
+    r11 :: str
+    r12, r13, r14 :: object
+    r15 :: str
+    r16 :: dict
+    r17 :: bool
+    r18 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.SubclassedTrait_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.SubclassedTrait = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('SubclassedTrait')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = __main__.SubclassedTrait :: type
+    r9 = (r8)
+    r10 = box(tuple[object], r9)
+    r11 = unicode_0 :: static  ('__main__')
+    r12 = __main__.DerivingObject_template :: type
+    r13 = pytype_from_template(r12, r10, r11)
+    __main__.DerivingObject = r13 :: type
+    r14 = __main__.globals :: static
+    r15 = unicode_2 :: static  ('DerivingObject')
+    r16 = cast(dict, r14)
+    r17 = r16.__setitem__(r15, r13) :: dict
+    r18 = None
+    return r18
 
 [case testNativeIndex]
 from typing import List
@@ -2270,6 +2527,26 @@ L0:
     r2 = unbox(int, r1)
     r3 = r0 + r2 :: int
     return r3
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testTypeAlias]
 from typing import List, NewType, NamedTuple

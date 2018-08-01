@@ -21,6 +21,26 @@ L1:
 L2:
     r2 = 2
     return r2
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testIsNotNone]
 from typing import Optional
@@ -46,6 +66,26 @@ L1:
 L2:
     r3 = 2
     return r3
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testAssignToOptional]
 from typing import Optional
@@ -94,6 +134,26 @@ L0:
     a.a = r8; r9 = is_error
     r10 = None
     return r10
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testBoxOptionalListItem]
 from typing import List, Optional
@@ -152,6 +212,26 @@ L1:
     return r4
 L2:
     return y
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testPartialOptionalType]
 def f(y: int) -> None:

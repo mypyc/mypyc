@@ -847,8 +847,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                           [self.load_globals_dict(), self.load_static_unicode(cdef.name),
                            tp], cdef.line)
 
-        # XXX: *WE* need to do the trait patchup!
-
+        # TODO: *WE* need to do the trait patchup here because something could try to
+        # use it right away.
 
     def visit_import(self, node: Import) -> None:
         if node.is_unreachable or node.is_mypy_only:

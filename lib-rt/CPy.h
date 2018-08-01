@@ -85,7 +85,6 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
         ((PyObject *)t)->ob_type = metatype;
     }
 
-
     PyObject *name = PyUnicode_FromString(template_->tp_name);
     t->ht_name = name;
     Py_INCREF(name);

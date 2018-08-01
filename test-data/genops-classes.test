@@ -11,6 +11,26 @@ def f(a):
 L0:
     r0 = a.x
     return r0
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testSetAttribute]
 class A:
@@ -29,6 +49,26 @@ L0:
     a.x = r0; r1 = is_error
     r2 = None
     return r2
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testUserClassInList]
 class C:
@@ -65,6 +105,26 @@ L0:
     r8 = 1
     r9 = r7 + r8 :: int
     return r9
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.C_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.C = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('C')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testMethodCall]
 class A:
@@ -91,10 +151,30 @@ def g(a):
     r3 :: None
 L0:
     r0 = 1
-    r1 = unicode_0 :: static  ('hi')
+    r1 = unicode_2 :: static  ('hi')
     r2 = a.f(r0, r1)
     r3 = None
     return r3
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testForwardUse]
 def g(a: A) -> int:
@@ -110,6 +190,26 @@ def g(a):
 L0:
     r0 = a.n
     return r0
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
+    return r8
 
 [case testOptionalMember]
 from typing import Optional
@@ -142,6 +242,26 @@ L1:
     return r7
 L2:
     r8 = 1
+    return r8
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.Node_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.Node = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('Node')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = None
     return r8
 
 [case testSubclass]
@@ -177,6 +297,45 @@ L0:
     self.y = r2; r3 = is_error
     r4 = None
     return r4
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: object
+    r9 :: tuple[object]
+    r10 :: object
+    r11 :: str
+    r12, r13, r14 :: object
+    r15 :: str
+    r16 :: dict
+    r17 :: bool
+    r18 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = __main__.A :: type
+    r9 = (r8)
+    r10 = box(tuple[object], r9)
+    r11 = unicode_0 :: static  ('__main__')
+    r12 = __main__.B_template :: type
+    r13 = pytype_from_template(r12, r10, r11)
+    __main__.B = r13 :: type
+    r14 = __main__.globals :: static
+    r15 = unicode_2 :: static  ('B')
+    r16 = cast(dict, r14)
+    r17 = r16.__setitem__(r15, r13) :: dict
+    r18 = None
+    return r18
 
 [case testAttrLvalue]
 class O(object):
@@ -207,6 +366,34 @@ L0:
     r2 = r0 += r1 :: int
     o.x = r2; r3 = is_error
     return o
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2 :: object
+    r3 :: tuple[object]
+    r4 :: object
+    r5 :: str
+    r6, r7, r8 :: object
+    r9 :: str
+    r10 :: dict
+    r11 :: bool
+    r12 :: None
+L0:
+    r0 = builtins.module :: static
+    r1 = unicode_0 :: static  ('object')
+    r2 = getattr r0, r1
+    r3 = (r2)
+    r4 = box(tuple[object], r3)
+    r5 = unicode_1 :: static  ('__main__')
+    r6 = __main__.O_template :: type
+    r7 = pytype_from_template(r6, r4, r5)
+    __main__.O = r7 :: type
+    r8 = __main__.globals :: static
+    r9 = unicode_2 :: static  ('O')
+    r10 = cast(dict, r8)
+    r11 = r10.__setitem__(r9, r7) :: dict
+    r12 = None
+    return r12
 
 [case testSubclassSpecialize2]
 class A:
@@ -258,7 +445,7 @@ def C.foo(self, x):
     r4 :: int
 L0:
     r0 = builtins.module :: static
-    r1 = unicode_0 :: static  ('id')
+    r1 = unicode_4 :: static  ('id')
     r2 = getattr r0, r1
     r3 = py_call(r2, x)
     r4 = unbox(int, r3)
@@ -303,6 +490,64 @@ def use_c(x, y):
 L0:
     r0 = x.foo(y)
     return r0
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: object
+    r9 :: tuple[object]
+    r10 :: object
+    r11 :: str
+    r12, r13, r14 :: object
+    r15 :: str
+    r16 :: dict
+    r17 :: bool
+    r18 :: object
+    r19 :: tuple[object]
+    r20 :: object
+    r21 :: str
+    r22, r23, r24 :: object
+    r25 :: str
+    r26 :: dict
+    r27 :: bool
+    r28 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = __main__.A :: type
+    r9 = (r8)
+    r10 = box(tuple[object], r9)
+    r11 = unicode_0 :: static  ('__main__')
+    r12 = __main__.B_template :: type
+    r13 = pytype_from_template(r12, r10, r11)
+    __main__.B = r13 :: type
+    r14 = __main__.globals :: static
+    r15 = unicode_2 :: static  ('B')
+    r16 = cast(dict, r14)
+    r17 = r16.__setitem__(r15, r13) :: dict
+    r18 = __main__.B :: type
+    r19 = (r18)
+    r20 = box(tuple[object], r19)
+    r21 = unicode_0 :: static  ('__main__')
+    r22 = __main__.C_template :: type
+    r23 = pytype_from_template(r22, r20, r21)
+    __main__.C = r23 :: type
+    r24 = __main__.globals :: static
+    r25 = unicode_3 :: static  ('C')
+    r26 = cast(dict, r24)
+    r27 = r26.__setitem__(r25, r23) :: dict
+    r28 = None
+    return r28
 
 [case testIsInstance]
 class A: pass
@@ -328,6 +573,45 @@ L1:
 L2:
     r3 = B()
     return r3
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: object
+    r9 :: tuple[object]
+    r10 :: object
+    r11 :: str
+    r12, r13, r14 :: object
+    r15 :: str
+    r16 :: dict
+    r17 :: bool
+    r18 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = __main__.A :: type
+    r9 = (r8)
+    r10 = box(tuple[object], r9)
+    r11 = unicode_0 :: static  ('__main__')
+    r12 = __main__.B_template :: type
+    r13 = pytype_from_template(r12, r10, r11)
+    __main__.B = r13 :: type
+    r14 = __main__.globals :: static
+    r15 = unicode_2 :: static  ('B')
+    r16 = cast(dict, r14)
+    r17 = r16.__setitem__(r15, r13) :: dict
+    r18 = None
+    return r18
 
 [case testFakeSuper]
 class A:
@@ -358,6 +642,45 @@ L0:
     self.y = y; r1 = is_error
     r2 = None
     return r2
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: object
+    r9 :: tuple[object]
+    r10 :: object
+    r11 :: str
+    r12, r13, r14 :: object
+    r15 :: str
+    r16 :: dict
+    r17 :: bool
+    r18 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = __main__.A :: type
+    r9 = (r8)
+    r10 = box(tuple[object], r9)
+    r11 = unicode_0 :: static  ('__main__')
+    r12 = __main__.B_template :: type
+    r13 = pytype_from_template(r12, r10, r11)
+    __main__.B = r13 :: type
+    r14 = __main__.globals :: static
+    r15 = unicode_2 :: static  ('B')
+    r16 = cast(dict, r14)
+    r17 = r16.__setitem__(r15, r13) :: dict
+    r18 = None
+    return r18
 
 [case testClassMethod]
 class C:
@@ -424,6 +747,45 @@ L0:
     self.y = y; r1 = is_error
     r2 = None
     return r2
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: object
+    r9 :: tuple[object]
+    r10 :: object
+    r11 :: str
+    r12, r13, r14 :: object
+    r15 :: str
+    r16 :: dict
+    r17 :: bool
+    r18 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = __main__.A :: type
+    r9 = (r8)
+    r10 = box(tuple[object], r9)
+    r11 = unicode_0 :: static  ('__main__')
+    r12 = __main__.B_template :: type
+    r13 = pytype_from_template(r12, r10, r11)
+    __main__.B = r13 :: type
+    r14 = __main__.globals :: static
+    r15 = unicode_2 :: static  ('B')
+    r16 = cast(dict, r14)
+    r17 = r16.__setitem__(r15, r13) :: dict
+    r18 = None
+    return r18
 
 [case testSuper2]
 from mypy_extensions import trait
@@ -448,6 +810,45 @@ L0:
     r0 = T.foo(self)
     r1 = None
     return r1
+def __top_level__():
+    r0 :: object
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: object
+    r9 :: tuple[object]
+    r10 :: object
+    r11 :: str
+    r12, r13, r14 :: object
+    r15 :: str
+    r16 :: dict
+    r17 :: bool
+    r18 :: None
+L0:
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.T_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.T = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('T')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = __main__.T :: type
+    r9 = (r8)
+    r10 = box(tuple[object], r9)
+    r11 = unicode_0 :: static  ('__main__')
+    r12 = __main__.X_template :: type
+    r13 = pytype_from_template(r12, r10, r11)
+    __main__.X = r13 :: type
+    r14 = __main__.globals :: static
+    r15 = unicode_2 :: static  ('X')
+    r16 = cast(dict, r14)
+    r17 = r16.__setitem__(r15, r13) :: dict
+    r18 = None
+    return r18
 
 [case testClassVariable]
 from typing import ClassVar
@@ -464,25 +865,40 @@ def f():
     r3 :: int
 L0:
     r0 = __main__.A :: type
-    r1 = unicode_0 :: static  ('x')
+    r1 = unicode_2 :: static  ('x')
     r2 = getattr r0, r1
     r3 = unbox(int, r2)
     return r3
 def __top_level__():
     r0 :: object
-    r1 :: int
-    r2 :: str
-    r3 :: object
-    r4 :: bool
-    r5 :: None
+    r1 :: str
+    r2, r3, r4 :: object
+    r5 :: str
+    r6 :: dict
+    r7 :: bool
+    r8 :: object
+    r9 :: int
+    r10 :: str
+    r11 :: object
+    r12 :: bool
+    r13 :: None
 L0:
-    r0 = __main__.A :: type
-    r1 = 10
-    r2 = unicode_0 :: static  ('x')
-    r3 = box(int, r1)
-    r4 = setattr r0, r2, r3
-    r5 = None
-    return r5
+    r0 = <error> :: object
+    r1 = unicode_0 :: static  ('__main__')
+    r2 = __main__.A_template :: type
+    r3 = pytype_from_template(r2, r0, r1)
+    __main__.A = r3 :: type
+    r4 = __main__.globals :: static
+    r5 = unicode_1 :: static  ('A')
+    r6 = cast(dict, r4)
+    r7 = r6.__setitem__(r5, r3) :: dict
+    r8 = __main__.A :: type
+    r9 = 10
+    r10 = unicode_2 :: static  ('x')
+    r11 = box(int, r9)
+    r12 = setattr r8, r10, r11
+    r13 = None
+    return r13
 
 [case testDefaultVars]
 from typing import ClassVar, Optional
@@ -597,3 +1013,51 @@ class C(Generic[T]):
     pass
 
 [out]
+def __top_level__():
+    r0 :: str
+    r1 :: object
+    r2 :: str
+    r3, r4, r5 :: object
+    r6 :: str
+    r7 :: bool
+    r8 :: object
+    r9 :: str
+    r10, r11 :: object
+    r12 :: str
+    r13, r14 :: object
+    r15 :: tuple[object]
+    r16 :: object
+    r17 :: str
+    r18, r19, r20 :: object
+    r21 :: str
+    r22 :: dict
+    r23 :: bool
+    r24 :: None
+L0:
+    r0 = unicode_0 :: static  ('T')
+    r1 = __main__.globals :: static
+    r2 = unicode_1 :: static  ('TypeVar')
+    r3 = r1[r2] :: dict
+    r4 = py_call(r3, r0)
+    r5 = __main__.globals :: static
+    r6 = unicode_0 :: static  ('T')
+    r7 = r5.__setitem__(r6, r4) :: object
+    r8 = __main__.globals :: static
+    r9 = unicode_2 :: static  ('Generic')
+    r10 = r8[r9] :: dict
+    r11 = __main__.globals :: static
+    r12 = unicode_0 :: static  ('T')
+    r13 = r11[r12] :: dict
+    r14 = r10[r13] :: object
+    r15 = (r14)
+    r16 = box(tuple[object], r15)
+    r17 = unicode_3 :: static  ('__main__')
+    r18 = __main__.C_template :: type
+    r19 = pytype_from_template(r18, r16, r17)
+    __main__.C = r19 :: type
+    r20 = __main__.globals :: static
+    r21 = unicode_4 :: static  ('C')
+    r22 = cast(dict, r20)
+    r23 = r22.__setitem__(r21, r19) :: dict
+    r24 = None
+    return r24
