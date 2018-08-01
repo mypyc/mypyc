@@ -947,7 +947,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # the Python parser strips the '=' from operator assignment statements, so re-add it
         op = stmt.op + '='
         res = self.binary_op(target_value, rreg, op, stmt.line)
-        # usually operator assignments are done in-place; but when target doesn't support that we need to manually assign
+        # usually operator assignments are done in-place
+        # but when target doesn't support that we need to manually assign
         self.assign_to_target(target, res, res.line)
         return INVALID_VALUE
 
