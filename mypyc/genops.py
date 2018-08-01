@@ -942,14 +942,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         """Operator assignment statement such as x += 1"""
         self.disallow_class_assignments([stmt.lvalue])
         target = self.get_assignment_target(stmt.lvalue)
-        target_value = self.read_from_target(target, stmt.line)
+        target_value = self.read(target, stmt.line)
         rreg = self.accept(stmt.rvalue)
         # the Python parser strips the '=' from operator assignment statements, so re-add it
         op = stmt.op + '='
         res = self.binary_op(target_value, rreg, op, stmt.line)
         # usually operator assignments are done in-place
         # but when target doesn't support that we need to manually assign
-        self.assign_to_target(target, res, res.line)
+        self.assign(target, res, res.line)
 
     def get_assignment_target(self, lvalue: Lvalue) -> AssignmentTarget:
         if isinstance(lvalue, NameExpr):
