@@ -5,18 +5,18 @@ def f() -> None:
         x = x + i
 [out]
 def f():
-    r0, x, i, r1, r2 :: int
+    r0, x, r1, i, r2 :: int
     r3 :: bool
     r4, r5, r6 :: int
     r7 :: None
 L0:
     r0 = 0
     x = r0
-    r1 = 0
-    i = r1
+    r1 = 5
+    r2 = 0
+    i = r2
 L1:
-    r2 = 5
-    r3 = i < r2 :: int
+    r3 = i < r1 :: int
     if r3 goto L2 else goto L4 :: bool
 L2:
     r4 = x + i :: int
@@ -58,16 +58,16 @@ def f() -> None:
         break
 [out]
 def f():
-    n, r0, r1 :: int
+    r0, n, r1 :: int
     r2 :: bool
     r3, r4 :: int
     r5 :: None
 L0:
-    r0 = 0
-    n = r0
+    r0 = 5
+    r1 = 0
+    n = r1
 L1:
-    r1 = 5
-    r2 = n < r1 :: int
+    r2 = n < r0 :: int
     if r2 goto L2 else goto L4 :: bool
 L2:
     goto L4
@@ -141,16 +141,16 @@ def f() -> None:
         continue
 [out]
 def f():
-    n, r0, r1 :: int
+    r0, n, r1 :: int
     r2 :: bool
     r3, r4 :: int
     r5 :: None
 L0:
-    r0 = 0
-    n = r0
+    r0 = 5
+    r1 = 0
+    n = r1
 L1:
-    r1 = 5
-    r2 = n < r1 :: int
+    r2 = n < r0 :: int
     if r2 goto L2 else goto L4 :: bool
 L2:
 L3:
@@ -207,29 +207,29 @@ def f(ls: List[int]) -> int:
 [out]
 def f(ls):
     ls :: list
-    r0, y, r1, r2, r3, r4 :: int
-    r5 :: bool
-    r6 :: object
-    x, r7, r8, r9 :: int
+    r0, y, r1, r2, r3 :: int
+    r4 :: bool
+    r5 :: object
+    x, r6, r7, r8, r9 :: int
 L0:
     r0 = 0
     y = r0
-    r2 = 0
-    r1 = r2
-    r3 = 1
+    r1 = 0
+    r2 = r1
 L1:
-    r4 = len ls :: list
-    r5 = r1 < r4 :: int
-    if r5 goto L2 else goto L4 :: bool
+    r3 = len ls :: list
+    r4 = r2 < r3 :: int
+    if r4 goto L2 else goto L4 :: bool
 L2:
-    r6 = ls[r1] :: list
-    r7 = unbox(int, r6)
-    x = r7
-    r8 = y + x :: int
-    y = r8
+    r5 = ls[r2] :: list
+    r6 = unbox(int, r5)
+    x = r6
+    r7 = y + x :: int
+    y = r7
 L3:
-    r9 = r1 + r3 :: int
-    r1 = r9
+    r8 = 1
+    r9 = r2 + r8 :: int
+    r2 = r9
     goto L1
 L4:
     return y

@@ -7,8 +7,7 @@ TYPE_PREFIX = 'CPyType_'  # Type object struct
 
 ENV_ATTR_NAME = '__mypyc_env__'
 NEXT_LABEL_ATTR_NAME = '__mypyc_next_label__'
-INDEX_ATTR_NAME = '__mypyc_index__'
-ITERATOR_ATTR_NAME = '__mypyc_iterator__'
+TEMP_ATTR_NAME = '__mypyc_temp__'
 LAMBDA_NAME = '__mypyc_lambda__'
 
 MAX_SHORT_INT = (1 << 62) - 1

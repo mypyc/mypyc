@@ -2386,18 +2386,6 @@ g()
 (((1, 2), 2), 1, 'hi', 'hi2')
 caught the exception
 
-[case testYieldForLoop]
-from typing import Iterable
-
-def yield_for_loop() -> Iterable:
-    l = [range(5)]
-    for i in l:
-        yield i
-
-[file driver.py]
-from native import yield_for_loop
-
-
 [case testYield]
 from typing import Generator, Iterable, Union
 def yield_three_times() -> Iterable[int]:
@@ -2411,15 +2399,16 @@ def yield_twice_and_return() -> Generator[int, None, int]:
     return 4
     yield 3
 
-def yield_while_loop() -> Generator:
+def yield_while_loop() -> Generator[int, None, int]:
     i = 0
     while i < 5:
         if i == 3:
             return i
         yield i
         i += 1
+    return -1
 
-def yield_for_loop() -> Iterable:
+def yield_for_loop() -> Iterable[int]:
     l = [i for i in range(3)]
     for i in l:
         yield i
@@ -2428,10 +2417,13 @@ def yield_for_loop() -> Iterable:
     for k in d:
         yield k
 
-    for i in range(5):
+    for i in range(3):
         yield i
 
-def yield_with_except() -> Generator:
+    for i in range(three()):
+        yield i
+
+def yield_with_except() -> Generator[int, None, None]:
     yield 10
     try:
         return
@@ -2451,6 +2443,9 @@ def complex_yield(a: int, b: str, c: float) -> Generator[Union[str, int], None, 
             dummy_var = 1
         x += 1
     return c
+
+def three() -> int:
+    return 3
 
 [file driver.py]
 from native import yield_three_times, yield_twice_and_return, yield_while_loop, yield_for_loop, yield_with_except, complex_yield
@@ -2490,7 +2485,7 @@ except StopIteration as e:
     assert e.value is None
 
 generator = yield_for_loop()
-for i in range(2):
+for i in range(4):
     assert next(generator) == 0
     assert next(generator) == 1
     assert next(generator) == 2

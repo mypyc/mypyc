@@ -237,27 +237,28 @@ def yield_for_loop_list__gen.__next__(self):
     r5, r6, r7 :: object
     r8 :: list
     r9 :: bool
-    r10 :: int
-    r11 :: bool
-    r12 :: list
-    r13, r14 :: int
-    r15 :: bool
-    r16 :: list
-    r17 :: int
-    r18, r19 :: object
-    r20 :: bool
-    r21 :: object
-    r22 :: int
-    r23 :: bool
-    r24, r25, r26 :: int
-    r27 :: bool
-    r28 :: None
-    r29 :: int
-    r30, r31 :: bool
-    r32 :: int
-    r33 :: bool
+    r10 :: list
+    r11 :: int
+    r12, r13 :: bool
+    r14 :: list
+    r15, r16 :: int
+    r17 :: bool
+    r18 :: list
+    r19 :: int
+    r20, r21 :: object
+    r22 :: bool
+    r23 :: object
+    r24 :: int
+    r25 :: bool
+    r26, r27, r28 :: int
+    r29 :: bool
+    r30 :: None
+    r31 :: int
+    r32, r33 :: bool
     r34 :: int
-    r35, r36 :: bool
+    r35 :: bool
+    r36 :: int
+    r37, r38 :: bool
 L0:
     r0 = self.__mypyc_env__
     r1 = r0.__mypyc_next_label__
@@ -271,47 +272,49 @@ L1:
     r7 = py_call(r5, r6)
     r8 = [r7]
     r0.l = r8; r9 = is_error
-    r10 = 0
-    r0.__mypyc_index__0 = r10; r11 = is_error
+    r10 = r0.l
+    r11 = 0
+    r0.r10 = r10; r12 = is_error
+    r0.__mypyc_temp__0 = r11; r13 = is_error
 L2:
-    r12 = r0.l
-    r13 = len r12 :: list
-    r14 = r0.__mypyc_index__0
-    r15 = r14 < r13 :: int
-    if r15 goto L3 else goto L7 :: bool
+    r14 = r0.r10
+    r15 = len r14 :: list
+    r16 = r0.__mypyc_temp__0
+    r17 = r16 < r15 :: int
+    if r17 goto L3 else goto L7 :: bool
 L3:
-    r16 = r0.l
-    r17 = r0.__mypyc_index__0
-    r18 = r16[r17] :: list
-    r19 = cast(object, r18)
-    r0.i = r19; r20 = is_error
+    r18 = r0.r10
+    r19 = r0.__mypyc_temp__0
+    r20 = r18[r19] :: list
+    r21 = cast(object, r20)
+    r0.i = r21; r22 = is_error
 L4:
-    r21 = r0.i
-    r22 = 1
-    r0.__mypyc_next_label__ = r22; r23 = is_error
-    return r21
+    r23 = r0.i
+    r24 = 1
+    r0.__mypyc_next_label__ = r24; r25 = is_error
+    return r23
 L5:
 L6:
-    r24 = r0.__mypyc_index__0
-    r25 = 1
-    r26 = r24 + r25 :: int
-    r0.__mypyc_index__0 = r26; r27 = is_error
+    r26 = r0.__mypyc_temp__0
+    r27 = 1
+    r28 = r26 + r27 :: int
+    r0.__mypyc_temp__0 = r28; r29 = is_error
     goto L2
 L7:
-    r28 = None
-    r29 = -1
-    r0.__mypyc_next_label__ = r29; r30 = is_error
+    r30 = None
+    r31 = -1
+    r0.__mypyc_next_label__ = r31; r32 = is_error
 L8:
-    raise StopIteration(r28)
+    raise StopIteration(r30)
     unreachable
 L9:
-    r32 = 0
-    r33 = r1 == r32 :: int
-    if r33 goto L1 else goto L10 :: bool
-L10:
-    r34 = 1
+    r34 = 0
     r35 = r1 == r34 :: int
-    if r35 goto L5 else goto L11 :: bool
+    if r35 goto L1 else goto L10 :: bool
+L10:
+    r36 = 1
+    r37 = r1 == r36 :: int
+    if r37 goto L5 else goto L11 :: bool
 L11:
     raise StopIteration
     unreachable
@@ -339,92 +342,97 @@ def yield_for_loop_dict__gen.__next__(self):
     r2 :: dict
     r3 :: int
     r4 :: bool
-    r5, r6 :: int
-    r7 :: bool
-    r8 :: int
-    r9 :: None
-    r10 :: object
-    r11 :: bool
-    r12, r13, r14 :: int
-    r15, r16 :: bool
-    r17 :: dict
-    r18 :: object
-    r19 :: bool
-    r20, r21 :: object
-    r22 :: int
-    r23 :: bool
-    r24 :: int
-    r25 :: object
-    r26 :: int
-    r27, r28 :: bool
-    r29 :: None
-    r30 :: int
-    r31, r32 :: bool
+    r5 :: int
+    r6 :: bool
+    r7, r8 :: int
+    r9 :: bool
+    r10 :: int
+    r11 :: None
+    r12 :: object
+    r13 :: bool
+    r14, r15, r16 :: int
+    r17, r18 :: bool
+    r19 :: dict
+    r20 :: object
+    r21, r22 :: bool
+    r23, r24 :: object
+    r25 :: int
+    r26 :: bool
+    r27 :: int
+    r28 :: object
+    r29 :: int
+    r30, r31 :: bool
+    r32 :: None
     r33 :: int
-    r34 :: bool
-    r35 :: int
-    r36, r37 :: bool
+    r34, r35 :: bool
+    r36 :: int
+    r37 :: bool
+    r38 :: int
+    r39, r40 :: bool
 L0:
     r0 = self.__mypyc_env__
     r1 = r0.__mypyc_next_label__
     goto L13
 L1:
     r2 = {}
-    r3 = 0
-    r0.i = r3; r4 = is_error
+    r3 = 5
+    r0.__mypyc_temp__1 = r3; r4 = is_error
+    r5 = 0
+    r0.i = r5; r6 = is_error
 L2:
-    r5 = 5
-    r6 = r0.i
-    r7 = r6 < r5 :: int
-    if r7 goto L3 else goto L5 :: bool
+    r7 = r0.i
+    r8 = r0.__mypyc_temp__1
+    r9 = r7 < r8 :: int
+    if r9 goto L3 else goto L5 :: bool
 L3:
-    r8 = r0.i
-    r9 = None
-    r10 = box(int, r8)
-    r11 = r2.__setitem__(r10, r9) :: dict
+    r10 = r0.i
+    r11 = None
+    r12 = box(int, r10)
+    r13 = r2.__setitem__(r12, r11) :: dict
 L4:
-    r12 = 1
-    r13 = r0.i
-    r14 = r13 + r12 :: int
-    r0.i = r14; r15 = is_error
+    r14 = r0.i
+    r15 = 1
+    r16 = r14 + r15 :: int
+    r0.i = r16; r17 = is_error
     goto L2
 L5:
-    r0.d = r2; r16 = is_error
-    r17 = r0.d
-    r18 = iter r17 :: object
-    r0.__mypyc_iterator__ = r18; r19 = is_error
+    r0.d = r2; r18 = is_error
+    r19 = r0.d
+    r20 = iter r19 :: object
+    r0.r19 = r19; r21 = is_error
+    r0.__mypyc_temp__2 = r20; r22 = is_error
 L6:
-    r20 = r0.__mypyc_iterator__
-    r21 = next r20 :: object
-    if is_error(r21) goto L10 else goto L7
+    r23 = r0.__mypyc_temp__2
+    r24 = next r23 :: object
+    if is_error(r24) goto L10 else goto L7
 L7:
-    r22 = unbox(int, r21)
-    r0.i = r22; r23 = is_error
+    r25 = unbox(int, r24)
+    r0.i = r25; r26 = is_error
 L8:
-    r24 = r0.i
-    r25 = box(int, r24)
-    r26 = 1
-    r0.__mypyc_next_label__ = r26; r27 = is_error
-    return r25
+    r27 = r0.i
+    r28 = box(int, r27)
+    r29 = 1
+    r0.__mypyc_next_label__ = r29; r30 = is_error
+    return r28
 L9:
     goto L6
 L10:
-    r28 = no_err_occurred
+    r31 = no_err_occurred
 L11:
-    r29 = None
-    r30 = -1
-    r0.__mypyc_next_label__ = r30; r31 = is_error
+    r32 = None
+    r33 = -1
+    r0.__mypyc_next_label__ = r33; r34 = is_error
 L12:
-    raise StopIteration(r29)
+    raise StopIteration(r32)
     unreachable
 L13:
-    r33 = 0
-    r34 = r1 == r33 :: int
-    if r34 goto L1 else goto L14 :: bool
+    r36 = 0
+    r37 = r1 == r36 :: int
+    if r37 goto L1 else goto L14 :: bool
 L14:
-    r35 = 1
-    r36 = r1 == r35 :: int
-    if r36 goto L9 else goto L15 :: bool
+    r38 = 1
+    r39 = r1 == r38 :: int
+    if r39 goto L9 else goto L15 :: bool
 L15:
     raise StopIteration
     unreachable
@@ -450,62 +458,66 @@ def yield_for_loop_range__gen.__next__(self):
     r0 :: yield_for_loop_range__env
     r1, r2 :: int
     r3 :: bool
-    r4, r5 :: int
-    r6 :: bool
-    r7 :: int
-    r8 :: object
+    r4 :: int
+    r5 :: bool
+    r6, r7 :: int
+    r8 :: bool
     r9 :: int
-    r10 :: bool
-    r11, r12, r13 :: int
-    r14 :: bool
-    r15 :: None
-    r16 :: int
-    r17, r18 :: bool
-    r19 :: int
-    r20 :: bool
+    r10 :: object
+    r11 :: int
+    r12 :: bool
+    r13, r14, r15 :: int
+    r16 :: bool
+    r17 :: None
+    r18 :: int
+    r19, r20 :: bool
     r21 :: int
-    r22, r23 :: bool
+    r22 :: bool
+    r23 :: int
+    r24, r25 :: bool
 L0:
     r0 = self.__mypyc_env__
     r1 = r0.__mypyc_next_label__
     goto L9
 L1:
-    r2 = 0
-    r0.i = r2; r3 = is_error
+    r2 = 5
+    r0.__mypyc_temp__3 = r2; r3 = is_error
+    r4 = 0
+    r0.i = r4; r5 = is_error
 L2:
-    r4 = 5
-    r5 = r0.i
-    r6 = r5 < r4 :: int
-    if r6 goto L3 else goto L7 :: bool
+    r6 = r0.i
+    r7 = r0.__mypyc_temp__3
+    r8 = r6 < r7 :: int
+    if r8 goto L3 else goto L7 :: bool
 L3:
 L4:
-    r7 = r0.i
-    r8 = box(int, r7)
-    r9 = 1
-    r0.__mypyc_next_label__ = r9; r10 = is_error
-    return r8
+    r9 = r0.i
+    r10 = box(int, r9)
+    r11 = 1
+    r0.__mypyc_next_label__ = r11; r12 = is_error
+    return r10
 L5:
 L6:
-    r11 = 1
-    r12 = r0.i
-    r13 = r12 + r11 :: int
-    r0.i = r13; r14 = is_error
+    r13 = r0.i
+    r14 = 1
+    r15 = r13 + r14 :: int
+    r0.i = r15; r16 = is_error
     goto L2
 L7:
-    r15 = None
-    r16 = -1
-    r0.__mypyc_next_label__ = r16; r17 = is_error
+    r17 = None
+    r18 = -1
+    r0.__mypyc_next_label__ = r18; r19 = is_error
 L8:
-    raise StopIteration(r15)
+    raise StopIteration(r17)
     unreachable
 L9:
-    r19 = 0
-    r20 = r1 == r19 :: int
-    if r20 goto L1 else goto L10 :: bool
-L10:
-    r21 = 1
+    r21 = 0
     r22 = r1 == r21 :: int
-    if r22 goto L5 else goto L11 :: bool
+    if r22 goto L1 else goto L10 :: bool
+L10:
+    r23 = 1
+    r24 = r1 == r23 :: int
+    if r24 goto L5 else goto L11 :: bool
 L11:
     raise StopIteration
     unreachable

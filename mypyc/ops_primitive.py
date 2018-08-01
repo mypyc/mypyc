@@ -157,9 +157,12 @@ def custom_op(arg_types: List[RType],
               name: Optional[str] = None,
               format_str: Optional[str] = None,
               is_var_arg: bool = False) -> OpDescription:
-    """Create a one-off op that can't be automatically generated from the AST. Note that if the
-    format_str argument is not provided, then a format_str is generated using the name argument.
-    The name argument only needs to be provided if the format_str argument is not provided.
+    """
+    Create a one-off op that can't be automatically generated from the AST.
+
+    Note that if the format_str argument is not provided, then a format_str is generated using the
+    name argument. The name argument only needs to be provided if the format_str argument is not
+    provided.
     """
     if name is not None and format_str is None:
         typename = ''
