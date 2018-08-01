@@ -503,15 +503,6 @@ class Register(Value):
         return False
 
 
-# An invalid register value.
-#
-# This is mostly a relic from when the statement and expression
-# visitors both returned the same type, but there are some places that
-# use it to avoid needing to make some value Optional. Those are
-# probably worth cleaning up.
-INVALID_VALUE = Register(void_rtype, name='<INVALID_VALUE>')
-
-
 class Op(Value):
     def __init__(self, line: int) -> None:
         super().__init__(line)

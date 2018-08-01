@@ -52,7 +52,7 @@ from mypyc.ops import (
     AssignmentTargetAttr, AssignmentTargetTuple, Environment, Op, LoadInt, RType, Value, Register,
     Return, FuncIR, Assign, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple, Unreachable,
     TupleGet, TupleSet, ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, ROptional,
-    MethodCall, INVALID_VALUE, INVALID_FUNC_DEF, int_rprimitive, float_rprimitive, bool_rprimitive,
+    MethodCall, INVALID_FUNC_DEF, int_rprimitive, float_rprimitive, bool_rprimitive,
     list_rprimitive, is_list_rprimitive, dict_rprimitive, set_rprimitive, str_rprimitive,
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, exc_rtuple,
     PrimitiveOp, ControlOp, LoadErrorValue, ERR_FALSE, OpDescription, RegisterOp,
@@ -3088,7 +3088,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return call_fn_ir
 
     def instantiate_callable_class(self, fn_info: FuncInfo) -> Value:
-        """Assigns a callable class to a register named after the given function definition. Note
+        """
+        Assigns a callable class to a register named after the given function definition. Note
         that fn_info refers to the function being assigned, whereas self.fn_info refers to the
         function encapsulating the function being turned into a callable class.
         """
