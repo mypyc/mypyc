@@ -1380,6 +1380,7 @@ class ClassIR:
         self.module_name = module_name
         self.is_trait = is_trait
         self.is_generated = is_generated
+        self.inherits_python = False
         # Default empty ctor
         self.ctor = FuncDecl(name, None, module_name, FuncSignature([], RInstance(self)))
         # Properties are accessed like attributes, but have behaivor like method calls.
@@ -1443,6 +1444,13 @@ class ClassIR:
     def has_method(self, name: str) -> bool:
         try:
             self.method_decl(name)
+        except KeyError:
+            return False
+        return True
+
+    def has_attr(self, name: str) -> bool:
+        try:
+            self.attr_type(name)
         except KeyError:
             return False
         return True

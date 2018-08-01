@@ -365,7 +365,10 @@ def prepare_class_def(module_name: str, cdef: ClassDef, mapper: Mapper) -> None:
     mro = []
     base_mro = []
     for cls in info.mro:
-        if cls not in mapper.type_to_ir: continue
+        if cls not in mapper.type_to_ir:
+            if cls.name != 'builtins.object':
+                ir.inherits_python = True
+            continue
         base_ir = mapper.type_to_ir[cls]
         if not base_ir.is_trait:
             base_mro.append(base_ir)
@@ -1687,7 +1690,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.load_module_attr(expr)
         else:
             obj = self.accept(expr.expr)
-            if isinstance(obj.type, RInstance):
+            if isinstance(obj.type, RInstance) and obj.type.class_ir.has_attr(expr.name):
                 return self.add(GetAttr(obj, expr.name, expr.line))
             else:
                 return self.py_get_attr(obj, expr.name, expr.line)

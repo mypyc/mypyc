@@ -77,6 +77,16 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     else:
         as_mapping_name = '0'
 
+    # If the class inherits from python, make space for a __dict__
+    struct_name = cl.struct_name(emitter.names)
+    if cl.inherits_python:
+        tp_basicsize = 'sizeof({}) + 2*sizeof(PyObject *)'.format(struct_name)
+        tp_dictoffset = 'sizeof({})'.format(struct_name)
+        tp_weaklistoffset = 'sizeof({}) + sizeof(PyObject *)'.format(struct_name)
+    else:
+        tp_basicsize = 'sizeof({})'.format(struct_name)
+        tp_weaklistoffset = tp_dictoffset = '0'
+
     if not cl.is_trait:
         emitter.emit_line('static PyObject *{}(void);'.format(setup_name))
         # TODO: Use RInstance
@@ -106,7 +116,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
         static PyTypeObject {type_struct}_template_ = {{
             PyVarObject_HEAD_INIT(&PyType_Type, 0)
             "{name}",                  /* tp_name */
-            sizeof({struct_name}),     /* tp_basicsize */
+            {tp_basicsize},            /* tp_basicsize */
             0,                         /* tp_itemsize */
             (destructor){dealloc_name},  /* tp_dealloc */
             0,                         /* tp_print */
@@ -128,7 +138,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
             (traverseproc){traverse_name}, /* tp_traverse */
             (inquiry){clear_name},     /* tp_clear */
             0,                         /* tp_richcompare */
-            0,                         /* tp_weaklistoffset */
+            {tp_weaklistoffset},       /* tp_weaklistoffset */
             {iter_name},               /* tp_iter */
             {next_name},               /* tp_iternext */
             {methods_name},            /* tp_methods */
@@ -138,14 +148,13 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
             0,                         /* tp_dict */
             0,                         /* tp_descr_get */
             0,                         /* tp_descr_set */
-            0,                         /* tp_dictoffset */
+            {tp_dictoffset},           /* tp_dictoffset */
             {init_name},               /* tp_init */
             0,                         /* tp_alloc */
             {new_name},                /* tp_new */
         }};
         static PyTypeObject *{type_struct}_template = &{type_struct}_template_;\
         """).format(type_struct=emitter.type_struct_name(cl),
-                    struct_name=cl.struct_name(emitter.names),
                     name=name,
                     traverse_name=traverse_name,
                     clear_name=clear_name,
@@ -158,6 +167,9 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
                     getseters_name=getseters_name,
                     as_mapping_name=as_mapping_name,
                     init_name=init_name,
+                    tp_basicsize=tp_basicsize,
+                    tp_dictoffset=tp_dictoffset,
+                    tp_weaklistoffset=tp_weaklistoffset,
                     ))
     emitter.emit_line()
     if not cl.is_trait:

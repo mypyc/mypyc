@@ -512,27 +512,44 @@ import native
 native.Failure()
 native.foo()
 
-[case testSubclassPy-skip]
+[case testSubclassPy]
 from b import B
 class A(B):
-    x: int
+    def __init__(self, x: int, y: int) -> None:
+        super().__init__(y)
+        self.x = x
+
     def foo(self, x: int) -> int:
         print("hi", x)
         return x+1
+
+def f(x: A) -> None:
+    print(x.x)
+    print(x.y)
+    print(x.foo(20))
+
 [file b.py]
 class B:
+    def __init__(self, y: int) -> None:
+        self.y = y
     def foo(self, x: int) -> int:
         print("parent!")
-        return x-1
+        return x + self.y
     def bar(self) -> None:
-        self.z = 10
-        print("hello!")
+        print("hello!", self.y)
 [file driver.py]
 import native
-a = native.A()
+a = native.A(10, 20)
 a.foo(10)
-a.bar(10)
-assert False
+a.bar()
+native.f(a)
+[out]
+hi 10
+hello! 20
+10
+20
+hi 20
+21
 
 [case testClassVariable]
 from typing import ClassVar
