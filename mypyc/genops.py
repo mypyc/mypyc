@@ -52,7 +52,7 @@ from mypyc.ops import (
     MethodCall, INVALID_VALUE, INVALID_CLASS, INVALID_FUNC_DEF, int_rprimitive, float_rprimitive,
     bool_rprimitive, list_rprimitive, is_list_rprimitive, dict_rprimitive, set_rprimitive,
     str_rprimitive, tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive,
-    exc_rtuple, optional_value_type,
+    exc_rtuple, optional_value_type, is_optional_type,
     PrimitiveOp, ControlOp, LoadErrorValue,
     ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap, FuncSignature,
     VTableAttr, VTableMethod, VTableEntries,
@@ -610,7 +610,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # don't initialize it to anything.
             if isinstance(stmt.rvalue, RefExpr) and stmt.rvalue.fullname == 'builtins.None':
                 attr_type = cls.attr_type(lvalue.name)
-                if (not isinstance(attr_type, ROptional) and not is_object_rprimitive(attr_type)
+                if (not is_optional_type(attr_type) and not is_object_rprimitive(attr_type)
                         and not is_none_rprimitive(attr_type)):
                     continue
 
