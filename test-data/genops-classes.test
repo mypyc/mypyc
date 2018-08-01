@@ -304,6 +304,102 @@ L0:
     r0 = x.foo(y)
     return r0
 
+[case testSubclass_toplevel]
+from typing import TypeVar, Generic
+from mypy_extensions import trait
+T = TypeVar('T')
+class C:
+    pass
+
+@trait
+class S:
+    pass
+
+class D(C, S, Generic[T]):
+    pass
+
+[out]
+def __top_level__():
+    r0 :: str
+    r1 :: object
+    r2 :: str
+    r3, r4, r5 :: object
+    r6 :: str
+    r7 :: bool
+    r8 :: object
+    r9 :: str
+    r10, r11, r12 :: object
+    r13 :: str
+    r14 :: dict
+    r15 :: bool
+    r16 :: object
+    r17 :: str
+    r18, r19, r20 :: object
+    r21 :: str
+    r22 :: dict
+    r23 :: bool
+    r24, r25, r26 :: object
+    r27 :: str
+    r28, r29 :: object
+    r30 :: str
+    r31, r32 :: object
+    r33 :: tuple[object, object, object]
+    r34 :: object
+    r35 :: str
+    r36, r37, r38 :: object
+    r39 :: str
+    r40 :: dict
+    r41 :: bool
+    r42 :: None
+L0:
+    r0 = unicode_0 :: static  ('T')
+    r1 = __main__.globals :: static
+    r2 = unicode_1 :: static  ('TypeVar')
+    r3 = r1[r2] :: dict
+    r4 = py_call(r3, r0)
+    r5 = __main__.globals :: static
+    r6 = unicode_0 :: static  ('T')
+    r7 = r5.__setitem__(r6, r4) :: object
+    r8 = <error> :: object
+    r9 = unicode_2 :: static  ('__main__')
+    r10 = __main__.C_template :: type
+    r11 = pytype_from_template(r10, r8, r9)
+    __main__.C = r11 :: type
+    r12 = __main__.globals :: static
+    r13 = unicode_3 :: static  ('C')
+    r14 = cast(dict, r12)
+    r15 = r14.__setitem__(r13, r11) :: dict
+    r16 = <error> :: object
+    r17 = unicode_2 :: static  ('__main__')
+    r18 = __main__.S_template :: type
+    r19 = pytype_from_template(r18, r16, r17)
+    __main__.S = r19 :: type
+    r20 = __main__.globals :: static
+    r21 = unicode_4 :: static  ('S')
+    r22 = cast(dict, r20)
+    r23 = r22.__setitem__(r21, r19) :: dict
+    r24 = __main__.C :: type
+    r25 = __main__.S :: type
+    r26 = __main__.globals :: static
+    r27 = unicode_5 :: static  ('Generic')
+    r28 = r26[r27] :: dict
+    r29 = __main__.globals :: static
+    r30 = unicode_0 :: static  ('T')
+    r31 = r29[r30] :: dict
+    r32 = r28[r31] :: object
+    r33 = (r24, r25, r32)
+    r34 = box(tuple[object, object, object], r33)
+    r35 = unicode_2 :: static  ('__main__')
+    r36 = __main__.D_template :: type
+    r37 = pytype_from_template(r36, r34, r35)
+    __main__.D = r37 :: type
+    r38 = __main__.globals :: static
+    r39 = unicode_6 :: static  ('D')
+    r40 = cast(dict, r38)
+    r41 = r40.__setitem__(r39, r37) :: dict
+    r42 = None
+    return r42
+
 [case testIsInstance]
 class A: pass
 class B(A): pass
@@ -527,11 +623,3 @@ L0:
     self.x = r9; r10 = is_error
     r11 = True
     return r11
-
-[case testGenericTrivial]
-from typing import TypeVar, Generic
-T = TypeVar('T')
-class C(Generic[T]):
-    pass
-
-[out]
