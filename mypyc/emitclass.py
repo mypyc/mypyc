@@ -9,7 +9,8 @@ from mypyc.emit import Emitter
 from mypyc.emitfunc import native_function_header
 from mypyc.ops import (
     ClassIR, FuncIR, FuncDecl, RType, RTuple, Environment, object_rprimitive, FuncSignature,
-    VTableMethod, VTableAttr, VTableEntries
+    VTableMethod, VTableAttr, VTableEntries,
+    FUNC_STATICMETHOD, FUNC_CLASSMETHOD,
 )
 from mypyc.sametype import is_same_type
 from mypyc.namegen import NameGenerator
@@ -46,6 +47,10 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     emit_line()
     generate_object_struct(cl, emitter)
     emit_line()
+
+    # If the class has a method to initialize default attribute
+    # values, we need to call it during initialization.
+    defaults_fn = cl.get_method('__mypyc_defaults_setup')
 
     # If there is a __init__ method, generate a function for tp_init and
     # extract the args (which we'll use for the native constructor)
@@ -155,9 +160,10 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
                     ))
     emitter.emit_line()
     if not cl.is_trait:
-        generate_setup_for_class(cl, setup_name, vtable_name, emitter)
+        generate_setup_for_class(cl, setup_name, defaults_fn, vtable_name, emitter)
         emitter.emit_line()
-        generate_constructor_for_class(cl, cl.ctor, init_fn, setup_name, vtable_name, emitter)
+        generate_constructor_for_class(
+            cl, cl.ctor, init_fn, setup_name, vtable_name, emitter)
         emitter.emit_line()
     generate_getseters(cl, emitter)
 
@@ -275,6 +281,7 @@ def generate_vtable(entries: VTableEntries,
 
 def generate_setup_for_class(cl: ClassIR,
                              func_name: str,
+                             defaults_fn: Optional[FuncIR],
                              vtable_name: str,
                              emitter: Emitter) -> None:
     """Generate a native function that allocates an instance of a class."""
@@ -291,6 +298,16 @@ def generate_setup_for_class(cl: ClassIR,
     for base in reversed(cl.base_mro):
         for attr, rtype in base.attributes.items():
             emitter.emit_line('self->{} = {};'.format(attr, emitter.c_undefined_value(rtype)))
+
+    # Initialize attributes to default values, if necessary
+    if defaults_fn is not None:
+        emitter.emit_lines(
+            'if ({}{}((PyObject *)self) == 0) {{'.format(
+                NATIVE_PREFIX, defaults_fn.cname(emitter.names)),
+            'Py_DECREF(self);',
+            'return NULL;',
+            '}')
+
     emitter.emit_line('return (PyObject *)self;')
     emitter.emit_line('}')
 
@@ -396,7 +413,13 @@ def generate_methods_table(cl: ClassIR,
     for fn in cl.methods.values():
         emitter.emit_line('{{"{}",'.format(fn.name))
         emitter.emit_line(' (PyCFunction){}{},'.format(PREFIX, fn.cname(emitter.names)))
-        emitter.emit_line(' METH_VARARGS | METH_KEYWORDS, NULL},')
+        flags = ['METH_VARARGS', 'METH_KEYWORDS']
+        if fn.decl.kind == FUNC_STATICMETHOD:
+            flags.append('METH_STATIC')
+        elif fn.decl.kind == FUNC_CLASSMETHOD:
+            flags.append('METH_CLASS')
+
+        emitter.emit_line(' {}, NULL}},'.format(' | '.join(flags)))
     emitter.emit_line('{NULL}  /* Sentinel */')
     emitter.emit_line('};')
 
