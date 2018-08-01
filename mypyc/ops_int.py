@@ -19,6 +19,7 @@ def int_binary_op(op: str, c_func_name: str, result_type: RType = int_rprimitive
 def int_compare_op(op: str, c_func_name: str) -> None:
     int_binary_op(op, c_func_name, bool_rprimitive)
 
+
 int_binary_op('+', 'CPyTagged_Add')
 int_binary_op('-', 'CPyTagged_Subtract')
 int_binary_op('*', 'CPyTagged_Multiply')

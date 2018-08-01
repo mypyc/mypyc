@@ -938,7 +938,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             target = self.get_assignment_target(lvalue)
             self.assign(target, rvalue_reg, line)
 
-    def visit_operator_assignment_stmt(self, stmt: OperatorAssignmentStmt) -> Value:
+    def visit_operator_assignment_stmt(self, stmt: OperatorAssignmentStmt) -> None:
         """Operator assignment statement such as x += 1"""
         self.disallow_class_assignments([stmt.lvalue])
         target = self.get_assignment_target(stmt.lvalue)
@@ -950,7 +950,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # usually operator assignments are done in-place
         # but when target doesn't support that we need to manually assign
         self.assign_to_target(target, res, res.line)
-        return INVALID_VALUE
 
     def get_assignment_target(self, lvalue: Lvalue) -> AssignmentTarget:
         if isinstance(lvalue, NameExpr):
