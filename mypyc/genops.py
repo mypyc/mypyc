@@ -1484,11 +1484,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             if more_types:
                 self.activate_block(false_block)
         if rest_items:
-            # For everything else we use generic operation.
-            coerced = self.coerce(obj, object_rprimitive, line)
+            # For everything else we use generic operation. Use force=True to drop the
+            # union type.
+            coerced = self.coerce(obj, object_rprimitive, line, force=True)
             temp = process_item(coerced)
             temp2 = self.coerce(temp, result_type, line)
             self.add(Assign(result, temp2))
+            self.goto(exit_block)
         self.activate_block(exit_block)
         return result
 
@@ -3008,11 +3010,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         module, name = fullname.rsplit('.', 1)
         return self.add(LoadStatic(object_rprimitive, name, module, NAMESPACE_TYPE))
 
-    def coerce(self, src: Value, target_type: RType, line: int) -> Value:
+    def coerce(self, src: Value, target_type: RType, line: int, force: bool = False) -> Value:
         """Generate a coercion/cast from one type to other (only if needed).
 
         For example, int -> object boxes the source int; int -> int emits nothing;
         object -> int unboxes the object. All conversions preserve object value.
+
+        If force is true, always generate an op (even if it is just an assingment) so
+        that the result will have exactly target_type as the type.
 
         Returns the register with the converted value (may be same as src).
         """
@@ -3027,6 +3032,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         if ((not src.type.is_unboxed and target_type.is_unboxed)
                 or not is_subtype(src.type, target_type)):
             return self.unbox_or_cast(src, target_type, line)
+        elif force:
+            tmp = self.alloc_temp(target_type)
+            self.add(Assign(tmp, src))
+            return tmp
         return src
 
     def keyword_args_to_positional(self,
