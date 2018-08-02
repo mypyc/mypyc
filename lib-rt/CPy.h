@@ -68,6 +68,26 @@ static inline void CPy_FixupTraitVtable(CPyVTableItem *vtable, int count) {
     }
 }
 
+static inline PyObject *_proxify(PyObject *bases) {
+    Py_ssize_t len = PyTuple_GET_SIZE(bases);
+    PyObject *proxy_bases = PyTuple_New(len);
+    int i;
+    for (i = 0; i < len; i++) {
+        PyObject *base = PyTuple_GET_ITEM(bases, i);
+        PyObject *proxy = PyObject_GetAttrString(base, "__mypyc_proxy__");
+        if (proxy) {
+            PyTuple_SET_ITEM(proxy_bases, i, proxy);
+        } else {
+            PyErr_Clear();
+            Py_INCREF(base);
+            PyTuple_SET_ITEM(proxy_bases, i, base);
+        }
+    }
+
+    return proxy_bases;
+}
+
+
 // Create a heap type based on a template non-heap type.
 // This is super hacky and maybe we should suck it up and use PyType_FromSpec instead.
 static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
@@ -113,29 +133,12 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
 
 //        dummy_class = (PyTypeObject *)PyObject_CallFunctionObjArgs(
 //            (PyObject *)metaclass, name, bases, ns, NULL);
-        Py_ssize_t len = PyTuple_GET_SIZE(bases);
-        PyObject *bullshit = PyTuple_New(len);
-        int i;
-        for (i = 0; i < len; i++) {
-            PyObject *base = PyTuple_GET_ITEM(bases, i);
-//            PyObject *proxy = PyObject_GetAttrString(base, "__origin__");
-            PyObject *proxy = PyObject_GetAttrString(base, "__mypyc_proxy__");
-            if (proxy) {
-//                abort();
-                PyTuple_SET_ITEM(bullshit, i, proxy);
-            } else {
-                PyErr_Clear();
-                Py_INCREF(base);
-                PyTuple_SET_ITEM(bullshit, i, base);
-            }
-        }
-//        PyTuple_SET_ITEM(bullshit, 0, (PyObject *)t);
-//        bullshit = PyNumber_Add(bullshit, bases);
-
-        name = PyNumber_Add(name, PyUnicode_FromString("_ass"));
+        PyObject *proxy_bases = bases;
+        //proxy_bases = _proxify(bases);
+        PyObject *proxy_name = PyNumber_Add(name, PyUnicode_FromString("_proxy"));
 
         dummy_class = (PyTypeObject *)PyObject_CallFunctionObjArgs(
-            (PyObject *)metaclass, name, bullshit, ns, NULL);
+            (PyObject *)metaclass, proxy_name, proxy_bases, ns, NULL);
         Py_DECREF(ns);
         if (!dummy_class)
             goto error;
@@ -161,6 +164,7 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
     Py_INCREF(name);
     t->ht_qualname = name;
     Py_XINCREF(bases);
+    //PyObject *reverse_proxy_bases = bases ? _proxify(bases) : NULL;
     t->ht_type.tp_bases = bases;
 
     if (PyType_Ready((PyTypeObject *)t) < 0)
@@ -170,6 +174,8 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
         if (PyDict_Merge(t->ht_type.tp_dict, dummy_class->tp_dict, 0) != 0)
             goto error;
         if (PyObject_SetAttrString((PyObject *)t, "__mypyc_proxy__", (PyObject *)dummy_class) < 0)
+            goto error;
+        if (PyObject_SetAttrString((PyObject *)dummy_class, "__mypyc_proxy__", (PyObject *)t) < 0)
             goto error;
         Py_DECREF(dummy_class);
     }

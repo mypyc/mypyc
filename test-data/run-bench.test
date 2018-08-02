@@ -148,6 +148,9 @@ import interpreted
 print(interpreted.SumVisitor.mro())
 import native
 print(native.SumVisitor.mro())
+print(native.TreeVisitor.__name__)
+print(native.SumVisitor.__name__)
+print(native.TreeVisitor[int])
 from timeit import timeit
 from time import time
 import os
@@ -166,6 +169,9 @@ def basic_test(m):
     assert m.sum_tree(tree) == 57
     assert m.equal(tree, tree)
     assert not m.equal(tree, tree2)
+
+    assert isinstance(native.SumVisitor(), native.TreeVisitor)
+
     return tree
 
 def test(m):
