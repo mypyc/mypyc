@@ -40,11 +40,11 @@ iter_op = func_op(name='builtins.iter',
 
 # Although the error_kind is set to be ERR_NEVER, this can actually return NULL, and thus it must
 # be checked using Branch.IS_ERROR.
-next_op = func_op(name='builtins.next',
-                  arg_types=[object_rprimitive],
-                  result_type=object_rprimitive,
-                  error_kind=ERR_NEVER,
-                  emit=simple_emit('{dest} = PyIter_Next({args[0]});'))
+next_op = custom_op(name='next',
+                    arg_types=[object_rprimitive],
+                    result_type=object_rprimitive,
+                    error_kind=ERR_NEVER,
+                    emit=simple_emit('{dest} = PyIter_Next({args[0]});'))
 
 #
 # Fallback primitive operations that operate on 'object' operands
@@ -75,6 +75,25 @@ for op, funcname in [('+', 'PyNumber_Add'),
                      ('&', 'PyNumber_And'),
                      ('^', 'PyNumber_Xor'),
                      ('|', 'PyNumber_Or')]:
+    binary_op(op=op,
+              arg_types=[object_rprimitive, object_rprimitive],
+              result_type=object_rprimitive,
+              error_kind=ERR_MAGIC,
+              emit=simple_emit('{dest} = %s({args[0]}, {args[1]});' % funcname),
+              priority=0)
+
+for op, funcname in [('+=', 'PyNumber_InPlaceAdd'),
+                     ('-=', 'PyNumber_InPlaceSubtract'),
+                     ('*=', 'PyNumber_InPlaceMultiply'),
+                     ('@=', 'PyNumber_InPlaceMatrixMultiply'),
+                     ('//=', 'PyNumber_InPlaceFloorDivide'),
+                     ('/=', 'PyNumber_InPlaceTrueDivide'),
+                     ('%=', 'PyNumber_InPlaceRemainder'),
+                     ('<<=', 'PyNumber_InPlaceLshift'),
+                     ('>>=', 'PyNumber_InPlaceRshift'),
+                     ('&=', 'PyNumber_InPlaceAnd'),
+                     ('^=', 'PyNumber_InPlaceXor'),
+                     ('|=', 'PyNumber_InPlaceOr')]:
     binary_op(op=op,
               arg_types=[object_rprimitive, object_rprimitive],
               result_type=object_rprimitive,

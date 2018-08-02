@@ -292,7 +292,7 @@ L3:
     r6 = cast(str, r5)
     return r6
 
-[case testSpecialNestedd]
+[case testSpecialNested]
 def a() -> int:
     x = 1
     def b() -> int:
@@ -328,9 +328,9 @@ L0:
     r0 = self.__mypyc_env__
     r1 = b_a_env()
     r1.__mypyc_env__ = r0; r2 = is_error
-    r3 = 1
-    r4 = r0.x
-    r5 = r4 + r3 :: int
+    r3 = r0.x
+    r4 = 1
+    r5 = r3 += r4 :: int
     r0.x = r5; r6 = is_error
     r7 = c_a_b_obj()
     r7.__mypyc_env__ = r1; r8 = is_error
@@ -416,8 +416,8 @@ def f(x: int, y: int) -> None:
     return s(x, y)
 
 [out]
-def __mypyc_lambda_0___f_obj.__call__(self, a, b):
-    self :: __mypyc_lambda_0___f_obj
+def __mypyc_lambda__0_f_obj.__call__(self, a, b):
+    self :: __mypyc_lambda__0_f_obj
     a, b :: object
     r0 :: f__env
     r1 :: object
@@ -428,13 +428,13 @@ L0:
 def f(x, y):
     x, y :: int
     r0 :: f__env
-    r1 :: __mypyc_lambda_0___f_obj
+    r1 :: __mypyc_lambda__0_f_obj
     r2 :: bool
     s, r3, r4, r5 :: object
     r6 :: None
 L0:
     r0 = f__env()
-    r1 = __mypyc_lambda_0___f_obj()
+    r1 = __mypyc_lambda__0_f_obj()
     r1.__mypyc_env__ = r0; r2 = is_error
     s = r1
     r3 = box(int, x)
