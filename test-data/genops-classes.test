@@ -328,29 +328,35 @@ def __top_level__():
     r7 :: bool
     r8 :: object
     r9 :: str
-    r10, r11, r12 :: object
-    r13 :: str
-    r14 :: dict
-    r15 :: bool
-    r16 :: object
-    r17 :: str
-    r18, r19, r20 :: object
-    r21 :: str
-    r22 :: dict
-    r23 :: bool
-    r24, r25, r26 :: object
-    r27 :: str
-    r28, r29 :: object
-    r30 :: str
-    r31, r32 :: object
-    r33 :: tuple[object, object, object]
-    r34 :: object
-    r35 :: str
-    r36, r37, r38 :: object
-    r39 :: str
-    r40 :: dict
-    r41 :: bool
-    r42 :: None
+    r10, r11 :: object
+    r12 :: bool
+    r13 :: object
+    r14 :: str
+    r15 :: dict
+    r16 :: bool
+    r17 :: object
+    r18 :: str
+    r19, r20 :: object
+    r21 :: bool
+    r22 :: object
+    r23 :: str
+    r24 :: dict
+    r25 :: bool
+    r26, r27, r28 :: object
+    r29 :: str
+    r30, r31 :: object
+    r32 :: str
+    r33, r34 :: object
+    r35 :: tuple[object, object, object]
+    r36 :: object
+    r37 :: str
+    r38, r39 :: object
+    r40 :: bool
+    r41 :: object
+    r42 :: str
+    r43 :: dict
+    r44 :: bool
+    r45 :: None
 L0:
     r0 = unicode_0 :: static  ('T')
     r1 = __main__.globals :: static
@@ -364,41 +370,44 @@ L0:
     r9 = unicode_2 :: static  ('__main__')
     r10 = __main__.C_template :: type
     r11 = pytype_from_template(r10, r8, r9)
+    r12 = C__trait_vtable_setup()
     __main__.C = r11 :: type
-    r12 = __main__.globals :: static
-    r13 = unicode_3 :: static  ('C')
-    r14 = cast(dict, r12)
-    r15 = r14.__setitem__(r13, r11) :: dict
-    r16 = <error> :: object
-    r17 = unicode_2 :: static  ('__main__')
-    r18 = __main__.S_template :: type
-    r19 = pytype_from_template(r18, r16, r17)
-    __main__.S = r19 :: type
-    r20 = __main__.globals :: static
-    r21 = unicode_4 :: static  ('S')
-    r22 = cast(dict, r20)
-    r23 = r22.__setitem__(r21, r19) :: dict
-    r24 = __main__.C :: type
-    r25 = __main__.S :: type
-    r26 = __main__.globals :: static
-    r27 = unicode_5 :: static  ('Generic')
-    r28 = r26[r27] :: dict
-    r29 = __main__.globals :: static
-    r30 = unicode_0 :: static  ('T')
-    r31 = r29[r30] :: dict
-    r32 = r28[r31] :: object
-    r33 = (r24, r25, r32)
-    r34 = box(tuple[object, object, object], r33)
-    r35 = unicode_2 :: static  ('__main__')
-    r36 = __main__.D_template :: type
-    r37 = pytype_from_template(r36, r34, r35)
-    __main__.D = r37 :: type
-    r38 = __main__.globals :: static
-    r39 = unicode_6 :: static  ('D')
-    r40 = cast(dict, r38)
-    r41 = r40.__setitem__(r39, r37) :: dict
-    r42 = None
-    return r42
+    r13 = __main__.globals :: static
+    r14 = unicode_3 :: static  ('C')
+    r15 = cast(dict, r13)
+    r16 = r15.__setitem__(r14, r11) :: dict
+    r17 = <error> :: object
+    r18 = unicode_2 :: static  ('__main__')
+    r19 = __main__.S_template :: type
+    r20 = pytype_from_template(r19, r17, r18)
+    r21 = S__trait_vtable_setup()
+    __main__.S = r20 :: type
+    r22 = __main__.globals :: static
+    r23 = unicode_4 :: static  ('S')
+    r24 = cast(dict, r22)
+    r25 = r24.__setitem__(r23, r20) :: dict
+    r26 = __main__.C :: type
+    r27 = __main__.S :: type
+    r28 = __main__.globals :: static
+    r29 = unicode_5 :: static  ('Generic')
+    r30 = r28[r29] :: dict
+    r31 = __main__.globals :: static
+    r32 = unicode_0 :: static  ('T')
+    r33 = r31[r32] :: dict
+    r34 = r30[r33] :: object
+    r35 = (r26, r27, r34)
+    r36 = box(tuple[object, object, object], r35)
+    r37 = unicode_2 :: static  ('__main__')
+    r38 = __main__.D_template :: type
+    r39 = pytype_from_template(r38, r36, r37)
+    r40 = D__trait_vtable_setup()
+    __main__.D = r39 :: type
+    r41 = __main__.globals :: static
+    r42 = unicode_6 :: static  ('D')
+    r43 = cast(dict, r41)
+    r44 = r43.__setitem__(r42, r39) :: dict
+    r45 = None
+    return r45
 
 [case testIsInstance]
 class A: pass

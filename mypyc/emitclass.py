@@ -40,6 +40,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
 
     getseters_name = '{}_getseters'.format(name_prefix)
     methods_name = '{}_methods'.format(name_prefix)
+    vtable_setup_name = '{}__trait_vtable_setup'.format(name_prefix)
 
     def emit_line() -> None:
         emitter.emit_line()
@@ -172,6 +173,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
                     tp_weaklistoffset=tp_weaklistoffset,
                     ))
     emitter.emit_line()
+    generate_trait_vtable_setup(cl, vtable_setup_name, vtable_name, emitter)
     if not cl.is_trait:
         generate_setup_for_class(cl, setup_name, defaults_fn, vtable_name, emitter)
         emitter.emit_line()
@@ -290,6 +292,24 @@ def generate_vtable(entries: VTableEntries,
             namer = native_setter_name if is_setter else native_getter_name
             emitter.emit_line('(CPyVTableItem){},'.format(namer(cl, attr, emitter.names)))
     emitter.emit_line('};')
+
+
+def generate_trait_vtable_setup(cl: ClassIR,
+                                vtable_setup_name: str,
+                                vtable_name: str,
+                                emitter: Emitter) -> None:
+    """Generate a native function that fixes up the trait vtables of a class.
+
+    This needs to be called before a class is used.
+    """
+    emitter.emit_line('static bool')
+    emitter.emit_line('{}{}(void)'.format(NATIVE_PREFIX, vtable_setup_name))
+    emitter.emit_line('{')
+    if cl.trait_vtables and not cl.is_trait:
+        emitter.emit_lines('CPy_FixupTraitVtable({}_vtable, {});'.format(
+            cl.name_prefix(emitter.names), len(cl.trait_vtables)))
+    emitter.emit_line('return 1;')
+    emitter.emit_line('}')
 
 
 def generate_setup_for_class(cl: ClassIR,

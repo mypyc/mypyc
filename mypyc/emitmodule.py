@@ -259,13 +259,6 @@ class ModuleGenerator:
 
         self.generate_top_level_call(module, emitter)
 
-        # TODO: This needs to be done right after the trait allocation
-        for cl in module.classes:
-            type_struct = emitter.type_struct_name(cl)
-            if cl.trait_vtables and not cl.is_trait:
-                emitter.emit_lines('CPy_FixupTraitVtable({}_vtable, {});'.format(
-                    cl.name_prefix(emitter.names), len(cl.trait_vtables)))
-
         emitter.emit_lines('Py_DECREF(modname);')
 
         emitter.emit_line('return {};'.format(module_static))

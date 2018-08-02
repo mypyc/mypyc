@@ -837,18 +837,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         modname = self.load_static_unicode(self.module_name)
         template = self.add(LoadStatic(object_rprimitive, cdef.name + "_template",
                                        self.module_name, NAMESPACE_TYPE))
-        # Create the class and assign it to whatever
+        # Create the class
         tp = self.primitive_op(pytype_from_template_op,
                                [template, tp_bases, modname], cdef.line)
+        # Immediately fix up the trait vtables, before doing anything with the class.
+        self.add(Call(
+            FuncDecl(cdef.name + '__trait_vtable_setup',
+                     None, self.module_name,
+                     FuncSignature([], bool_rprimitive)), [], -1))
+        # Save the class
         self.add(InitStatic(tp, cdef.name, self.module_name, NAMESPACE_TYPE))
 
         # Add it to the dict
         self.primitive_op(dict_set_item_op,
                           [self.load_globals_dict(), self.load_static_unicode(cdef.name),
                            tp], cdef.line)
-
-        # TODO: *WE* need to do the trait patchup here because something could try to
-        # use it right away.
 
     def visit_import(self, node: Import) -> None:
         if node.is_unreachable or node.is_mypy_only:

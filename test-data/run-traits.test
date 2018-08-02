@@ -27,6 +27,8 @@ def use_c(c: C) -> int:
     c.bar()
     return c.baz()
 
+use_t(C())
+
 [file driver.py]
 from native import A, T, C, use_c, use_t
 c = C()
@@ -36,6 +38,7 @@ assert c.baz() == 10
 assert use_c(c) == 10
 assert use_t(c) == 10
 [out]
+bar
 foo
 bar
 bar
