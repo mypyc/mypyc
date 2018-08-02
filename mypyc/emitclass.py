@@ -113,6 +113,10 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     generate_methods_table(cl, methods_name, emitter)
     emit_line()
 
+    flags = ['Py_TPFLAGS_DEFAULT', 'Py_TPFLAGS_HAVE_GC', 'Py_TPFLAGS_HEAPTYPE',
+             'Py_TPFLAGS_BASETYPE']
+    tp_flags = ' | '.join(flags)
+
     emitter.emit_line(textwrap.dedent("""\
         static PyTypeObject {type_struct}_template_ = {{
             PyVarObject_HEAD_INIT(&PyType_Type, 0)
@@ -134,7 +138,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
             0,                         /* tp_getattro */
             0,                         /* tp_setattro */
             0,                         /* tp_as_buffer */
-            Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_HEAPTYPE, /* tp_flags */
+            {tp_flags},                /* tp_flags */
             0,                         /* tp_doc */
             (traverseproc){traverse_name}, /* tp_traverse */
             (inquiry){clear_name},     /* tp_clear */
@@ -168,6 +172,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
                     getseters_name=getseters_name,
                     as_mapping_name=as_mapping_name,
                     init_name=init_name,
+                    tp_flags=tp_flags,
                     tp_basicsize=tp_basicsize,
                     tp_dictoffset=tp_dictoffset,
                     tp_weaklistoffset=tp_weaklistoffset,
