@@ -451,13 +451,13 @@ L3:
     if is_error(r4) goto L5 (error at lol:3) else goto L4
 L4:
     st = r4
-    goto L12
+    goto L13
 L5:
     r5 = error_catch
     r6 = builtins.module :: static
     r7 = unicode_1 :: static  ('Exception')
     r8 = getattr r6, r7
-    if is_error(r8) goto L10 (error at lol:4) else goto L6
+    if is_error(r8) goto L11 (error at lol:4) else goto L6
 L6:
     r9 = exc_matches r8
     if r9 goto L7 else goto L8 :: bool
@@ -468,53 +468,59 @@ L7:
     return r11
 L8:
     reraise_exc; r12 = 0
-    if not r12 goto L10 else goto L9 :: bool
+    if not r12 goto L11 else goto L9 :: bool
 L9:
     unreachable
 L10:
     restore_exc_info r5
-    r13 = no_err_occurred
-    if not r13 goto L13 else goto L11 :: bool
+    goto L13
 L11:
+    restore_exc_info r5
+    r13 = keep_propagating
+    if not r13 goto L14 else goto L12 :: bool
 L12:
+    unreachable
+L13:
     r14 = 1
     r15 = st + r14 :: int
     return r15
-L13:
+L14:
     r16 = <error> :: int
     return r16
 
-(0, 0)   {st, x}                 {st, x}
-(1, 0)   {st, x}                 {r0, st, x}
-(1, 1)   {r0, st, x}             {r0, r1, st, x}
-(1, 2)   {r0, r1, st, x}         {r2, st, x}
-(1, 3)   {r2, st, x}             {r2, st, x}
-(2, 0)   {r2, st, x}             {r3, st}
-(2, 1)   {r3, st}                {r3, st}
-(3, 0)   {r3, st}                {r4, st}
-(3, 1)   {r4, st}                {r4, st}
+(0, 0)   {x}                     {x}
+(1, 0)   {x}                     {r0, x}
+(1, 1)   {r0, x}                 {r0, r1, x}
+(1, 2)   {r0, r1, x}             {r2, x}
+(1, 3)   {r2, x}                 {r2, x}
+(2, 0)   {r2, x}                 {r3}
+(2, 1)   {r3}                    {r3}
+(3, 0)   {r3}                    {r4}
+(3, 1)   {r4}                    {r4}
 (4, 0)   {r4}                    {st}
 (4, 1)   {st}                    {st}
-(5, 0)   {st}                    {r5, st}
-(5, 1)   {r5, st}                {r5, r6, st}
-(5, 2)   {r5, r6, st}            {r5, r6, r7, st}
-(5, 3)   {r5, r6, r7, st}        {r5, r8, st}
-(5, 4)   {r5, r8, st}            {r5, r8, st}
-(6, 0)   {r5, r8, st}            {r5, r9, st}
-(6, 1)   {r5, r9, st}            {r5, st}
+(5, 0)   {}                      {r5}
+(5, 1)   {r5}                    {r5, r6}
+(5, 2)   {r5, r6}                {r5, r6, r7}
+(5, 3)   {r5, r6, r7}            {r5, r8}
+(5, 4)   {r5, r8}                {r5, r8}
+(6, 0)   {r5, r8}                {r5, r9}
+(6, 1)   {r5, r9}                {r5}
 (7, 0)   {r5}                    {r10, r5}
 (7, 1)   {r10, r5}               {r11, r5}
 (7, 2)   {r11, r5}               {r11}
 (7, 3)   {r11}                   {}
-(8, 0)   {r5, st}                {r12, r5, st}
-(8, 1)   {r12, r5, st}           {r5, st}
+(8, 0)   {r5}                    {r12, r5}
+(8, 1)   {r12, r5}               {r5}
 (9, 0)   {}                      {}
 (10, 0)  {r5, st}                {st}
-(10, 1)  {st}                    {r13, st}
-(10, 2)  {r13, st}               {st}
-(11, 0)  {st}                    {st}
-(12, 0)  {st}                    {r14, st}
-(12, 1)  {r14, st}               {r15}
-(12, 2)  {r15}                   {}
-(13, 0)  {}                      {r16}
-(13, 1)  {r16}                   {}
+(10, 1)  {st}                    {st}
+(11, 0)  {r5}                    {}
+(11, 1)  {}                      {r13}
+(11, 2)  {r13}                   {}
+(12, 0)  {}                      {}
+(13, 0)  {st}                    {r14, st}
+(13, 1)  {r14, st}               {r15}
+(13, 2)  {r15}                   {}
+(14, 0)  {}                      {r16}
+(14, 1)  {r16}                   {}
