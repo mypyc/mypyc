@@ -5,7 +5,7 @@
 #include <Python.h>
 #include <frameobject.h>
 #include <assert.h>
-#include <pythonsupport.h>
+#include "pythonsupport.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -75,6 +75,7 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
                                              PyObject *modname) {
     PyHeapTypeObject *t = NULL;
     PyTypeObject *dummy_class = NULL;
+    PyObject *name;
 
     PyTypeObject *metaclass = Py_TYPE(template_);
 
@@ -104,7 +105,7 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
             goto error;
     }
 
-    PyObject *name = PyUnicode_FromString(template_->tp_name);
+    name = PyUnicode_FromString(template_->tp_name);
     if (!name)
         goto error;
     t->ht_name = name;

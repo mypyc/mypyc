@@ -134,5 +134,8 @@ init_subclass(PyTypeObject *type, PyObject *kwds)
 }
 #endif
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif
