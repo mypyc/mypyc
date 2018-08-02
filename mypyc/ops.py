@@ -368,7 +368,11 @@ class Environment:
         return target
 
     def lookup(self, symbol: SymbolNode) -> AssignmentTarget:
-        return self.symtable[symbol]
+        try:
+            return self.symtable[symbol]
+        except KeyError as e:
+            print(symbol.name())
+            raise e
 
     def add_temp(self, typ: RType, is_arg: bool = False) -> 'Register':
         assert isinstance(typ, RType)

@@ -391,7 +391,7 @@ class FuncInfo(object):
         self.ns = namespace
         # Callable classes implement the '__call__' method, and are used to represent functions
         # that are nested inside of other functions.
-        self._callable_class = None  # type: Optional[CallableClass]
+        self._callable_class = None  # type: Optional[ImplicitClass]
         # Environment classes are ClassIR instances that contain attributes representing the
         # variables in the environment of the function they correspond to. Environment classes are
         # generated for functions that contain nested functions.
@@ -423,12 +423,12 @@ class FuncInfo(object):
         return self._contains_nested
 
     @property
-    def callable_class(self) -> 'CallableClass':
+    def callable_class(self) -> 'ImplicitClass':
         assert self._callable_class is not None
         return self._callable_class
 
     @callable_class.setter
-    def callable_class(self, cls: 'CallableClass') -> None:
+    def callable_class(self, cls: 'ImplicitClass') -> None:
         self._callable_class = cls
 
     @property
@@ -452,7 +452,7 @@ class FuncInfo(object):
     @property
     def curr_env_reg(self) -> Value:
         """Returns the register containing the instance of the environment class. Note that this
-        returns either the Value in the FuncInfo class or the Value in CallableClass depending on
+        returns either the Value in the FuncInfo class or the Value in ImplicitClass depending on
         whether the function is nested. The setter for curr_env_reg is not implemented because of
         possible ambiguity.
         """
@@ -473,8 +473,10 @@ class ImplicitClass(object):
         self._self_reg = None  # type: Optional[Value]
         # Environment class registers are the local registers associated with instances of an
         # environment class, used for getting and setting attributes. curr_env_reg is the register
-        # associated with the current environment.
+        # associated with the current environment. prev_env_reg is the self.__mypyc_env__ field
+        # associated with the previous environment.
         self._curr_env_reg = None  # type: Optional[Value]
+        self._prev_env_reg = None  # type: Optional[Value]
 
     @property
     def self_reg(self) -> Value:
@@ -493,15 +495,6 @@ class ImplicitClass(object):
     @curr_env_reg.setter
     def curr_env_reg(self, reg: Value) -> None:
         self._curr_env_reg = reg
-
-
-class CallableClass(ImplicitClass):
-    def __init__(self, ir: ClassIR) -> None:
-        super().__init__(ir)
-        # Environment class registers are the local registers associated with instances of an
-        # environment class, used for getting and setting attributes. prev_env_reg is the
-        # self.__mypyc_env__ field associated with the previous environment.
-        self._prev_env_reg = None  # type: Optional[Value]
 
     @property
     def prev_env_reg(self) -> Value:
@@ -1001,7 +994,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.setup_env_for_generator_class()
 
         if not self.fn_info.is_generator:
-            self.load_env_registers()
+            self.load_env_registers(self.fn_info._callable_class)
         self.gen_arg_default()
 
         if self.fn_info.contains_nested:
@@ -2943,7 +2936,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         return env
 
-    def load_env_registers(self) -> None:
+    def load_env_registers(self, base: Optional[ImplicitClass] = None) -> None:
         """Loads the registers for a given FuncDef.
 
         Adds the arguments of the FuncDef to the environment. If the FuncDef is nested inside of
@@ -2952,20 +2945,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         """
         self.add_args_to_env(local=True)
 
-        fn_info = self.fn_info
-        if fn_info.is_nested:
+        if self.fn_info.is_nested:
+            assert base is not None
+
             index = len(self.environments) - 2
 
             # Load the first outer environment. This one is special because it gets saved in the
             # FuncInfo instance's prev_env_reg field.
             if index > 1:
                 outer_env = self.environments[index]
-                prev_env_reg = self.load_outer_env(fn_info.callable_class.self_reg, outer_env)
-                fn_info.callable_class.prev_env_reg = prev_env_reg
+                prev_env_reg = self.load_outer_env(base.self_reg, outer_env)
+                base.prev_env_reg = prev_env_reg
                 index -= 1
 
             # Load the remaining outer environments into registers.
-            curr_env_reg = fn_info.callable_class.prev_env_reg
+            curr_env_reg = base.prev_env_reg
             while index > 1:
                 outer_env = self.environments[index]
                 curr_env_reg = self.load_outer_env(curr_env_reg, outer_env)
@@ -3016,7 +3010,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.add(Goto(generator_class.switch_block))
         generator_class.blocks.append(self.new_block())
 
-    def add_args_to_env(self, local: bool = True) -> None:
+    def add_args_to_env(self, local: bool = True,
+                        base: Optional[Union[FuncInfo, ImplicitClass]] = None) -> None:
         fn_info = self.fn_info
         if local:
             for arg in fn_info.fitem.arguments:
@@ -3028,11 +3023,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 assert arg.variable.type, "Function argument missing type"
                 if self.is_free_variable(arg.variable) or fn_info.is_generator:
                     rtype = self.type_to_rtype(arg.variable.type)
-                    if fn_info.is_nested:
-                        self.add_var_to_env_class(arg.variable, rtype, fn_info.callable_class,
-                                                  reassign=True)
-                    else:
-                        self.add_var_to_env_class(arg.variable, rtype, fn_info, reassign=True)
+                    assert base is not None, 'base cannot be None for adding nonlocal args'
+                    self.add_var_to_env_class(arg.variable, rtype, base, reassign=True)
 
     def gen_func_ns(self) -> str:
         """Generates a namespace for a nested function using its outer function names."""
@@ -3072,7 +3064,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         callable_class_ir = ClassIR(name, self.module_name)
         callable_class_ir.attributes[ENV_ATTR_NAME] = RInstance(self.fn_infos[-2].env_class)
         callable_class_ir.mro = [callable_class_ir]
-        self.fn_info.callable_class = CallableClass(callable_class_ir)
+        self.fn_info.callable_class = ImplicitClass(callable_class_ir)
         self.classes.append(callable_class_ir)
 
         # Add a 'self' variable to the callable class' environment, and store that variable in a
@@ -3148,7 +3140,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Iterate through the function arguments and replace local definitions (using registers)
         # that were previously added to the environment with references to the function's
         # environment class.
-        self.add_args_to_env(local=False)
+        if self.fn_info.is_nested:
+            self.add_args_to_env(local=False, base=self.fn_info.callable_class)
+        else:
+            self.add_args_to_env(local=False, base=self.fn_info)
 
     def instantiate_env_class(self) -> Value:
         """Assigns an environment class to a register named after the given function definition."""
@@ -3167,7 +3162,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def gen_generator_func(self) -> None:
         self.setup_generator_class()
-        self.load_env_registers()
+        self.load_env_registers(self.fn_info._callable_class)
         self.finalize_env_class()
         self.add(Return(self.instantiate_generator_class()))
 
