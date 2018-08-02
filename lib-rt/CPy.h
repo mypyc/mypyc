@@ -92,35 +92,8 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
             goto error;
     }
 
-    // Allocate the type and then copy the main stuff in.
-    t = (PyHeapTypeObject*)PyType_GenericAlloc(metaclass, 0);
-    if (!t)
-        goto error;
-    memcpy((char *)t + sizeof(PyVarObject),
-           (char *)template_ + sizeof(PyVarObject),
-           sizeof(PyTypeObject) - sizeof(PyVarObject));
-
-    if (bases != old_bases) {
-        if (PyObject_SetAttrString((PyObject *)t, "__orig_bases__", old_bases) < 0)
-            goto error;
-    }
-
     name = PyUnicode_FromString(template_->tp_name);
     if (!name)
-        goto error;
-    t->ht_name = name;
-    Py_INCREF(name);
-    t->ht_qualname = name;
-    Py_XINCREF(bases);
-    t->ht_type.tp_bases = bases;
-
-    if (PyType_Ready((PyTypeObject *)t) < 0)
-        goto error;
-
-    if (PyObject_SetAttrString((PyObject *)t, "__module__", modname) < 0)
-        goto error;
-
-    if (init_subclass((PyTypeObject *)t, NULL))
         goto error;
 
     // If there is a metaclass other than type, we would like to call
@@ -138,17 +111,74 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
         PyObject *ns = PyDict_New();
         if (!ns) goto error;
 
+//        dummy_class = (PyTypeObject *)PyObject_CallFunctionObjArgs(
+//            (PyObject *)metaclass, name, bases, ns, NULL);
+        Py_ssize_t len = PyTuple_GET_SIZE(bases);
+        PyObject *bullshit = PyTuple_New(len);
+        int i;
+        for (i = 0; i < len; i++) {
+            PyObject *base = PyTuple_GET_ITEM(bases, i);
+//            PyObject *proxy = PyObject_GetAttrString(base, "__origin__");
+            PyObject *proxy = PyObject_GetAttrString(base, "__mypyc_proxy__");
+            if (proxy) {
+//                abort();
+                PyTuple_SET_ITEM(bullshit, i, proxy);
+            } else {
+                PyErr_Clear();
+                Py_INCREF(base);
+                PyTuple_SET_ITEM(bullshit, i, base);
+            }
+        }
+//        PyTuple_SET_ITEM(bullshit, 0, (PyObject *)t);
+//        bullshit = PyNumber_Add(bullshit, bases);
+
+        name = PyNumber_Add(name, PyUnicode_FromString("_ass"));
+
         dummy_class = (PyTypeObject *)PyObject_CallFunctionObjArgs(
-            (PyObject *)metaclass, name, bases, ns, NULL);
+            (PyObject *)metaclass, name, bullshit, ns, NULL);
         Py_DECREF(ns);
         if (!dummy_class)
             goto error;
 
+        bases = dummy_class->tp_bases;
+        Py_INCREF(bases);
+    }
+
+    // Allocate the type and then copy the main stuff in.
+    t = (PyHeapTypeObject*)PyType_GenericAlloc(metaclass, 0);
+    if (!t)
+        goto error;
+    memcpy((char *)t + sizeof(PyVarObject),
+           (char *)template_ + sizeof(PyVarObject),
+           sizeof(PyTypeObject) - sizeof(PyVarObject));
+
+    if (bases != old_bases) {
+        if (PyObject_SetAttrString((PyObject *)t, "__orig_bases__", old_bases) < 0)
+            goto error;
+    }
+
+    t->ht_name = name;
+    Py_INCREF(name);
+    t->ht_qualname = name;
+    Py_XINCREF(bases);
+    t->ht_type.tp_bases = bases;
+
+    if (PyType_Ready((PyTypeObject *)t) < 0)
+        goto error;
+
+    if (dummy_class) {
         if (PyDict_Merge(t->ht_type.tp_dict, dummy_class->tp_dict, 0) != 0)
             goto error;
-
+        if (PyObject_SetAttrString((PyObject *)t, "__mypyc_proxy__", (PyObject *)dummy_class) < 0)
+            goto error;
         Py_DECREF(dummy_class);
     }
+
+    if (PyObject_SetAttrString((PyObject *)t, "__module__", modname) < 0)
+        goto error;
+
+    if (init_subclass((PyTypeObject *)t, NULL))
+        goto error;
 
     Py_XDECREF(bases);
     Py_XDECREF(old_bases);

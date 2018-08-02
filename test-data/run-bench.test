@@ -79,7 +79,7 @@ if os.environ.get('MYPYC_RUN_BENCH') == '1':
 
 [case testBenchmarkVisitorTree]
 from mypy_extensions import trait
-from typing import cast, Generic, TypeVar
+from typing import cast, Generic, TypeVar, Any
 
 T = TypeVar('T')
 class Tree:
@@ -144,11 +144,14 @@ def bench_equal_tree(x: Tree, y: Tree) -> None:
 
 [file driver.py]
 from typing import Optional
-import native
 import interpreted
+print(interpreted.SumVisitor.mro())
+import native
+print(native.SumVisitor.mro())
 from timeit import timeit
 from time import time
 import os
+
 
 def dumb_time(f):
     t0 = time()
