@@ -990,6 +990,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         if not self.fn_info.is_generator:
             self.load_env_registers(self.fn_info._callable_class)
+        else:
+            self.load_outer_envs(self.fn_info.generator_class)
+
         self.gen_arg_default()
 
         if self.fn_info.contains_nested:
@@ -3045,6 +3048,26 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         return env
 
+    def load_outer_envs(self, base: ImplicitClass) -> None:
+        index = len(self.environments) - 2
+
+        # Load the first outer environment. This one is special because it gets saved in the
+        # FuncInfo instance's prev_env_reg field.
+        if index > 1:
+            outer_env = self.environments[index]
+            if isinstance(base, GeneratorClass):
+                base.prev_env_reg = self.load_outer_env(base.curr_env_reg, outer_env)
+            else:
+                base.prev_env_reg = self.load_outer_env(base.self_reg, outer_env)
+            env_reg_to_load = base.prev_env_reg
+            index -= 1
+
+        # Load the remaining outer environments into registers.
+        while index > 1:
+            outer_env = self.environments[index]
+            env_reg_to_load = self.load_outer_env(env_reg_to_load, outer_env)
+            index -= 1
+
     def load_env_registers(self, base: Optional[ImplicitClass] = None) -> None:
         """Loads the registers for a given FuncDef.
 
@@ -3056,22 +3079,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         if self.fn_info.is_nested:
             assert base is not None
-            index = len(self.environments) - 2
-
-            # Load the first outer environment. This one is special because it gets saved in the
-            # FuncInfo instance's prev_env_reg field.
-            if index > 1:
-                outer_env = self.environments[index]
-                prev_env_reg = self.load_outer_env(base.self_reg, outer_env)
-                base.prev_env_reg = prev_env_reg
-                index -= 1
-
-            # Load the remaining outer environments into registers.
-            curr_env_reg = base.prev_env_reg
-            while index > 1:
-                outer_env = self.environments[index]
-                curr_env_reg = self.load_outer_env(curr_env_reg, outer_env)
-                index -= 1
+            self.load_outer_envs(base)
 
     def add_var_to_env_class(self,
                              var: SymbolNode,

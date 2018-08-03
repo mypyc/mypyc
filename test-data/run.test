@@ -2515,76 +2515,52 @@ class A(object):
 [file driver.py]
 from native import yield_three_times, yield_twice_and_return, yield_while_loop, yield_for_loop, yield_with_except, complex_yield, A
 
+def get_stop_iteration_val(g):
+    try:
+        next(g)
+    except StopIteration as e:
+        return e.value
+
 generator = yield_three_times()
 assert next(generator) == 1
 assert next(generator) == 2
 assert next(generator) == 3
-try:
-    next(generator)
-except StopIteration as e:
-    assert e.value is None
+assert get_stop_iteration_val(generator) is None
 
 generator = yield_twice_and_return()
 assert next(generator) == 1
 assert next(generator) == 2
-try:
-    next(generator)
-except StopIteration as e:
-    assert e.value == 4
-try:
-    next(generator)
-except StopIteration as e:
-    assert e.value is None
+assert get_stop_iteration_val(generator) == 4
+assert get_stop_iteration_val(generator) is None
 
 generator = yield_while_loop()
 assert next(generator) == 0
 assert next(generator) == 1
 assert next(generator) == 2
-try:
-    next(generator)
-except StopIteration as e:
-    assert e.value == 3
-try:
-    next(generator)
-except StopIteration as e:
-    assert e.value is None
+assert get_stop_iteration_val(generator) == 3
+assert get_stop_iteration_val(generator) is None
 
 generator = yield_for_loop()
 for i in range(4):
     assert next(generator) == 0
     assert next(generator) == 1
     assert next(generator) == 2
-try:
-    next(generator)
-except StopIteration as e:
-    assert e.value is None
+assert get_stop_iteration_val(generator) is None
 
 generator = yield_with_except()
 assert next(generator) == 10
-try:
-    next(generator)
-except StopIteration as e:
-    assert e.value is None
+assert get_stop_iteration_val(generator) is None
 
 generator = complex_yield(5, 'foo', 1.0)
 assert next(generator) == '2 foo'
 assert next(generator) == 3
 assert next(generator) == '4 foo'
-try:
-    next(generator)
-except StopIteration as e:
-    assert e.value == 1.0
-try:
-    next(generator)
-except StopIteration as e:
-    assert e.value is None
+assert get_stop_iteration_val(generator) == 1.0
+assert get_stop_iteration_val(generator) is None
 
 generator = A(0).generator()
 assert next(generator) == 0
-try:
-    next(generator)
-except StopIteration as e:
-    assert e.value is None
+assert get_stop_iteration_val(generator) is None
 
 for i in yield_twice_and_return():
     print(i)
@@ -2674,3 +2650,27 @@ enter! a
 yooo? a
 exit! a exception!
 ((1,), Exception('exception!',))
+
+[case testYieldNested]
+from typing import Callable, Generator
+
+def normal(a: int, b: float) -> Callable:
+    def generator(x: int, y: str) -> Generator:
+        yield a
+        yield b
+        yield x
+        yield y
+    return generator
+
+[file driver.py]
+from native import normal
+
+generator = normal(1, 2.0)(3, '4.00')
+assert next(generator) == 1
+assert next(generator) == 2.0
+assert next(generator) == 3
+assert next(generator) == '4.00'
+try:
+    next(generator)
+except StopIteration as e:
+    assert e.value is None
