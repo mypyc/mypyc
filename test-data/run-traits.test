@@ -125,3 +125,19 @@ foo
 bar 13
 bar 13
 1337
+
+[case testTrait3]
+from mypy_extensions import trait
+from typing import Generic, TypeVar
+
+@trait
+class T1: pass
+@trait
+class T2: pass
+
+T = TypeVar('T')
+
+class C(Generic[T], T1, T2):
+    pass
+[file driver.py]
+import native

@@ -214,7 +214,7 @@ def f(x):
     r8 :: int
 L0:
     r0 = builtins.module :: static
-    r1 = unicode_0 :: static  ('int')
+    r1 = unicode_2 :: static  ('int')
     r2 = getattr r0, r1
     r3 = isinstance x, r2
     if r3 goto L1 else goto L2 :: bool
@@ -293,7 +293,7 @@ def set(o, s):
     r1 :: bool
     r2 :: None
 L0:
-    r0 = unicode_0 :: static  ('a')
+    r0 = unicode_3 :: static  ('a')
     r1 = setattr o, r0, s
     r2 = None
     return r2
@@ -419,7 +419,7 @@ L1:
     goto L3
 L2:
     r5 = o
-    r6 = unicode_0 :: static  ('x')
+    r6 = unicode_2 :: static  ('x')
     r7 = getattr r5, r6
     r8 = unbox(int, r7)
     r0 = r8
@@ -449,7 +449,7 @@ L1:
     goto L3
 L2:
     r5 = o
-    r6 = unicode_0 :: static  ('x')
+    r6 = unicode_2 :: static  ('x')
     r7 = getattr r5, r6
     r8 = unbox(int, r7)
     r0 = r8

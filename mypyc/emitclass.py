@@ -80,12 +80,16 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
 
     # If the class inherits from python, make space for a __dict__
     struct_name = cl.struct_name(emitter.names)
-    if cl.inherits_python:
-        tp_basicsize = 'sizeof({}) + 2*sizeof(PyObject *)'.format(struct_name)
-        tp_dictoffset = 'sizeof({})'.format(struct_name)
-        tp_weaklistoffset = 'sizeof({}) + sizeof(PyObject *)'.format(struct_name)
+    if cl.is_trait:
+        base_size = 'sizeof(PyObject)'
     else:
-        tp_basicsize = 'sizeof({})'.format(struct_name)
+        base_size = 'sizeof({})'.format(struct_name)
+    if cl.inherits_python:
+        tp_basicsize = '{} + 2*sizeof(PyObject *)'.format(base_size)
+        tp_dictoffset = base_size
+        tp_weaklistoffset = '{} + sizeof(PyObject *)'.format(base_size)
+    else:
+        tp_basicsize = base_size
         tp_weaklistoffset = tp_dictoffset = '0'
 
     if not cl.is_trait:

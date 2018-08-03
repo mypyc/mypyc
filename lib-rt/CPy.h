@@ -148,7 +148,8 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
     }
 
     // Allocate the type and then copy the main stuff in.
-    t = (PyHeapTypeObject*)PyType_GenericAlloc(metaclass, 0);
+    // XXX: hack
+    t = (PyHeapTypeObject*)PyType_GenericAlloc(&PyType_Type, 0);
     if (!t)
         goto error;
     memcpy((char *)t + sizeof(PyVarObject),
@@ -169,6 +170,8 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
 
     if (PyType_Ready((PyTypeObject *)t) < 0)
         goto error;
+
+    Py_TYPE(t) = metaclass;
 
     if (dummy_class) {
         if (PyDict_Merge(t->ht_type.tp_dict, dummy_class->tp_dict, 0) != 0)
