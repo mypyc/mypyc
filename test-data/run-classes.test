@@ -513,7 +513,7 @@ native.Failure()
 native.foo()
 
 [case testSubclassPy]
-from b import B
+from b import B, V
 class A(B):
     def __init__(self, x: int, y: int) -> None:
         super().__init__(y)
@@ -523,12 +523,20 @@ class A(B):
         print("hi", x)
         return x+1
 
+class C(V[int]):
+    def f(self) -> int: return 10
+
+assert isinstance(C(), V)
+
 def f(x: A) -> None:
     print(x.x)
     print(x.y)
     print(x.foo(20))
 
 [file b.py]
+from typing import Generic, TypeVar
+T = TypeVar('T')
+
 class B:
     def __init__(self, y: int) -> None:
         self.y = y
@@ -537,6 +545,10 @@ class B:
         return x + self.y
     def bar(self) -> None:
         print("hello!", self.y)
+
+class V(Generic[T]):
+    def f(self) -> T:
+        raise Exception('unimplemented')
 [file driver.py]
 import native
 a = native.A(10, 20)
