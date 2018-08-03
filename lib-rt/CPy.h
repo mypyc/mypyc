@@ -103,28 +103,31 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
     // support subclassing Generic[T] prior to Python 3.7.
     //
     // We solve this with a kind of atrocious hack: create a parallel
-    // class using the metaclass, and then merge its dict back into
-    // the original class. There are lots of cases where this won't really
-    // work, but for the case of GenericMeta setting a bunch of properties
+    // class using the metaclass, determine the bases of the real
+    // class by pulling them out of the parallel class, creating the
+    // real class, and then merging its dict back into the original
+    // class. There are lots of cases where this won't really work,
+    // but for the case of GenericMeta setting a bunch of properties
     // on the class we should be fine.
     if (metaclass != &PyType_Type) {
         PyObject *ns = PyDict_New();
         if (!ns) goto error;
 
-        PyObject *proxy_name = PyNumber_Add(name, PyUnicode_FromString("_proxy"));
-
         dummy_class = (PyTypeObject *)PyObject_CallFunctionObjArgs(
-            (PyObject *)metaclass, proxy_name, bases, ns, NULL);
+            (PyObject *)metaclass, name, bases, ns, NULL);
         Py_DECREF(ns);
         if (!dummy_class)
             goto error;
 
+        Py_DECREF(bases);
         bases = dummy_class->tp_bases;
         Py_INCREF(bases);
     }
 
-    // Allocate the type and then copy the main stuff in.
-    // XXX: hack
+    // Allocate the type and then copy the main stuff in.  We create
+    // it with the type metaclass and then set the real metaclass
+    // later, since otherwise there are some extra strictness checks
+    // about the mro we fail.
     t = (PyHeapTypeObject*)PyType_GenericAlloc(&PyType_Type, 0);
     if (!t)
         goto error;
@@ -152,7 +155,10 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
     if (dummy_class) {
         if (PyDict_Merge(t->ht_type.tp_dict, dummy_class->tp_dict, 0) != 0)
             goto error;
-        /* Oh no dude. */
+        // This is the *really* tasteless bit. GenericMeta's __new__
+        // in certain versions of typing sets _gorg to point back to
+        // the class. We need to override it to keep it from pointing
+        // to the proxy.
         if (PyDict_SetItemString(t->ht_type.tp_dict, "_gorg", (PyObject *)t) < 0)
             goto error;
         Py_DECREF(dummy_class);
