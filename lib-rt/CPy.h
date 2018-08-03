@@ -68,6 +68,9 @@ static inline void CPy_FixupTraitVtable(CPyVTableItem *vtable, int count) {
     }
 }
 
+// XXX: We need to proxify on 3.6 but not 3.5 and this is awful and
+// see if I can avoid it.
+#if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 6
 static inline PyObject *_proxify(PyObject *bases) {
     Py_ssize_t len = PyTuple_GET_SIZE(bases);
     PyObject *proxy_bases = PyTuple_New(len);
@@ -86,7 +89,12 @@ static inline PyObject *_proxify(PyObject *bases) {
 
     return proxy_bases;
 }
-
+#else
+static inline PyObject *_proxify(PyObject *bases) {
+    Py_INCREF(bases);
+    return bases;
+}
+#endif
 
 // Create a heap type based on a template non-heap type.
 // This is super hacky and maybe we should suck it up and use PyType_FromSpec instead.
@@ -165,8 +173,8 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
     Py_INCREF(name);
     t->ht_qualname = name;
     Py_XINCREF(bases);
-    //PyObject *reverse_proxy_bases = bases ? _proxify(bases) : NULL;
-    t->ht_type.tp_bases = bases;
+    PyObject *reverse_proxy_bases = bases ? _proxify(bases) : NULL;
+    t->ht_type.tp_bases = reverse_proxy_bases;
 
     if (PyType_Ready((PyTypeObject *)t) < 0)
         goto error;
