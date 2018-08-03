@@ -51,14 +51,14 @@ from mypyc.ops import (
     BasicBlock, AssignmentTarget, AssignmentTargetRegister, AssignmentTargetIndex,
     AssignmentTargetAttr, AssignmentTargetTuple, Environment, Op, LoadInt, RType, Value, Register,
     Return, FuncIR, Assign, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple, Unreachable,
-    TupleGet, TupleSet, ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, ROptional,
-    MethodCall, INVALID_FUNC_DEF, int_rprimitive, float_rprimitive, bool_rprimitive,
-    list_rprimitive, is_list_rprimitive, dict_rprimitive, set_rprimitive, str_rprimitive,
-    tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, exc_rtuple,
-    PrimitiveOp, ControlOp, LoadErrorValue, ERR_FALSE, OpDescription, RegisterOp,
-    is_object_rprimitive, LiteralsMap, FuncSignature, VTableAttr, VTableMethod, VTableEntries,
-    NAMESPACE_TYPE, RaiseStandardError, LoadErrorValue, NO_TRACEBACK_LINE_NO, FuncDecl,
-    FUNC_NORMAL, FUNC_STATICMETHOD, FUNC_CLASSMETHOD,
+    TupleGet, TupleSet, ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, MethodCall,
+    INVALID_FUNC_DEF, int_rprimitive, float_rprimitive, bool_rprimitive, list_rprimitive,
+    is_list_rprimitive, dict_rprimitive, set_rprimitive, str_rprimitive, tuple_rprimitive,
+    none_rprimitive, is_none_rprimitive, object_rprimitive, exc_rtuple, PrimitiveOp, ControlOp,
+    LoadErrorValue, ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap,
+    FuncSignature, VTableAttr, VTableMethod, VTableEntries, NAMESPACE_TYPE, RaiseStandardError,
+    LoadErrorValue, NO_TRACEBACK_LINE_NO, FuncDecl, FUNC_NORMAL, FUNC_STATICMETHOD,
+    FUNC_CLASSMETHOD, RUnion, is_optional_type, optional_value_type
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import (
@@ -76,7 +76,7 @@ from mypyc.ops_misc import (
 from mypyc.ops_exc import (
     no_err_occurred_op, raise_exception_op, reraise_exception_op,
     error_catch_op, restore_exc_info_op, exc_matches_op, get_exc_value_op,
-    get_exc_info_op,
+    get_exc_info_op, keep_propagating_op,
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
@@ -266,12 +266,8 @@ class Mapper:
         elif isinstance(typ, NoneTyp):
             return none_rprimitive
         elif isinstance(typ, UnionType):
-            assert len(typ.items) == 2 and any(isinstance(it, NoneTyp) for it in typ.items)
-            if isinstance(typ.items[0], NoneTyp):
-                value_type = typ.items[1]
-            else:
-                value_type = typ.items[0]
-            return ROptional(self.type_to_rtype(value_type))
+            return RUnion([self.type_to_rtype(item)
+                           for item in typ.items])
         elif isinstance(typ, AnyType):
             return object_rprimitive
         elif isinstance(typ, TypeType):
@@ -763,7 +759,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # don't initialize it to anything.
             if isinstance(stmt.rvalue, RefExpr) and stmt.rvalue.fullname == 'builtins.None':
                 attr_type = cls.attr_type(lvalue.name)
-                if (not isinstance(attr_type, ROptional) and not is_object_rprimitive(attr_type)
+                if (not is_optional_type(attr_type) and not is_object_rprimitive(attr_type)
                         and not is_none_rprimitive(attr_type)):
                     continue
 
@@ -987,7 +983,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.gen_generator_func()
             blocks, env, ret_type, fn_info = self.leave()
             func_ir, func_reg = self.gen_func_ir(blocks, sig, env, fn_info, class_name)
-            self.functions.append(func_ir)
 
             # Re-enter the FuncItem and visit the body of the function this time.
             self.enter(fn_info)
@@ -1011,7 +1006,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         blocks, env, ret_type, fn_info = self.leave()
 
         if fn_info.is_generator:
-            func_ir = self.add_next_to_generator_class(blocks, sig, env, fn_info)
+            self.functions.append(self.add_next_to_generator_class(blocks, sig, env, fn_info))
             self.functions.append(self.add_iter_to_generator_class(fn_info))
         else:
             func_ir, func_reg = self.gen_func_ir(blocks, sig, env, fn_info, class_name)
@@ -1187,7 +1182,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         assert False, 'Unsupported lvalue: %r' % lvalue
 
-    def read(self, target: Union[Value, AssignmentTarget], line: int) -> Value:
+    def read(self, target: Union[Value, AssignmentTarget], line: int = -1) -> Value:
         if isinstance(target, Value):
             return target
         if isinstance(target, AssignmentTargetRegister):
@@ -1346,15 +1341,17 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         self.for_loop_helper(s.index, s.expr, body, else_block if s.else_body else None, s.line)
 
-    def spill(self, value: Value, line: int) -> AssignmentTarget:
+    def spill(self, value: Value) -> AssignmentTarget:
         """Moves a given Value instance into the generator class' environment class."""
         name = '{}{}'.format(TEMP_ATTR_NAME, self.temp_counter)
         self.temp_counter += 1
         target = self.add_var_to_env_class(Var(name), value.type, self.fn_info.generator_class)
-        self.assign(target, value, line)
+
+        # Shouldn't be able to fail, so -1 for line
+        self.assign(target, value, -1)
         return target
 
-    def maybe_spill(self, value: Value, line: int) -> Union[Value, AssignmentTarget]:
+    def maybe_spill(self, value: Value) -> Union[Value, AssignmentTarget]:
         """
         Moves a given Value instance into the environment class for generator functions. For
         non-generator functions, leaves the Value instance as it is.
@@ -1363,11 +1360,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         original Value itself for non-generator functions.
         """
         if self.fn_info.is_generator:
-            return self.spill(value, line)
+            return self.spill(value)
         return value
 
-    def maybe_spill_assignable(self, value: Value,
-                               line: int) -> Union[Register, AssignmentTarget]:
+    def maybe_spill_assignable(self, value: Value) -> Union[Register, AssignmentTarget]:
         """
         Moves a given Value instance into the environment class for generator functions. For
         non-generator functions, allocate a temporary Register.
@@ -1376,11 +1372,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         assignable Register for non-generator functions.
         """
         if self.fn_info.is_generator:
-            return self.spill(value, line)
+            return self.spill(value)
+
+        if isinstance(value, Register):
+            return value
 
         # Allocate a temporary register for the assignable value.
         reg = self.alloc_temp(value.type)
-        self.assign(reg, value, line)
+        self.assign(reg, value, -1)
         return reg
 
     def for_loop_helper(self, index: Lvalue, expr: Expression,
@@ -1409,7 +1408,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # TODO: Check argument counts and kinds; check the lvalue
             end = expr.args[0]
             end_reg = self.accept(end)
-            end_target = self.maybe_spill(end_reg, line)
+            end_target = self.maybe_spill(end_reg)
 
             # Initialize loop index to 0. Assert that the index target is assignable.
             index_target = self.get_assignment_target(
@@ -1445,8 +1444,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # environment class.
             expr_reg = self.accept(expr)
             index_reg = self.add(LoadInt(0))
-            expr_target = self.maybe_spill(expr_reg, line)
-            index_target = self.maybe_spill_assignable(index_reg, line)
+            expr_target = self.maybe_spill(expr_reg)
+            index_target = self.maybe_spill_assignable(index_reg)
 
             condition_block = self.goto_new_block()
 
@@ -1487,8 +1486,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # environment class.
             expr_reg = self.accept(expr)
             iter_reg = self.add(PrimitiveOp([expr_reg], iter_op, line))
-            expr_target = self.maybe_spill(expr_reg, line)
-            iter_target = self.maybe_spill(iter_reg, line)
+            expr_target = self.maybe_spill(expr_reg)
+            iter_target = self.maybe_spill(iter_reg)
 
             # Create a block for where the __next__ function will be called on the iterator and
             # checked to see if the value returned is NULL, which would signal either the end of
@@ -1657,10 +1656,93 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.load_module_attr(expr)
         else:
             obj = self.accept(expr.expr)
-            if isinstance(obj.type, RInstance):
-                return self.add(GetAttr(obj, expr.name, expr.line))
+            return self.get_attr(obj, expr.name, self.node_type(expr), expr.line)
+
+    def get_attr(self, obj: Value, attr: str, result_type: RType, line: int) -> Value:
+        if isinstance(obj.type, RInstance):
+            return self.add(GetAttr(obj, attr, line))
+        elif isinstance(obj.type, RUnion):
+            return self.union_get_attr(obj, obj.type, attr, result_type, line)
+        else:
+            return self.py_get_attr(obj, attr, line)
+
+    def union_get_attr(self,
+                       obj: Value,
+                       rtype: RUnion,
+                       attr: str,
+                       result_type: RType,
+                       line: int) -> Value:
+        def get_item_attr(value: Value) -> Value:
+            return self.get_attr(value, attr, result_type, line)
+
+        return self.decompose_union_helper(obj, rtype, result_type, get_item_attr, line)
+
+    def decompose_union_helper(self,
+                               obj: Value,
+                               rtype: RUnion,
+                               result_type: RType,
+                               process_item: Callable[[Value], Value],
+                               line: int) -> Value:
+        """Generate isinstance() + specialized operations for union items.
+
+        Say, for Union[A, B] generate ops resembling this (pseudocode):
+
+            if isinstance(obj, A):
+                result = <result of process_item(cast(A, obj)>
             else:
-                return self.py_get_attr(obj, expr.name, expr.line)
+                result = <result of process_item(cast(B, obj)>
+
+        Args:
+            obj: value with a union type
+            rtype: the union type
+            result_type: result of the operation
+            process_item: callback to generate op for a single union item (arg is coerced
+                to union item type)
+            line: line number
+        """
+        # TODO: Optimize cases where a single operation can handle multiple union items
+        #     (say a method is implemented in a common base class)
+        fast_items = []
+        rest_items = []
+        for item in rtype.items:
+            if isinstance(item, RInstance):
+                fast_items.append(item)
+            else:
+                # For everything but RInstance we fall back to C API
+                rest_items.append(item)
+        exit_block = BasicBlock()
+        result = self.alloc_temp(result_type)
+        for i, item in enumerate(fast_items):
+            more_types = i < len(fast_items) - 1 or rest_items
+            if more_types:
+                # We are not at the final item so we need one more branch
+                op = self.isinstance(obj, item, line)
+                true_block, false_block = BasicBlock(), BasicBlock()
+                self.add_bool_branch(op, true_block, false_block)
+                self.activate_block(true_block)
+            coerced = self.coerce(obj, item, line)
+            temp = process_item(coerced)
+            temp2 = self.coerce(temp, result_type, line)
+            self.add(Assign(result, temp2))
+            self.goto(exit_block)
+            if more_types:
+                self.activate_block(false_block)
+        if rest_items:
+            # For everything else we use generic operation. Use force=True to drop the
+            # union type.
+            coerced = self.coerce(obj, object_rprimitive, line, force=True)
+            temp = process_item(coerced)
+            temp2 = self.coerce(temp, result_type, line)
+            self.add(Assign(result, temp2))
+            self.goto(exit_block)
+        self.activate_block(exit_block)
+        return result
+
+    def isinstance(self, obj: Value, rtype: RInstance, line: int) -> Value:
+        class_ir = rtype.class_ir
+        fullname = '%s.%s' % (class_ir.module_name, class_ir.name)
+        type_obj = self.load_native_type_object(fullname)
+        return self.primitive_op(fast_isinstance_op, [obj, type_obj], line)
 
     def py_get_attr(self, obj: Value, attr: str, line: int) -> Value:
         key = self.load_static_unicode(attr)
@@ -1930,6 +2012,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 arg_values = self.coerce_native_call_args(arg_values, decl.bound_sig, base.line)
 
                 return self.add(MethodCall(base, name, arg_values, line))
+        elif isinstance(base.type, RUnion):
+            return self.union_method_call(base, base.type, name, arg_values, return_rtype, line,
+                                          arg_kinds, arg_names)
 
         # Try to do a special-cased method call
         target = self.translate_special_method_call(base, name, arg_values, return_rtype, line)
@@ -1938,6 +2023,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         # Fall back to Python method call
         return self.py_method_call(base, name, arg_values, base.line, arg_kinds, arg_names)
+
+    def union_method_call(self,
+                          base: Value,
+                          obj_type: RUnion,
+                          name: str,
+                          arg_values: List[Value],
+                          return_rtype: RType,
+                          line: int,
+                          arg_kinds: Optional[List[int]],
+                          arg_names: Optional[List[Optional[str]]]) -> Value:
+        def call_union_item(value: Value) -> Value:
+            return self.gen_method_call(value, name, arg_values, return_rtype, line,
+                                        arg_kinds, arg_names)
+
+        return self.decompose_union_helper(base, obj_type, return_rtype, call_union_item, line)
 
     def translate_cast_expr(self, expr: CastExpr) -> Value:
         src = self.accept(expr.expr)
@@ -2102,26 +2202,27 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             length = self.primitive_op(list_len_op, [value], value.line)
             zero = self.add(LoadInt(0))
             value = self.binary_op(length, zero, '!=', value.line)
-        elif isinstance(value.type, ROptional):
-            is_none = self.binary_op(value, self.add(PrimitiveOp([], none_op, value.line)),
-                                     'is not', value.line)
-            branch = Branch(is_none, true, false, Branch.BOOL_EXPR)
-            self.add(branch)
-            value_type = value.type.value_type
-            if isinstance(value_type, RInstance):
-                # Optional[X] where X is always truthy
-                # TODO: Support __bool__
-                pass
-            else:
-                # Optional[X] where X may be falsey and requires a check
-                branch.true = self.new_block()
-                # unbox_or_cast instead of coerce because we want the
-                # type to change even if it is a subtype.
-                remaining = self.unbox_or_cast(value, value.type.value_type, value.line)
-                self.add_bool_branch(remaining, true, false)
-            return
-        elif not is_same_type(value.type, bool_rprimitive):
-            value = self.primitive_op(bool_op, [value], value.line)
+        else:
+            value_type = optional_value_type(value.type)
+            if value_type is not None:
+                is_none = self.binary_op(value, self.add(PrimitiveOp([], none_op, value.line)),
+                                         'is not', value.line)
+                branch = Branch(is_none, true, false, Branch.BOOL_EXPR)
+                self.add(branch)
+                if isinstance(value_type, RInstance):
+                    # Optional[X] where X is always truthy
+                    # TODO: Support __bool__
+                    pass
+                else:
+                    # Optional[X] where X may be falsey and requires a check
+                    branch.true = self.new_block()
+                    # unbox_or_cast instead of coerce because we want the
+                    # type to change even if it is a subtype.
+                    remaining = self.unbox_or_cast(value, value_type, value.line)
+                    self.add_bool_branch(remaining, true, false)
+                return
+            elif not is_same_type(value.type, bool_rprimitive):
+                value = self.primitive_op(bool_op, [value], value.line)
         self.add(Branch(value, true, false, Branch.BOOL_EXPR))
 
     def visit_nonlocal_decl(self, o: NonlocalDecl) -> None:
@@ -2190,6 +2291,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         assert handlers, "try needs except"
 
         except_entry, exit_block, cleanup_block = BasicBlock(), BasicBlock(), BasicBlock()
+        double_except_block = BasicBlock()
         # If there is an else block, jump there after the try, otherwise just leave
         else_block = BasicBlock() if else_body else exit_block
 
@@ -2206,7 +2308,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # the *old* exc_info if an exception occurs.
         # The exception chaining will be done automatically when the
         # exception is raised, based on the exception in exc_info.
-        self.error_handlers.append(cleanup_block)
+        self.error_handlers.append(double_except_block)
         self.activate_block(except_entry)
         old_exc = self.primitive_op(error_catch_op, [], line)
         # Compile the except blocks with the nonlocal control flow overridden to clear exc_info
@@ -2237,14 +2339,20 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.nonlocal_control.pop()
         self.error_handlers.pop()
 
-        # Cleanup for if we leave except through normal control flow
-        # or a raised exception: restore the saved exc_info
-        # information and continue propagating the exception if it
-        # exists.
+        # Cleanup for if we leave except through normal control flow:
+        # restore the saved exc_info information and continue propagating
+        # the exception if it exists.
         self.activate_block(cleanup_block)
         self.primitive_op(restore_exc_info_op, [old_exc], line)
-        self.primitive_op(no_err_occurred_op, [], NO_TRACEBACK_LINE_NO)
         self.goto(exit_block)
+
+        # Cleanup for if we leave except through a raised exception:
+        # restore the saved exc_info information and continue propagating
+        # the exception.
+        self.activate_block(double_except_block)
+        self.primitive_op(restore_exc_info_op, [old_exc], line)
+        self.primitive_op(keep_propagating_op, [], NO_TRACEBACK_LINE_NO)
+        self.add(Unreachable())
 
         # If present, compile the else body in the obvious way
         if else_body:
@@ -2402,7 +2510,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # If there was an exception, restore again
         self.activate_block(cleanup_block)
         finally_control.gen_cleanup(self)
-        self.primitive_op(no_err_occurred_op, [], NO_TRACEBACK_LINE_NO)  # HACK always raises
+        self.primitive_op(keep_propagating_op, [], NO_TRACEBACK_LINE_NO)
         self.add(Unreachable())
 
         return out_block
@@ -2464,12 +2572,12 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # I don't actually understand why a bunch of it is the way it is.
         # We could probably optimize the case where the manager is compiled by us,
         # but that is not our common case at all, so.
-        mgr = self.accept(expr)
-        typ = self.primitive_op(type_op, [mgr], line)
-        exit_ = self.py_get_attr(typ, '__exit__', line)
-        value = self.py_call(self.py_get_attr(typ, '__enter__', line), [mgr], line)
-        exc = self.alloc_temp(bool_rprimitive)
-        self.add(Assign(exc, self.primitive_op(true_op, [], -1)))
+        mgr_v = self.accept(expr)
+        typ = self.primitive_op(type_op, [mgr_v], line)
+        exit_ = self.maybe_spill(self.py_get_attr(typ, '__exit__', line))
+        value = self.py_call(self.py_get_attr(typ, '__enter__', line), [mgr_v], line)
+        mgr = self.maybe_spill(mgr_v)
+        exc = self.maybe_spill_assignable(self.primitive_op(true_op, [], -1))
 
         def try_body() -> None:
             if target:
@@ -2477,9 +2585,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             body()
 
         def except_body() -> None:
-            self.add(Assign(exc, self.primitive_op(false_op, [], -1)))
+            self.assign(exc, self.primitive_op(false_op, [], -1), line)
             out_block, reraise_block = BasicBlock(), BasicBlock()
-            self.add_bool_branch(self.py_call(exit_, [mgr] + self.get_sys_exc_info(), line),
+            self.add_bool_branch(self.py_call(self.read(exit_),
+                                              [self.read(mgr)] + self.get_sys_exc_info(), line),
                                  out_block, reraise_block)
             self.activate_block(reraise_block)
             self.primitive_op(reraise_exception_op, [], NO_TRACEBACK_LINE_NO)
@@ -2488,10 +2597,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         def finally_body() -> None:
             out_block, exit_block = BasicBlock(), BasicBlock()
-            self.add(Branch(exc, exit_block, out_block, Branch.BOOL_EXPR))
+            self.add(Branch(self.read(exc), exit_block, out_block, Branch.BOOL_EXPR))
             self.activate_block(exit_block)
             none = self.primitive_op(none_op, [], -1)
-            self.py_call(exit_, [mgr, none, none, none], line)
+            self.py_call(self.read(exit_), [self.read(mgr), none, none, none], line)
             self.goto_and_activate(out_block)
 
         self.visit_try_finally_stmt(
@@ -2947,7 +3056,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         if self.fn_info.is_nested:
             assert base is not None
-
             index = len(self.environments) - 2
 
             # Load the first outer environment. This one is special because it gets saved in the
@@ -3231,7 +3339,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Set the generator class' environment class' NEXT_LABEL_ATTR_NAME attribute to 0.
         zero_reg = self.add(LoadInt(0))
         self.add(SetAttr(curr_env_reg, NEXT_LABEL_ATTR_NAME, zero_reg, fitem.line))
-
         return generator_reg
 
     def is_builtin_ref_expr(self, expr: RefExpr) -> bool:
@@ -3295,11 +3402,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         module, name = fullname.rsplit('.', 1)
         return self.add(LoadStatic(object_rprimitive, name, module, NAMESPACE_TYPE))
 
-    def coerce(self, src: Value, target_type: RType, line: int) -> Value:
+    def coerce(self, src: Value, target_type: RType, line: int, force: bool = False) -> Value:
         """Generate a coercion/cast from one type to other (only if needed).
 
         For example, int -> object boxes the source int; int -> int emits nothing;
         object -> int unboxes the object. All conversions preserve object value.
+
+        If force is true, always generate an op (even if it is just an assingment) so
+        that the result will have exactly target_type as the type.
 
         Returns the register with the converted value (may be same as src).
         """
@@ -3314,6 +3424,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         if ((not src.type.is_unboxed and target_type.is_unboxed)
                 or not is_subtype(src.type, target_type)):
             return self.unbox_or_cast(src, target_type, line)
+        elif force:
+            tmp = self.alloc_temp(target_type)
+            self.add(Assign(tmp, src))
+            return tmp
         return src
 
     def keyword_args_to_positional(self,
