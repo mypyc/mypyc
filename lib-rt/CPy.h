@@ -81,7 +81,7 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
 
     PyObject *old_bases = bases;
     if (bases) {
-        Py_INCREF(bases);
+        Py_INCREF(old_bases);
         bases = update_bases(old_bases);
 
         // Find the appropriate metaclass from our base classes. We
@@ -146,6 +146,7 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
     if (PyType_Ready((PyTypeObject *)t) < 0)
         goto error;
 
+    Py_INCREF(metaclass);
     Py_TYPE(t) = metaclass;
 
     if (dummy_class) {
