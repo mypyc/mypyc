@@ -155,7 +155,7 @@ print(tuple(x.__name__ for x in interpreted.SumVisitor.mro()))
 print(tuple(x.__name__ for x in native.SumVisitor.mro()))
 print(native.TreeVisitor.__name__)
 print(native.SumVisitor.__name__)
-print(native.TreeVisitor[int])
+print(native.TreeVisitor[native.T])
 
 def dumb_time(f):
     t0 = time()
@@ -196,4 +196,4 @@ if os.environ.get('MYPYC_RUN_BENCH') == '1':
 ('SumVisitor', 'TreeVisitor', 'Generic', 'object')
 TreeVisitor
 SumVisitor
-native.TreeVisitor[int]
+native.TreeVisitor[~T]
