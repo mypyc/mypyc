@@ -13,7 +13,7 @@ It would be translated to something that conceptually looks like this:
    r3 = r2 + r1 :: int
    return r3
 """
-from typing import Callable, Dict, List, Tuple, Optional, Union, Sequence, Set, overload
+from typing import Callable, Dict, List, Tuple, Optional, Union, Sequence, Set, Any, overload
 from abc import abstractmethod
 import sys
 import traceback
@@ -72,8 +72,7 @@ from mypyc.ops_misc import (
     none_op, true_op, false_op, iter_op, next_op, py_getattr_op, py_setattr_op, py_delattr_op,
     py_call_op, py_call_with_kwargs_op, py_method_call_op,
     fast_isinstance_op, bool_op, new_slice_op,
-    is_none_op, type_op,
-    pytype_from_template_op,
+    type_op, pytype_from_template_op,
 )
 from mypyc.ops_exc import (
     no_err_occurred_op, raise_exception_op, reraise_exception_op,
@@ -82,7 +81,7 @@ from mypyc.ops_exc import (
 )
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
-from mypyc.crash import crash_report
+from mypyc.crash import catch_errors
 
 GenFunc = Callable[[], None]
 
@@ -96,17 +95,18 @@ def build_ir(modules: List[MypyFile],
     classes = []
     for module in modules:
         module_classes = [node for node in module.defs if isinstance(node, ClassDef)]
-        classes.extend([(module.fullname(), cdef) for cdef in module_classes])
+        classes.extend([(module, cdef) for cdef in module_classes])
 
     # Collect all class mappings so that we can bind arbitrary class name
     # references even if there are import cycles.
-    for module_name, cdef in classes:
-        class_ir = ClassIR(cdef.name, module_name, is_trait(cdef))
+    for module, cdef in classes:
+        class_ir = ClassIR(cdef.name, module.fullname(), is_trait(cdef))
         mapper.type_to_ir[cdef.info] = class_ir
 
     # Populate structural information in class IR.
-    for module_name, cdef in classes:
-        prepare_class_def(module_name, cdef, mapper)
+    for module, cdef in classes:
+        with catch_errors(module.path, cdef.line):
+            prepare_class_def(module.fullname(), cdef, mapper)
 
     # Collect all the functions also
     for module in modules:
@@ -721,14 +721,19 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         We allow literals of primitives types, None, and references to global variables
         whose names are in all caps (as an unsound and very hacky proxy for whether they
         are a constant).
+        Additionally in a totally defensely hack we whitelist some other names.
         """
         # TODO: This is a hack, #336
+        ALLOWED_NAMES = ('_dummy',)
         return (isinstance(e, (StrExpr, BytesExpr, IntExpr, FloatExpr))
                 or (isinstance(e, UnaryExpr) and e.op == '-'
                     and isinstance(e.expr, (IntExpr, FloatExpr)))
+                or (isinstance(e, TupleExpr)
+                    and all(self.is_approximately_constant(e) for e in e.items))
                 or (isinstance(e, RefExpr) and e.kind == GDEF
                     and (e.fullname in ('builtins.True', 'builtins.False', 'builtins.None')
-                         or (e.node is not None and e.node.name().upper() == e.node.name()))))
+                         or (e.node is not None and (e.node.name().upper() == e.node.name()
+                                                     or e.node.name() in ALLOWED_NAMES)))))
 
     def generate_attr_defaults(self, cdef: ClassDef) -> None:
         """Generate an initialization method for default attr values (from class vars)"""
@@ -745,6 +750,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                         and isinstance(stmt.lvalues[0], NameExpr)
                         and not is_class_var(stmt.lvalues[0])
                         and not isinstance(stmt.rvalue, TempNode)):
+                    if stmt.lvalues[0].name == '__slots__':
+                        continue
+
                     default_assignments.append(stmt)
 
         if not default_assignments:
@@ -761,8 +769,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         for stmt in default_assignments:
             lvalue = stmt.lvalues[0]
             assert isinstance(lvalue, NameExpr)
-            assert self.is_approximately_constant(stmt.rvalue), (
-                "Unsupported default attribute value")
+            with self.catch_errors(stmt.line):
+                assert self.is_approximately_constant(stmt.rvalue), (
+                    "Unsupported default attribute value")
 
             # If the attribute is initialized to None and type isn't optional,
             # don't initialize it to anything.
@@ -791,9 +800,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         for stmt in cdef.defs.body:
             if isinstance(stmt, FuncDef):
-                self.visit_method(cdef, stmt)
+                with self.catch_errors(stmt.line):
+                    self.visit_method(cdef, stmt)
             elif isinstance(stmt, Decorator):
-                self.visit_method(cdef, stmt.func)
+                with self.catch_errors(stmt.line):
+                    self.visit_method(cdef, stmt.func)
             elif isinstance(stmt, PassStmt):
                 continue
             elif isinstance(stmt, AssignmentStmt):
@@ -815,7 +826,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 # Docstring. Ignore
                 pass
             else:
-                assert False, "Unsupported statement in class body"
+                with self.catch_errors(stmt.line):
+                    assert False, "Unsupported statement in class body"
 
         self.generate_attr_defaults(cdef)
 
@@ -953,8 +965,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         fitem = self.fn_info.fitem
         for arg in fitem.arguments:
             if arg.initializer:
-                assert self.is_approximately_constant(arg.initializer), (
-                    "Unsupported default argument")
+                with self.catch_errors(arg.initializer.line):
+                    assert self.is_approximately_constant(arg.initializer), (
+                        "Unsupported default argument")
                 target = self.environment.lookup(arg.variable)
                 assert isinstance(target, AssignmentTargetRegister)
                 error_block, body_block = BasicBlock(), BasicBlock()
@@ -1099,7 +1112,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def add_implicit_return(self) -> None:
         block = self.blocks[-1][-1]
         if not block.ops or not isinstance(block.ops[-1], ControlOp):
-            retval = self.add(PrimitiveOp([], none_op, line=-1))
+            retval = self.none()
             self.nonlocal_control[-1].gen_return(self, retval)
 
     def add_implicit_unreachable(self) -> None:
@@ -1119,7 +1132,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             retval = self.accept(stmt.expr)
             retval = self.coerce(retval, self.ret_types[-1], stmt.line)
         else:
-            retval = self.add(PrimitiveOp([], none_op, line=-1))
+            retval = self.none()
         self.nonlocal_control[-1].gen_return(self, retval)
 
     def disallow_class_assignments(self, lvalues: List[Lvalue]) -> None:
@@ -1593,7 +1606,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 if is_none_rprimitive(result_type):
                     # Special case None return. The actual result may actually be a bool
                     # and so we can't just coerce it.
-                    target = self.add(PrimitiveOp([], none_op, line))
+                    target = self.none()
                 else:
                     target = self.coerce(target, result_type, line)
             return target
@@ -2209,16 +2222,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         elif op == 'not in':
             op, negate = 'in', True
 
-        rhs = e.operands[1]
-        if (op == 'is' and isinstance(rhs, NameExpr) and rhs.node
-                and rhs.node.fullname() == 'builtins.None'):
-            # Special case 'is None' checks.
-            left = self.accept(e.operands[0])
-            target = self.add(PrimitiveOp([left], is_none_op, e.line))
-        else:
-            left = self.accept(e.operands[0])
-            right = self.accept(e.operands[1])
-            target = self.binary_op(left, right, op, e.line)
+        left = self.accept(e.operands[0])
+        right = self.accept(e.operands[1])
+        target = self.binary_op(left, right, op, e.line)
 
         if negate:
             target = self.unary_op(target, 'not', e.line)
@@ -2235,8 +2241,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         else:
             value_type = optional_value_type(value.type)
             if value_type is not None:
-                is_none = self.binary_op(value, self.add(PrimitiveOp([], none_op, value.line)),
-                                         'is not', value.line)
+                is_none = self.binary_op(value, self.none(), 'is not', value.line)
                 branch = Branch(is_none, true, false, Branch.BOOL_EXPR)
                 self.add(branch)
                 if isinstance(value_type, RInstance):
@@ -2261,7 +2266,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def visit_slice_expr(self, expr: SliceExpr) -> Value:
         def get_arg(arg: Optional[Expression]) -> Value:
             if arg is None:
-                return self.primitive_op(none_op, [], expr.line)
+                return self.none()
             else:
                 return self.accept(arg)
 
@@ -2629,7 +2634,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             out_block, exit_block = BasicBlock(), BasicBlock()
             self.add(Branch(self.read(exc), exit_block, out_block, Branch.BOOL_EXPR))
             self.activate_block(exit_block)
-            none = self.primitive_op(none_op, [], -1)
+            none = self.none()
             self.py_call(self.read(exit_), [self.read(mgr), none, none, none], line)
             self.goto_and_activate(out_block)
 
@@ -2831,7 +2836,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             retval = self.accept(expr.expr)
             retval = self.coerce(retval, self.ret_types[-1], expr.line)
         else:
-            retval = self.add(PrimitiveOp([], none_op, line=-1))
+            retval = self.none()
 
         generator_class = self.fn_info.generator_class
         # Create a new block for the instructions immediately following the yield expression, and
@@ -2846,7 +2851,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         # TODO: Replace this value with the value that is sent into the generator when we support
         #       the 'send' function.
-        return PrimitiveOp([], none_op, line=-1)
+        return self.none()
 
     # Unimplemented constructs
     # TODO: some of these are actually things that should never show up,
@@ -3003,7 +3008,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def accept(self, node: Statement) -> None: ...
 
     def accept(self, node: Union[Statement, Expression]) -> Optional[Value]:
-        try:
+        with self.catch_errors(node.line):
             if isinstance(node, Expression):
                 res = node.accept(self)
                 res = self.coerce(res, self.node_type(node), node.line)
@@ -3011,8 +3016,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             else:
                 node.accept(self)
                 return None
-        except Exception:
-            crash_report(self.module_path, node.line)
 
     def alloc_temp(self, type: RType) -> Register:
         return self.environment.add_temp(type)
@@ -3054,6 +3057,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 result_type=None,
                 line=line)
         return dict_reg
+
+    def none(self) -> Value:
+        return self.add(PrimitiveOp([], none_op, line=-1))
 
     def load_outer_env(self, base: Value, outer_env: Environment) -> Value:
         """Loads the environment class for a given base into a register.
@@ -3475,3 +3481,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                                   lambda n: AnyType(TypeOfAny.special_form))
         assert all(len(lst) <= 1 for lst in formal_to_actual)
         return [None if len(lst) == 0 else args[lst[0]] for lst in formal_to_actual]
+
+    # Lacks a good type because there wasn't a reasonable type in 3.5 :(
+    def catch_errors(self, line: int) -> Any:
+        return catch_errors(self.module_path, line)

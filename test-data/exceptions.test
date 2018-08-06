@@ -7,6 +7,11 @@ from typing import List
 def f(x: List[int]) -> int:
     return x[0]
 [out]
+def f(x):
+    x :: list
+    r0 :: int
+    r1 :: object
+    r2, r3 :: int
 L0:
     r0 = 0
     r1 = x[r0] :: list
@@ -28,6 +33,15 @@ def f(x: List[int], y: int, z: int) -> None:
     x.append(y)
     x[y] = z
 [out]
+def f(x, y, z):
+    x :: list
+    y, z :: int
+    r0 :: object
+    r1 :: bool
+    r2 :: None
+    r3 :: object
+    r4 :: bool
+    r5, r6 :: None
 L0:
     inc_ref y :: int
     r0 = box(int, y)
@@ -36,7 +50,6 @@ L0:
     if not r1 goto L3 (error at f:3) else goto L1 :: bool
 L1:
     r2 = None
-    dec_ref r2
     inc_ref z :: int
     r3 = box(int, z)
     r4 = x.__setitem__(y, r3) :: list
@@ -44,6 +57,7 @@ L1:
     if not r4 goto L3 (error at f:4) else goto L2 :: bool
 L2:
     r5 = None
+    inc_ref r5
     return r5
 L3:
     r6 = <error> :: None
@@ -61,30 +75,41 @@ def f(x: Optional[A]) -> int:
         return 2
     return 3
 [out]
+def f(x):
+    x :: union[A, None]
+    r0 :: None
+    r1 :: bool
+    r2 :: int
+    r3 :: A
+    r4 :: None
+    r5, r6 :: bool
+    r7, r8, r9 :: int
 L0:
-    r0 = x is None
-    if r0 goto L1 else goto L2 :: bool
+    r0 = None
+    r1 = x is r0
+    if r1 goto L1 else goto L2 :: bool
 L1:
-    r1 = 1
-    return r1
+    r2 = 1
+    return r2
 L2:
     inc_ref x
-    r2 = cast(A, x)
-    if is_error(r2) goto L6 (error at f:8) else goto L3
+    r3 = cast(A, x)
+    if is_error(r3) goto L6 (error at f:8) else goto L3
 L3:
-    r3 = r2 is None
-    dec_ref r2
-    r4 = !r3
-    if r4 goto L4 else goto L5 :: bool
+    r4 = None
+    r5 = r3 is r4
+    dec_ref r3
+    r6 = !r5
+    if r6 goto L4 else goto L5 :: bool
 L4:
-    r5 = 2
-    return r5
-L5:
-    r6 = 3
-    return r6
-L6:
-    r7 = <error> :: int
+    r7 = 2
     return r7
+L5:
+    r8 = 3
+    return r8
+L6:
+    r9 = <error> :: int
+    return r9
 
 [case testListSum]
 from typing import List
@@ -96,6 +121,12 @@ def sum(a: List[int], l: int) -> int:
         i = i + 1
     return sum
 [out]
+def sum(a, l):
+    a :: list
+    l, r0, sum, r1, i :: int
+    r2 :: bool
+    r3 :: object
+    r4, r5, r6, r7, r8 :: int
 L0:
     r0 = 0
     sum = r0
@@ -142,6 +173,18 @@ def g() -> None:
     except:
         print("weeee")
 [out]
+def g():
+    r0 :: object
+    r1 :: str
+    r2, r3 :: object
+    r4 :: tuple[object, object, object]
+    r5 :: str
+    r6 :: object
+    r7 :: str
+    r8, r9 :: object
+    r10 :: None
+    r11 :: bool
+    r12, r13 :: None
 L0:
 L1:
     r0 = builtins.module :: static
@@ -182,6 +225,7 @@ L10:
     unreachable
 L11:
     r12 = None
+    inc_ref r12
     return r12
 L12:
     r13 = <error> :: None
@@ -201,6 +245,24 @@ def a() -> str:
     finally:
         print('goodbye!')
 [out]
+def a():
+    r0 :: object
+    r1 :: str
+    r2, r3 :: object
+    r4 :: None
+    r5, r6 :: str
+    r7 :: tuple[object, object, object]
+    r8 :: str
+    r9 :: tuple[object, object, object]
+    r10 :: str
+    r11 :: tuple[object, object, object]
+    r12 :: str
+    r13 :: object
+    r14 :: str
+    r15, r16 :: object
+    r17 :: None
+    r18, r19 :: bool
+    r20 :: str
 L0:
 L1:
     r0 = builtins.module :: static
@@ -293,9 +355,13 @@ def lol() -> None:
     """Hello"""
     pass
 [out]
+def lol():
+    r0 :: str
+    r1 :: None
 L0:
     r0 = unicode_0 :: static  ('Hello')
     r1 = None
+    inc_ref r1
     return r1
 
 [case testExceptUndefined]
@@ -306,6 +372,19 @@ def lol(x: object) -> int:
         return -1
     return st + 1
 [out]
+def lol(x):
+    x, r0 :: object
+    r1 :: str
+    r2, r3 :: object
+    r4, st :: int
+    r5 :: tuple[object, object, object]
+    r6 :: object
+    r7 :: str
+    r8 :: object
+    r9 :: bool
+    r10, r11 :: int
+    r12, r13 :: bool
+    r14, r15, r16 :: int
 L0:
 L1:
     r0 = builtins.module :: static
