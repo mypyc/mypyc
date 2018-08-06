@@ -751,13 +751,13 @@ def generator__gen.__next__(self):
     r8 :: object
     r9 :: int
     r10 :: bool
-    r11 :: None
-    r12 :: int
-    r13, r14 :: bool
-    r15 :: int
-    r16 :: bool
-    r17 :: int
-    r18, r19 :: bool
+    r11, r12 :: None
+    r13 :: int
+    r14, r15 :: bool
+    r16 :: int
+    r17 :: bool
+    r18 :: int
+    r19, r20 :: bool
 L0:
     r0 = self.__mypyc_env__
     r1 = r0.__mypyc_next_label__
@@ -777,19 +777,20 @@ L2:
     return r8
 L3:
     r11 = None
-    r12 = -1
-    r0.__mypyc_next_label__ = r12; r13 = is_error
+    r12 = None
+    r13 = -1
+    r0.__mypyc_next_label__ = r13; r14 = is_error
 L4:
-    raise StopIteration(r11)
+    raise StopIteration(r12)
     unreachable
 L5:
-    r15 = 0
-    r16 = r1 == r15 :: int
-    if r16 goto L1 else goto L6 :: bool
+    r16 = 0
+    r17 = r1 == r16 :: int
+    if r17 goto L1 else goto L6 :: bool
 L6:
-    r17 = 1
-    r18 = r1 == r17 :: int
-    if r18 goto L3 else goto L7 :: bool
+    r18 = 1
+    r19 = r1 == r18 :: int
+    if r19 goto L3 else goto L7 :: bool
 L7:
     raise StopIteration
     unreachable

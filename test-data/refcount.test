@@ -813,3 +813,13 @@ L4:
 L5:
     dec_ref r0
     goto L3
+
+[case testYieldNestedRefcount]
+from typing import Callable, Generator
+
+def generator(a: int) -> Generator:
+    def normal(x: int) -> int:
+        return a + x
+    yield normal(1)
+
+[out]

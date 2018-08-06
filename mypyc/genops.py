@@ -2963,6 +2963,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         self.blocks[-1][-1].ops.append(op)
         if isinstance(op, RegisterOp):
+            if isinstance(op, Call):
+                print('performing add_op on {}'.format(op.to_str(self.environment)))
             self.environment.add_op(op)
         return op
 
