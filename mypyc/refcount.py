@@ -44,6 +44,8 @@ def insert_ref_count_opcodes(ir: FuncIR) -> None:
 
     This is the entry point to this module.
     """
+    print('starting decref for {}'.format(ir.name))
+
     cfg = get_cfg(ir.blocks)
     borrowed = set(reg for reg in ir.env.regs() if reg.is_borrowed)
     live = analyze_live_regs(ir.blocks, cfg)
@@ -178,6 +180,9 @@ def after_branch_decrefs(label: BasicBlock,
     target_pre_live = pre_live[label, 0]
     decref = source_live_regs - target_pre_live - source_borrowed
     if decref:
+        for reg in decref:
+            if reg not in env.indexes:
+                print(reg.to_str(env))
         return tuple(reg
                      for reg in sorted(decref, key=lambda r: env.indexes[r])
                      if reg.type.is_refcounted and reg not in omitted)

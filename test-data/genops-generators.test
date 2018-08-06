@@ -691,25 +691,45 @@ L0:
     r0.__mypyc_next_label__ = r4; r5 = is_error
     return r2
 
-[case testYieldNested]
+[case testYieldNestedGenops]
 from typing import Callable, Generator
 
-def normal(a: int) -> Callable:
-    def generator(x: int) -> Generator:
-        yield a
-        yield x
-    return generator
+def generator(a: int) -> Generator:
+    def normal(x: int) -> int:
+        return a + x
+    yield normal(1)
+
+# def generator(a: int) -> int:
+#     def normal(x: int) -> int:
+#         return a + x
+#     return normal(1)
+
+# def normal(a: int) -> Callable:
+#     def generator(x: int) -> Generator:
+#         yield a
+#         yield x
+#     return generator
 
 [out]
-def generator_normal_gen.__next__(self):
-    self :: generator_normal_gen
-    r0 :: generator_normal_env
+def normal_generator_obj.__call__(self, x):
+    self :: normal_generator_obj
+    x :: int
+    r0 :: generator__env
+    r1, r2 :: int
+L0:
+    r0 = self.__mypyc_env__
+    r1 = r0.a
+    r2 = r1 + x :: int
+    return r2
+def generator__gen.__next__(self):
+    self :: generator__gen
+    r0 :: generator__env
     r1 :: int
-    r2 :: normal__env
-    r3 :: int
-    r4 :: object
-    r5 :: int
-    r6 :: bool
+    r2 :: normal_generator_obj
+    r3 :: bool
+    normal :: object
+    r4 :: int
+    r5, r6 :: object
     r7 :: int
     r8 :: object
     r9 :: int
@@ -720,85 +740,59 @@ def generator_normal_gen.__next__(self):
     r15 :: int
     r16 :: bool
     r17 :: int
-    r18 :: bool
-    r19 :: int
-    r20, r21 :: bool
+    r18, r19 :: bool
 L0:
     r0 = self.__mypyc_env__
     r1 = r0.__mypyc_next_label__
-    goto L7
+    goto L5
 L1:
-    r2 = r0.__mypyc_env__
+    r2 = normal_generator_obj()
+    r2.__mypyc_env__ = r0; r3 = is_error
+    normal = r2
 L2:
-    r3 = r2.a
-    r4 = box(int, r3)
-    r5 = 1
-    r0.__mypyc_next_label__ = r5; r6 = is_error
-    return r4
-L3:
-L4:
-    r7 = r0.x
+    r4 = 1
+    r5 = box(int, r4)
+    r6 = py_call(normal, r5)
+    r7 = unbox(int, r6)
     r8 = box(int, r7)
-    r9 = 2
+    r9 = 1
     r0.__mypyc_next_label__ = r9; r10 = is_error
     return r8
-L5:
+L3:
     r11 = None
     r12 = -1
     r0.__mypyc_next_label__ = r12; r13 = is_error
-L6:
+L4:
     raise StopIteration(r11)
     unreachable
-L7:
+L5:
     r15 = 0
     r16 = r1 == r15 :: int
-    if r16 goto L1 else goto L8 :: bool
-L8:
+    if r16 goto L1 else goto L6 :: bool
+L6:
     r17 = 1
     r18 = r1 == r17 :: int
-    if r18 goto L3 else goto L9 :: bool
-L9:
-    r19 = 2
-    r20 = r1 == r19 :: int
-    if r20 goto L5 else goto L10 :: bool
-L10:
+    if r18 goto L3 else goto L7 :: bool
+L7:
     raise StopIteration
     unreachable
-def generator_normal_gen.__iter__(self):
-    self :: generator_normal_gen
+def generator__gen.__iter__(self):
+    self :: generator__gen
 L0:
     return self
-def generator_normal_obj.__call__(self, x):
-    self :: generator_normal_obj
-    x :: int
-    r0 :: normal__env
-    r1 :: generator_normal_env
-    r2, r3 :: bool
-    r4 :: generator_normal_gen
-    r5 :: bool
-    r6 :: int
-    r7 :: bool
-L0:
-    r0 = self.__mypyc_env__
-    r1 = generator_normal_env()
-    r1.__mypyc_env__ = r0; r2 = is_error
-    r1.x = x; r3 = is_error
-    r4 = generator_normal_gen()
-    r4.__mypyc_env__ = r1; r5 = is_error
-    r6 = 0
-    r1.__mypyc_next_label__ = r6; r7 = is_error
-    return r4
-def normal(a):
+def generator(a):
     a :: int
-    r0 :: normal__env
+    r0 :: generator__env
     r1 :: bool
-    r2 :: generator_normal_obj
+    r2 :: generator__gen
     r3 :: bool
-    generator :: object
+    r4 :: int
+    r5 :: bool
 L0:
-    r0 = normal__env()
+    r0 = generator__env()
     r0.a = a; r1 = is_error
-    r2 = generator_normal_obj()
+    r2 = generator__gen()
     r2.__mypyc_env__ = r0; r3 = is_error
-    generator = r2
-    return generator
+    r4 = 0
+    r0.__mypyc_next_label__ = r4; r5 = is_error
+    return r2

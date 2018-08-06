@@ -2651,26 +2651,33 @@ yooo? a
 exit! a exception!
 ((1,), Exception('exception!',))
 
-[case testYieldNested]
+[case testYieldNestedRun]
 from typing import Callable, Generator
 
-def normal(a: int, b: float) -> Callable:
-    def generator(x: int, y: str) -> Generator:
-        yield a
-        yield b
-        yield x
-        yield y
-    return generator
+# def normal(a: int, b: float) -> Callable:
+#     def generator(x: int, y: str) -> Generator:
+#         yield a
+#         yield b
+#         yield x
+#         yield y
+#     return generator
+
+def generator(a: int) -> Generator:
+    def normal(x: int) -> int:
+        return a + x
+
+    for i in range(3):
+        yield normal(i)
 
 [file driver.py]
 from native import normal
 
-generator = normal(1, 2.0)(3, '4.00')
-assert next(generator) == 1
-assert next(generator) == 2.0
-assert next(generator) == 3
-assert next(generator) == '4.00'
+g = normal(1, 2.0)(3, '4.00')
+assert next(g) == 1
+assert next(g) == 2.0
+assert next(g) == 3
+assert next(g) == '4.00'
 try:
-    next(generator)
+    next(g)
 except StopIteration as e:
     assert e.value is None
