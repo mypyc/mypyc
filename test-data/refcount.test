@@ -823,3 +823,110 @@ def generator(a: int) -> Generator:
     yield normal(1)
 
 [out]
+def normal_generator_obj.__call__(self, x):
+    self :: normal_generator_obj
+    x :: int
+    r0 :: generator__env
+    r1, r2 :: int
+L0:
+    r0 = self.__mypyc_env__
+    r1 = r0.a
+    dec_ref r0
+    r2 = r1 + x :: int
+    dec_ref r1 :: int
+    return r2
+def generator__gen.__next__(self):
+    self :: generator__gen
+    r0 :: generator__env
+    r1 :: int
+    r2 :: normal_generator_obj
+    r3 :: bool
+    normal :: object
+    r4 :: int
+    r5, r6 :: object
+    r7 :: int
+    r8 :: object
+    r9 :: int
+    r10 :: bool
+    r11, r12 :: None
+    r13 :: int
+    r14, r15 :: bool
+    r16 :: int
+    r17 :: bool
+    r18 :: int
+    r19, r20 :: bool
+L0:
+    r0 = self.__mypyc_env__
+    r1 = r0.__mypyc_next_label__
+    goto L5
+L1:
+    r2 = normal_generator_obj()
+    r2.__mypyc_env__ = r0; r3 = is_error
+    normal = r2
+L2:
+    r4 = 1
+    r5 = box(int, r4)
+    r6 = py_call(normal, r5)
+    dec_ref normal
+    dec_ref r5
+    r7 = unbox(int, r6)
+    dec_ref r6
+    r8 = box(int, r7)
+    r9 = 1
+    r0.__mypyc_next_label__ = r9; r10 = is_error
+    dec_ref r0
+    dec_ref r9 :: int
+    return r8
+L3:
+    r11 = None
+    r12 = None
+    r13 = -1
+    r0.__mypyc_next_label__ = r13; r14 = is_error
+    dec_ref r0
+    dec_ref r13 :: int
+L4:
+    raise StopIteration(r12)
+    unreachable
+L5:
+    r16 = 0
+    r17 = r1 == r16 :: int
+    dec_ref r16 :: int
+    if r17 goto L8 else goto L6 :: bool
+L6:
+    r18 = 1
+    r19 = r1 == r18 :: int
+    dec_ref r1 :: int
+    dec_ref r18 :: int
+    if r19 goto L3 else goto L9 :: bool
+L7:
+    raise StopIteration
+    unreachable
+L8:
+    dec_ref r1 :: int
+    goto L1
+L9:
+    dec_ref r0
+    goto L7
+def generator__gen.__iter__(self):
+    self :: generator__gen
+L0:
+    inc_ref self
+    return self
+def generator(a):
+    a :: int
+    r0 :: generator__env
+    r1 :: bool
+    r2 :: generator__gen
+    r3 :: bool
+    r4 :: int
+    r5 :: bool
+L0:
+    r0 = generator__env()
+    r0.a = a; r1 = is_error
+    r2 = generator__gen()
+    r2.__mypyc_env__ = r0; r3 = is_error
+    r4 = 0
+    r0.__mypyc_next_label__ = r4; r5 = is_error
+    dec_ref r0
+    dec_ref r4 :: int
+    return r2

@@ -2444,7 +2444,7 @@ except TypeError:
 else:
     assert False
 
-[case testYield]
+[case testYieldRun]
 from typing import Generator, Iterable, Union
 def yield_three_times() -> Iterable[int]:
     yield 1
@@ -2649,17 +2649,23 @@ enter! a
 1
 yooo? a
 exit! a exception!
-((1,), Exception('exception!',))
+((1,), 'exception!')
 
 [case testYieldNestedRun]
 from typing import Callable, Generator
 
-# def normal(a: int, b: float) -> Callable:
-#     def generator(x: int, y: str) -> Generator:
+def normal(a: int, b: float) -> Callable:
+    def generator(x: int, y: str) -> Generator:
+        yield a
+        yield b
+        yield x
+        yield y
+    return generator
+
+# def normal(a: int) -> Callable:
+#     def generator(x: int) -> Generator:
 #         yield a
-#         yield b
 #         yield x
-#         yield y
 #     return generator
 
 # def generator(a: int) -> Generator:
@@ -2676,13 +2682,20 @@ def generator(a: int) -> Generator:
     yield normal(1)
 
 [file driver.py]
-from native import normal
+from native import normal, generator
 
 g = normal(1, 2.0)(3, '4.00')
 assert next(g) == 1
 assert next(g) == 2.0
 assert next(g) == 3
 assert next(g) == '4.00'
+try:
+    next(g)
+except StopIteration as e:
+    assert e.value is None
+
+g = generator(1)
+assert next(g) == 2
 try:
     next(g)
 except StopIteration as e:

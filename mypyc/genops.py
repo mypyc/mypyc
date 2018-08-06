@@ -1005,6 +1005,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.enter(fn_info)
             self.setup_env_for_generator_class()
             self.load_outer_envs(self.fn_info.generator_class)
+            self.create_switch_for_generator_class()
         else:
             self.load_env_registers(self.fn_info._callable_class)
             self.gen_arg_default()
@@ -1018,7 +1019,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.maybe_add_implicit_return()
 
         if self.fn_info.is_generator:
-            self.create_switch_for_generator_class()
+            self.populate_switch_for_generator_class()
 
         blocks, env, ret_type, fn_info = self.leave()
 
@@ -1154,8 +1155,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # Assign to local variable.
             assert isinstance(lvalue.node, SymbolNode)  # TODO: Can this fail?
             symbol = lvalue.node
-
-            print('get_assignment_target: {}'.symbol.name())
 
             if lvalue.kind == LDEF:
                 if symbol not in self.environment.symtable:
@@ -2955,8 +2954,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         self.blocks[-1][-1].ops.append(op)
         if isinstance(op, RegisterOp):
-            if isinstance(op, Call):
-                print('performing add_op on {} in {}'.format(op.to_str(self.environment), self.fn_info.name))
             self.environment.add_op(op)
         return op
 
@@ -3141,8 +3138,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         generator_class.next_label_reg = self.read(generator_class.next_label_target, fitem.line)
 
-        self.add(Goto(generator_class.switch_block))
-        generator_class.blocks.append(self.new_block())
+        # self.add(Goto(generator_class.switch_block))
+        # generator_class.blocks.append(self.new_block())
 
     def add_args_to_env(self, local: bool = True,
                         base: Optional[Union[FuncInfo, ImplicitClass]] = None,
@@ -3240,7 +3237,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         # Set the callable class' environment attribute to point at the environment class
         # defined in the callable class' immediate outer scope.
-        self.add(SetAttr(func_reg, ENV_ATTR_NAME, self.fn_info.curr_env_reg, fitem.line))
+        if self.fn_info.is_generator and self.fn_info.contains_nested:
+            self.add(SetAttr(func_reg, ENV_ATTR_NAME, self.fn_info.generator_class.curr_env_reg, fitem.line))
+        else:
+            self.add(SetAttr(func_reg, ENV_ATTR_NAME, self.fn_info.curr_env_reg, fitem.line))
         return func_reg
 
     def setup_env_class(self) -> ClassIR:
@@ -3341,6 +3341,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return next_fn_ir
 
     def create_switch_for_generator_class(self) -> None:
+        self.add(Goto(self.fn_info.generator_class.switch_block))
+        self.fn_info.generator_class.blocks.append(self.new_block())
+
+    def populate_switch_for_generator_class(self) -> None:
         generator_class = self.fn_info.generator_class
         line = self.fn_info.fitem.line
 
