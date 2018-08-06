@@ -712,6 +712,7 @@ L0:
 from typing import Callable, Generator
 
 def generator(a: int) -> Generator:
+    # a += 1
     def normal(x: int) -> int:
         return a + x
     yield normal(1)

@@ -405,8 +405,6 @@ class FuncInfo(object):
         self._is_nested = is_nested
         self._contains_nested = contains_nested
 
-        self.environment = None  # type: Optional[Environment]
-
         # TODO: add field for ret_type: RType = none_rprimitive
 
     @property
@@ -985,7 +983,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         fn_info = FuncInfo(fitem, name, self.gen_func_ns(), is_nested, contains_nested)
         self.enter(fn_info)
-        fn_info.environment = self.environment
 
         if self.fn_info.is_nested:
             self.setup_callable_class()
@@ -1016,13 +1013,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.finalize_env_class()
 
         self.ret_types[-1] = sig.ret_type
-
-        # Put both these environments into the FuncInfo class. Do this so that when we visit inner
-        # functions, we can get attributes from multiple environments at the same level instead of
-        # just a single one.
-        for key, val in self.environment.symtable.items():
-            self.fn_info.environment.symtable[key] = val
-
         self.accept(fitem.body)
 
         self.maybe_add_implicit_return()
@@ -1164,6 +1154,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # Assign to local variable.
             assert isinstance(lvalue.node, SymbolNode)  # TODO: Can this fail?
             symbol = lvalue.node
+
+            print('get_assignment_target: {}'.symbol.name())
+
             if lvalue.kind == LDEF:
                 if symbol not in self.environment.symtable:
                     # If the function contains a nested function and the symbol is a free symbol,
@@ -1182,7 +1175,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                                          self.fn_info, reassign=False)
 
                     # Otherwise define a new local variable.
-                    print('get_assignment_target: adding {} to symtable'.format(symbol.name()))
                     return self.environment.add_local_reg(symbol, self.node_type(lvalue))
                 else:
                     # Assign to a previously defined variable.
@@ -2964,7 +2956,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.blocks[-1][-1].ops.append(op)
         if isinstance(op, RegisterOp):
             if isinstance(op, Call):
-                print('performing add_op on {}'.format(op.to_str(self.environment)))
+                print('performing add_op on {} in {}'.format(op.to_str(self.environment), self.fn_info.name))
             self.environment.add_op(op)
         return op
 
@@ -3064,7 +3056,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         for symbol, target in outer_env.symtable.items():
             env.type.class_ir.attributes[symbol.name()] = target.type
             symbol_target = AssignmentTargetAttr(env, symbol.name())
-            print('load_outer_env: adding {} to symtable'.format(symbol.name()))
             self.environment.add_target(symbol, symbol_target)
 
         return env
@@ -3075,7 +3066,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Load the first outer environment. This one is special because it gets saved in the
         # FuncInfo instance's prev_env_reg field.
         if index > 1:
-            outer_env = self.fn_infos[index].environment
+            # outer_env = self.fn_infos[index].environment
+            outer_env = self.environments[index]
             if isinstance(base, GeneratorClass):
                 base.prev_env_reg = self.load_outer_env(base.curr_env_reg, outer_env)
             else:
@@ -3085,7 +3077,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         # Load the remaining outer environments into registers.
         while index > 1:
-            outer_env = self.fn_infos[index].environment
+            # outer_env = self.fn_infos[index].environment
+            outer_env = self.environments[index]
             env_reg = self.load_outer_env(env_reg, outer_env)
             index -= 1
 
@@ -3120,7 +3113,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         # Override the local definition of the variable to instead point at the variable in
         # the environment class.
-        print('add_var_to_env_class: adding {} to symtable'.format(var.name()))
         return self.environment.add_target(var, attr_target)
 
     def setup_env_for_generator_class(self) -> None:
@@ -3144,19 +3136,22 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                                                       generator_class,
                                                                       reassign=False)
 
+        # Add arguments from the original generator function to the generator class' environment.
+        self.add_args_to_env(local=False, base=generator_class, reassign=False)
+
         generator_class.next_label_reg = self.read(generator_class.next_label_target, fitem.line)
 
         self.add(Goto(generator_class.switch_block))
         generator_class.blocks.append(self.new_block())
 
     def add_args_to_env(self, local: bool = True,
-                        base: Optional[Union[FuncInfo, ImplicitClass]] = None) -> None:
+                        base: Optional[Union[FuncInfo, ImplicitClass]] = None,
+                        reassign: bool = True) -> None:
         fn_info = self.fn_info
         if local:
             for arg in fn_info.fitem.arguments:
                 assert arg.variable.type, "Function argument missing type"
                 rtype = self.type_to_rtype(arg.variable.type)
-                print('add_args_to_env: adding {} to symtable'.format(arg.variable.name()))
                 self.environment.add_local_reg(arg.variable, rtype, is_arg=True)
         else:
             for arg in fn_info.fitem.arguments:
@@ -3164,7 +3159,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 if self.is_free_variable(arg.variable) or fn_info.is_generator:
                     rtype = self.type_to_rtype(arg.variable.type)
                     assert base is not None, 'base cannot be None for adding nonlocal args'
-                    self.add_var_to_env_class(arg.variable, rtype, base, reassign=True)
+                    self.add_var_to_env_class(arg.variable, rtype, base, reassign=reassign)
 
     def gen_func_ns(self) -> str:
         """Generates a namespace for a nested function using its outer function names."""

@@ -2662,12 +2662,18 @@ from typing import Callable, Generator
 #         yield y
 #     return generator
 
+# def generator(a: int) -> Generator:
+#     def normal(x: int) -> int:
+#         return a + x
+
+#     for i in range(3):
+#         yield normal(i)
+
 def generator(a: int) -> Generator:
+    # a += 1
     def normal(x: int) -> int:
         return a + x
-
-    for i in range(3):
-        yield normal(i)
+    yield normal(1)
 
 [file driver.py]
 from native import normal
