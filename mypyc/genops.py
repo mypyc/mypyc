@@ -448,13 +448,6 @@ class FuncInfo(object):
 
     @property
     def curr_env_reg(self) -> Value:
-        """Returns the register containing the instance of the environment class. Note that this
-        returns either the Value in the FuncInfo class or the Value in ImplicitClass depending on
-        whether the function is nested. The setter for curr_env_reg is not implemented because of
-        possible ambiguity.
-        """
-        if self._is_nested:
-            return self.callable_class.curr_env_reg
         assert self._curr_env_reg is not None
         return self._curr_env_reg
 
@@ -980,9 +973,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         is_nested = fitem in self.nested_fitems
         contains_nested = fitem in self.encapsulating_fitems
-
-        fn_info = FuncInfo(fitem, name, self.gen_func_ns(), is_nested, contains_nested)
-        self.enter(fn_info)
+        self.enter(FuncInfo(fitem, name, self.gen_func_ns(), is_nested, contains_nested))
 
         if self.fn_info.is_nested:
             self.setup_callable_class()
@@ -1001,21 +992,20 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             func_ir, func_reg = self.gen_func_ir(blocks, sig, env, fn_info, class_name)
 
             # Re-enter the FuncItem and visit the body of the function this time.
-            # self.enter(fn_info, env)
             self.enter(fn_info)
             self.setup_env_for_generator_class()
             self.load_outer_envs(self.fn_info.generator_class)
             self.create_switch_for_generator_class()
         else:
-            self.load_env_registers(self.fn_info._callable_class)
+            self.load_env_registers()
             self.gen_arg_default()
 
         if self.fn_info.contains_nested and not self.fn_info.is_generator:
             self.finalize_env_class()
 
         self.ret_types[-1] = sig.ret_type
-        self.accept(fitem.body)
 
+        self.accept(fitem.body)
         self.maybe_add_implicit_return()
 
         if self.fn_info.is_generator:
@@ -1068,10 +1058,15 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 func_target = self.environment.lookup(fdef.original_def)
             else:
                 # The return type is 'object' instead of an RInstance of the callable class because
-                # differently defined functions with the same name and signature in conditional
+                # differently defined functions with the same name and signature across conditional
                 # blocks will generate different callable classes, so the callable class that gets
                 # instantiated must be generic.
-                func_target = self.environment.add_local_reg(fdef, object_rprimitive)
+                if self.fn_info.is_generator:
+                    func_target = self.add_var_to_env_class(fdef, object_rprimitive,
+                                                            self.fn_info.generator_class,
+                                                            reassign=False)
+                else:
+                    func_target = self.environment.add_local_reg(fdef, object_rprimitive)
             self.assign(func_target, func_reg, fdef.line)
 
         self.functions.append(func_ir)
@@ -1155,7 +1150,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # Assign to local variable.
             assert isinstance(lvalue.node, SymbolNode)  # TODO: Can this fail?
             symbol = lvalue.node
-
             if lvalue.kind == LDEF:
                 if symbol not in self.environment.symtable:
                     # If the function contains a nested function and the symbol is a free symbol,
@@ -1365,7 +1359,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         name = '{}{}'.format(TEMP_ATTR_NAME, self.temp_counter)
         self.temp_counter += 1
         target = self.add_var_to_env_class(Var(name), value.type, self.fn_info.generator_class)
-
         # Shouldn't be able to fail, so -1 for line
         self.assign(target, value, -1)
         return target
@@ -2904,8 +2897,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     # Helpers
 
-    def enter(self, fn_info: FuncInfo, env: Optional[Environment] = None) -> None:
-        self.environment = env if env else Environment(fn_info.name)
+    def enter(self, fn_info: FuncInfo) -> None:
+        self.environment = Environment(fn_info.name)
         self.environments.append(self.environment)
         self.fn_info = fn_info
         self.fn_infos.append(self.fn_info)
@@ -3079,7 +3072,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             env_reg = self.load_outer_env(env_reg, outer_env)
             index -= 1
 
-    def load_env_registers(self, base: Optional[ImplicitClass] = None) -> None:
+    def load_env_registers(self) -> None:
         """Loads the registers for a given FuncDef.
 
         Adds the arguments of the FuncDef to the environment. If the FuncDef is nested inside of
@@ -3087,10 +3080,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         registers so that they can be used when accessing free variables.
         """
         self.add_args_to_env(local=True)
-
         if self.fn_info.is_nested:
-            assert base is not None
-            self.load_outer_envs(base)
+            self.load_outer_envs(self.fn_info.callable_class)
 
     def add_var_to_env_class(self,
                              var: SymbolNode,
@@ -3136,10 +3127,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Add arguments from the original generator function to the generator class' environment.
         self.add_args_to_env(local=False, base=generator_class, reassign=False)
 
+        # Set the next label register for the generator class.
         generator_class.next_label_reg = self.read(generator_class.next_label_target, fitem.line)
-
-        # self.add(Goto(generator_class.switch_block))
-        # generator_class.blocks.append(self.new_block())
 
     def add_args_to_env(self, local: bool = True,
                         base: Optional[Union[FuncInfo, ImplicitClass]] = None,
@@ -3237,10 +3226,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         # Set the callable class' environment attribute to point at the environment class
         # defined in the callable class' immediate outer scope.
-        if self.fn_info.is_generator and self.fn_info.contains_nested:
-            self.add(SetAttr(func_reg, ENV_ATTR_NAME, self.fn_info.generator_class.curr_env_reg, fitem.line))
+        if self.fn_info.is_generator:
+            curr_env_reg = self.fn_info.generator_class.curr_env_reg
+        elif self.fn_info.is_nested:
+            curr_env_reg = self.fn_info.callable_class.curr_env_reg
         else:
-            self.add(SetAttr(func_reg, ENV_ATTR_NAME, self.fn_info.curr_env_reg, fitem.line))
+            curr_env_reg = self.fn_info.curr_env_reg
+        self.add(SetAttr(func_reg, ENV_ATTR_NAME, curr_env_reg, fitem.line))
         return func_reg
 
     def setup_env_class(self) -> ClassIR:
@@ -3297,7 +3289,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def gen_generator_func(self) -> None:
         self.setup_generator_class()
-        self.load_env_registers(self.fn_info._callable_class)
+        self.load_env_registers()
         self.gen_arg_default()
         self.finalize_env_class()
         self.add(Return(self.instantiate_generator_class()))
@@ -3362,7 +3354,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def instantiate_generator_class(self) -> Value:
         fitem = self.fn_info.fitem
         generator_reg = self.add(Call(self.fn_info.generator_class.ir.ctor, [], fitem.line))
-        curr_env_reg = self.fn_info.curr_env_reg
+        if self.fn_info.is_nested:
+            curr_env_reg = self.fn_info.callable_class.curr_env_reg
+        else:
+            curr_env_reg = self.fn_info.curr_env_reg
 
         # Set the generator class' environment attribute to point at the environment class
         # defined in the current scope.
