@@ -2071,7 +2071,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                             right: Callable[[], Value], line: int) -> Value:
         # Having actual Phi nodes would be really nice here!
         target = self.alloc_temp(expr_type)
+        # left_body takes the value of the left side, right_body the right
         left_body, right_body, next = BasicBlock(), BasicBlock(), BasicBlock()
+        # true_body is taken if the left is true, false_body if it is false.
+        # For 'and' the value is the right side if the left is true, and for 'or'
+        # it is the right side if the left is false.
         true_body, false_body = (
             (right_body, left_body) if op == 'and' else (left_body, right_body))
 
