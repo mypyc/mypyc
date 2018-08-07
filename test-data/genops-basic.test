@@ -1657,14 +1657,14 @@ def f(x, y, z):
     r1 :: str
     r2 :: None
 L0:
+    r0 = 3
     if is_error(y) goto L1 else goto L2
 L1:
-    r0 = 3
     y = r0
 L2:
+    r1 = unicode_0 :: static  ('test')
     if is_error(z) goto L3 else goto L4
 L3:
-    r1 = unicode_0 :: static  ('test')
     z = r1
 L4:
     r2 = None
@@ -1706,14 +1706,14 @@ def A.f(self, x, y, z):
     r1 :: str
     r2 :: None
 L0:
+    r0 = 3
     if is_error(y) goto L1 else goto L2
 L1:
-    r0 = 3
     y = r0
 L2:
+    r1 = unicode_0 :: static  ('test')
     if is_error(z) goto L3 else goto L4
 L3:
-    r1 = unicode_0 :: static  ('test')
     z = r1
 L4:
     r2 = None
