@@ -3225,7 +3225,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         func_reg = self.add(Call(fn_info.callable_class.ir.ctor, [], fitem.line))
 
         # Set the callable class' environment attribute to point at the environment class
-        # defined in the callable class' immediate outer scope.
+        # defined in the callable class' immediate outer scope. Note that there are three possible
+        # environment class registers we may use. If the encapsulating function is:
+        # - a generator function, then the callable class is instantiated from the generator class'
+        #   __next__' function, and hence the generator class' environment register is used.
+        # - a nested function, then the callable class is instantiated from the current callable
+        #   class' '__call__' function, and hence the callable class' environment register is used.
+        # - neither, then we use the environment register of the original function.
         if self.fn_info.is_generator:
             curr_env_reg = self.fn_info.generator_class.curr_env_reg
         elif self.fn_info.is_nested:
@@ -3354,6 +3360,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def instantiate_generator_class(self) -> Value:
         fitem = self.fn_info.fitem
         generator_reg = self.add(Call(self.fn_info.generator_class.ir.ctor, [], fitem.line))
+
+        # Get the current environment register. If the current function is nested, then the
+        # generator class gets instantiated from the callable class' '__call__' method, and hence
+        # we use the callable class' environment register. Otherwise, we use the original
+        # function's environment register.
         if self.fn_info.is_nested:
             curr_env_reg = self.fn_info.callable_class.curr_env_reg
         else:

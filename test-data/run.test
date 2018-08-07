@@ -2678,13 +2678,13 @@ def another_triple() -> Callable:
     return generator
 
 [file driver.py]
-from typing import Generator, Tuple, TypeVar, Sequence, Union
+from typing import Generator, Tuple, TypeVar, Sequence
 from native import normal, generator, triple, another_triple
 
 T = TypeVar('T')
 U = TypeVar('U')
 
-def run_generator(gen: Generator[T, None, U]) -> Tuple[Sequence[T], Union[U, str]]:
+def run_generator(gen: Generator[T, None, U]) -> Tuple[Sequence[T], U, str]:
     res = []
     while True:
         try:
