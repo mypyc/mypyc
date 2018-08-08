@@ -74,7 +74,7 @@ from mypyc.ops_misc import (
     type_op,
 )
 from mypyc.ops_exc import (
-    no_err_occurred_op, raise_exception_op, reraise_exception_op,
+    no_err_occurred_op, raise_exception_op, raise_exception_with_tb_op, reraise_exception_op,
     error_catch_op, restore_exc_info_op, exc_matches_op, get_exc_value_op,
     get_exc_info_op, keep_propagating_op,
 )
@@ -504,9 +504,9 @@ class GeneratorClass(ImplicitClass):
         self._next_label_reg = None  # type: Optional[Value]
         self._next_label_target = None  # type: Optional[AssignmentTarget]
 
-        self._type_reg = None  # type: Optional[Value]
-        self._value_reg = None  # type: Optional[Value]
-        self._traceback_reg = None  # type: Optional[Value]
+        self._exc_type_reg = None  # type: Optional[Value]
+        self._exc_value_reg = None  # type: Optional[Value]
+        self._exc_traceback_reg = None  # type: Optional[Value]
 
         self.switch_block = BasicBlock()
         self.blocks = []  # type: List[BasicBlock]
@@ -530,31 +530,31 @@ class GeneratorClass(ImplicitClass):
         self._next_label_target = target
 
     @property
-    def type_reg(self) -> Value:
-        assert self._type_reg is not None
-        return self._type_reg
+    def exc_type_reg(self) -> Value:
+        assert self._exc_type_reg is not None
+        return self._exc_type_reg
 
-    @type_reg.setter
-    def type_reg(self, reg: Value) -> None:
-        self._type_reg = reg
-
-    @property
-    def value_reg(self) -> Value:
-        assert self._value_reg is not None
-        return self._value_reg
-
-    @value_reg.setter
-    def value_reg(self, reg: Value) -> None:
-        self._value_reg = reg
+    @exc_type_reg.setter
+    def exc_type_reg(self, reg: Value) -> None:
+        self._exc_type_reg = reg
 
     @property
-    def traceback_reg(self) -> Value:
-        assert self._traceback_reg is not None
-        return self._traceback_reg
+    def exc_value_reg(self) -> Value:
+        assert self._exc_value_reg is not None
+        return self._exc_value_reg
 
-    @traceback_reg.setter
-    def traceback_reg(self, reg: Value) -> None:
-        self._traceback_reg = reg
+    @exc_value_reg.setter
+    def exc_value_reg(self, reg: Value) -> None:
+        self._exc_value_reg = reg
+
+    @property
+    def exc_traceback_reg(self) -> Value:
+        assert self._exc_traceback_reg is not None
+        return self._exc_traceback_reg
+
+    @exc_traceback_reg.setter
+    def exc_traceback_reg(self, reg: Value) -> None:
+        self._exc_traceback_reg = reg
 
 
 class NonlocalControl:
@@ -1028,6 +1028,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.setup_env_for_generator_class()
             self.load_outer_envs(self.fn_info.generator_class)
             self.create_switch_for_generator_class()
+            self.add_generator_raise_exception_blocks(fitem.line)
         else:
             self.load_env_registers()
             self.gen_arg_default()
@@ -2908,6 +2909,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             retval = self.none()
 
         generator_class = self.fn_info.generator_class
+
         # Create a new block for the instructions immediately following the yield expression, and
         # set the next label so that the next time '__next__' is called on the generator object,
         # the function continues at the new block.
@@ -2918,17 +2920,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.add(Return(retval))
         self.activate_block(next_block)
 
-        error_block = BasicBlock()
-        ok_block = BasicBlock()
-        comparison = self.binary_op(generator_class.type_reg, self.none(), 'is not', expr.line)
-        self.add_bool_branch(comparison, error_block, ok_block)
-
-        self.activate_block(error_block)
-        self.primitive_op(raise_exception_op,
-                          [generator_class.type_reg, generator_class.value_reg], expr.line)
-        # self.primitive_op(raise_exception_op,
-        #                   [generator_class.type_reg, self.none()], expr.line)
-        self.goto_and_activate(ok_block)
+        self.add_generator_raise_exception_blocks(expr.line)
 
         # TODO: Replace this value with the value that is sent into the generator when we support
         #       the 'send' function.
@@ -3223,11 +3215,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         # Add the type, value, traceback variables to the environment
         type_var, value_var, traceback_var = Var('type'), Var('value'), Var('traceback')
-        generator_class.type_reg = self.read(self.environment.add_local_reg(type_var,
+        generator_class.exc_type_reg = self.read(self.environment.add_local_reg(type_var,
                                                                             object_rprimitive))
-        generator_class.value_reg = self.read(self.environment.add_local_reg(value_var,
+        generator_class.exc_value_reg = self.read(self.environment.add_local_reg(value_var,
                                                                              object_rprimitive))
-        generator_class.traceback_reg = self.read(
+        generator_class.exc_traceback_reg = self.read(
             self.environment.add_local_reg(traceback_var, object_rprimitive))
 
         generator_class.self_reg = self.read(self_target, fitem.line)
@@ -3463,7 +3455,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.enter(fn_info)
         self_reg = self.read(self.add_self_to_env(fn_info.generator_class.ir))
         none_reg = self.none()
-        result = self.add(Call(fn_decl, [self_reg, none_reg, none_reg, none_reg], fn_info.fitem.line))
+        result = self.add(Call(fn_decl, [self_reg, none_reg, none_reg, none_reg],
+                               fn_info.fitem.line))
         self.add(Return(result))
         blocks, env, _, fn_info = self.leave()
 
@@ -3547,6 +3540,36 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         zero_reg = self.add(LoadInt(0))
         self.add(SetAttr(curr_env_reg, NEXT_LABEL_ATTR_NAME, zero_reg, fitem.line))
         return generator_reg
+
+    def add_generator_raise_exception_blocks(self, line: int) -> None:
+        gen_cls = self.fn_info.generator_class
+
+        # Check to see if an exception was raised
+        error_block = BasicBlock()
+        ok_block = BasicBlock()
+        comparison = self.binary_op(gen_cls.exc_type_reg, self.none(), 'is not', line)
+        self.add_bool_branch(comparison, error_block, ok_block)
+
+        self.activate_block(error_block)
+
+        # Check to see if the traceback field is set.
+        if_tb_block = BasicBlock()
+        else_block = BasicBlock()
+        comparison = self.binary_op(gen_cls.exc_traceback_reg, self.none(), 'is not', line)
+        self.add_bool_branch(comparison, if_tb_block, else_block)
+
+        # If the traceback field is set, then raise an exception and set the traceback field to the
+        # value that was passed in.
+        self.activate_block(if_tb_block)
+        self.primitive_op(raise_exception_with_tb_op,
+                          [gen_cls.exc_type_reg, gen_cls.exc_value_reg, gen_cls.exc_traceback_reg], line)
+        self.goto(ok_block)
+
+        # Otherwise, raise a normal exception and use the default value for the traceback.
+        self.activate_block(else_block)
+        self.primitive_op(raise_exception_op,
+                          [gen_cls.exc_type_reg, gen_cls.exc_value_reg], line)
+        self.goto_and_activate(ok_block)
 
     def add_self_to_env(self, cls: ClassIR) -> AssignmentTargetRegister:
         return self.environment.add_local_reg(Var('self'),

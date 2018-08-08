@@ -817,181 +817,147 @@ L5:
 [case testYieldRefcount]
 from typing import Iterable
 
-def yield_three_times() -> Iterable:
+def yield_once() -> Iterable:
     yield 1
-    yield 2
-    yield 3
 
 [out]
-def yield_three_times__gen.__mypyc_next_h__(self, type, value, traceback):
-    self :: yield_three_times__gen
+def yield_once__gen.__mypyc_next_h__(self, type, value, traceback):
+    self :: yield_once__gen
     type, value, traceback :: object
-    r0 :: yield_three_times__env
-    r1, r2 :: int
-    r3 :: object
-    r4 :: int
-    r5 :: bool
-    r6 :: None
-    r7, r8 :: bool
-    r9 :: None
+    r0 :: yield_once__env
+    r1 :: int
+    r2 :: None
+    r3 :: bool
+    r4 :: None
+    r5, r6, r7 :: bool
+    r8 :: int
+    r9 :: object
     r10 :: int
-    r11 :: object
-    r12 :: int
+    r11 :: bool
+    r12 :: None
     r13 :: bool
     r14 :: None
-    r15, r16 :: bool
-    r17 :: None
-    r18 :: int
-    r19 :: object
+    r15, r16, r17 :: bool
+    r18, r19 :: None
     r20 :: int
-    r21 :: bool
-    r22 :: None
-    r23, r24 :: bool
-    r25, r26 :: None
-    r27 :: int
-    r28, r29 :: bool
-    r30 :: int
-    r31 :: bool
-    r32 :: int
-    r33 :: bool
-    r34 :: int
-    r35 :: bool
-    r36 :: int
-    r37, r38 :: bool
+    r21, r22 :: bool
+    r23 :: int
+    r24 :: bool
+    r25 :: int
+    r26, r27 :: bool
 L0:
     r0 = self.__mypyc_env__
     r1 = r0.__mypyc_next_label__
-    goto L15
+    goto L13
 L1:
+    r2 = None
+    r3 = type is not r2
+    if r3 goto L2 else goto L16 :: bool
 L2:
-    r2 = 1
-    r3 = box(int, r2)
-    r4 = 1
-    r0.__mypyc_next_label__ = r4; r5 = is_error
-    dec_ref r0
-    dec_ref r4 :: int
-    return r3
+    r4 = None
+    r5 = traceback is not r4
+    if r5 goto L3 else goto L17 :: bool
 L3:
-    r6 = None
-    r7 = type is not r6
-    if r7 goto L4 else goto L20 :: bool
+    raise_exception(type, value, traceback); r6 = 0
+    dec_ref type
+    dec_ref value
+    dec_ref traceback
+    goto L5
 L4:
-    raise_exception(type, value); r8 = 0
+    raise_exception(type, value); r7 = 0
     dec_ref type
     dec_ref value
 L5:
-    r9 = None
 L6:
-    r10 = 2
-    r11 = box(int, r10)
-    r12 = 2
-    r0.__mypyc_next_label__ = r12; r13 = is_error
+    r8 = 1
+    r9 = box(int, r8)
+    r10 = 1
+    r0.__mypyc_next_label__ = r10; r11 = is_error
     dec_ref r0
-    dec_ref r12 :: int
-    return r11
+    dec_ref r10 :: int
+    return r9
 L7:
-    r14 = None
-    r15 = type is not r14
-    if r15 goto L8 else goto L21 :: bool
+    r12 = None
+    r13 = type is not r12
+    if r13 goto L8 else goto L18 :: bool
 L8:
-    raise_exception(type, value); r16 = 0
+    r14 = None
+    r15 = traceback is not r14
+    if r15 goto L9 else goto L19 :: bool
+L9:
+    raise_exception(type, value, traceback); r16 = 0
     dec_ref type
     dec_ref value
-L9:
-    r17 = None
+    dec_ref traceback
+    goto L11
 L10:
-    r18 = 3
-    r19 = box(int, r18)
-    r20 = 3
+    raise_exception(type, value); r17 = 0
+    dec_ref type
+    dec_ref value
+L11:
+    r18 = None
+    r19 = None
+    r20 = -1
     r0.__mypyc_next_label__ = r20; r21 = is_error
     dec_ref r0
     dec_ref r20 :: int
-    return r19
-L11:
-    r22 = None
-    r23 = type is not r22
-    if r23 goto L12 else goto L22 :: bool
 L12:
-    raise_exception(type, value); r24 = 0
-    dec_ref type
-    dec_ref value
-L13:
-    r25 = None
-    r26 = None
-    r27 = -1
-    r0.__mypyc_next_label__ = r27; r28 = is_error
-    dec_ref r0
-    dec_ref r27 :: int
-L14:
-    raise StopIteration(r26)
+    raise StopIteration(r19)
     unreachable
-L15:
-    r30 = 0
-    r31 = r1 == r30 :: int
-    dec_ref r30 :: int
-    if r31 goto L23 else goto L16 :: bool
-L16:
-    r32 = 1
-    r33 = r1 == r32 :: int
-    dec_ref r32 :: int
-    if r33 goto L24 else goto L17 :: bool
-L17:
-    r34 = 2
-    r35 = r1 == r34 :: int
-    dec_ref r34 :: int
-    if r35 goto L25 else goto L18 :: bool
-L18:
-    r36 = 3
-    r37 = r1 == r36 :: int
+L13:
+    r23 = 0
+    r24 = r1 == r23 :: int
+    dec_ref r23 :: int
+    if r24 goto L20 else goto L14 :: bool
+L14:
+    r25 = 1
+    r26 = r1 == r25 :: int
     dec_ref r1 :: int
-    dec_ref r36 :: int
-    if r37 goto L11 else goto L26 :: bool
-L19:
+    dec_ref r25 :: int
+    if r26 goto L7 else goto L21 :: bool
+L15:
     raise StopIteration
     unreachable
-L20:
+L16:
     dec_ref type
     dec_ref value
+    dec_ref traceback
     goto L5
+L17:
+    dec_ref traceback
+    goto L4
+L18:
+    dec_ref type
+    dec_ref value
+    dec_ref traceback
+    goto L11
+L19:
+    dec_ref traceback
+    goto L10
+L20:
+    dec_ref r1 :: int
+    goto L1
 L21:
     dec_ref type
     dec_ref value
-    goto L9
-L22:
-    dec_ref type
-    dec_ref value
-    goto L13
-L23:
-    dec_ref type
-    dec_ref value
-    dec_ref r1 :: int
-    goto L1
-L24:
-    dec_ref r1 :: int
-    goto L3
-L25:
-    dec_ref r1 :: int
-    goto L7
-L26:
-    dec_ref type
-    dec_ref value
+    dec_ref traceback
     dec_ref r0
-    goto L19
-def yield_three_times__gen.__next__(self):
-    self :: yield_three_times__gen
+    goto L15
+def yield_once__gen.__next__(self):
+    self :: yield_once__gen
     r0 :: None
     r1 :: object
 L0:
     r0 = None
-    r1 = yield_three_times__gen.__mypyc_next_h__(self, r0, r0, r0)
+    r1 = yield_once__gen.__mypyc_next_h__(self, r0, r0, r0)
     return r1
-def yield_three_times__gen.__iter__(self):
-    self :: yield_three_times__gen
+def yield_once__gen.__iter__(self):
+    self :: yield_once__gen
 L0:
     inc_ref self
     return self
-def yield_three_times__gen.throw(self, type, value, traceback):
-    self :: yield_three_times__gen
+def yield_once__gen.throw(self, type, value, traceback):
+    self :: yield_once__gen
     type, value, traceback :: object
     r0 :: None
     r1 :: object
@@ -1007,7 +973,7 @@ L3:
     inc_ref r0
     traceback = r0
 L4:
-    r1 = yield_three_times__gen.__mypyc_next_h__(self, type, value, traceback)
+    r1 = yield_once__gen.__mypyc_next_h__(self, type, value, traceback)
     dec_ref value
     dec_ref traceback
     return r1
@@ -1017,15 +983,15 @@ L5:
 L6:
     inc_ref traceback
     goto L4
-def yield_three_times():
-    r0 :: yield_three_times__env
-    r1 :: yield_three_times__gen
+def yield_once():
+    r0 :: yield_once__env
+    r1 :: yield_once__gen
     r2 :: bool
     r3 :: int
     r4 :: bool
 L0:
-    r0 = yield_three_times__env()
-    r1 = yield_three_times__gen()
+    r0 = yield_once__env()
+    r1 = yield_once__gen()
     r1.__mypyc_env__ = r0; r2 = is_error
     r3 = 0
     r0.__mypyc_next_label__ = r3; r4 = is_error
