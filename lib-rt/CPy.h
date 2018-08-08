@@ -81,7 +81,6 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
 
     PyObject *old_bases = bases;
     if (bases) {
-        Py_INCREF(old_bases);
         bases = update_bases(old_bases);
 
         // Find the appropriate metaclass from our base classes. We
@@ -171,14 +170,12 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
         goto error;
 
     Py_XDECREF(bases);
-    Py_XDECREF(old_bases);
 
     return (PyObject *)t;
 
 error:
     Py_XDECREF(t);
     Py_XDECREF(bases);
-    Py_XDECREF(old_bases);
     Py_XDECREF(dummy_class);
     return NULL;
 }
