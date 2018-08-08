@@ -398,19 +398,25 @@ print(f((1,2,3,4)))
 2
 
 [case testFunctionCallWithDefaultArgs]
-from typing import Tuple, List
-def f(x: int, y: int = 3, s: str = "test") -> Tuple[int, str]:
+from typing import Tuple, List, Optional
+def f(x: int, y: int = 3, s: str = "test", z: object = 5) -> Tuple[int, str]:
     def inner() -> int:
         return x + y
     return inner(), s
 def g() -> None:
     assert f(2) == (5, "test")
     assert f(s = "123", x = -2) == (1, "123")
+def h(a: Optional[object] = None, b: Optional[str] = None) -> Tuple[object, Optional[str]]:
+    return (a, b)
 [file driver.py]
-from native import f, g
+from native import f, g, h
 g()
 assert f(2) == (5, "test")
 assert f(s = "123", x = -2) == (1, "123")
+assert h() == (None, None)
+assert h(10) == (10, None)
+assert h(b='a') == (None, 'a')
+assert h(10, 'a') == (10, 'a')
 
 [case testMethodCallWithDefaultArgs]
 from typing import Tuple, List
@@ -1805,6 +1811,9 @@ def foo() -> object:
 def bar() -> object:
     print('bar')
     return 'bar'
+def t(x: int) -> int:
+    print(x)
+    return x
 
 def f(b: bool) -> Tuple[object, object, object]:
     x = foo() if b else bar()
@@ -1818,8 +1827,14 @@ def nand(p: bool, q: bool) -> bool:
     if not (p and q):
         return True
     return False
+
+def chained(x: int, y: int, z: int) -> bool:
+    return t(x) < t(y) > t(z)
+
+def chained2(x: int, y: int, z: int, w: int) -> bool:
+    return t(x) < t(y) < t(z) < t(w)
 [file driver.py]
-from native import f, g, nand
+from native import f, g, nand, chained, chained2
 assert f(True) == ('foo', True, 'foo')
 print()
 assert f(False) == ('bar', 'foo', False)
@@ -1830,6 +1845,19 @@ assert nand(True, True) == False
 assert nand(True, False) == True
 assert nand(False, True) == True
 assert nand(False, False) == True
+
+print()
+assert chained(10, 20, 15) == True
+print()
+assert chained(10, 20, 30) == False
+print()
+assert chained(21, 20, 30) == False
+print()
+assert chained2(1, 2, 3, 4) == True
+print()
+assert chained2(1, 0, 3, 4) == False
+print()
+assert chained2(1, 2, 0, 4) == False
 [out]
 foo
 foo
@@ -1840,6 +1868,29 @@ foo
 foo
 foo
 bar
+
+10
+20
+15
+
+10
+20
+30
+
+21
+20
+
+1
+2
+3
+4
+
+1
+0
+
+1
+2
+0
 
 [case testMultipleAssignment]
 from typing import Tuple, List, Any
@@ -2384,6 +2435,7 @@ Lol(a=1, b=[])
 from typing import Tuple
 class C:
     b: Tuple[Tuple[Tuple[int, int], int], int, str, object]
+    c: Tuple[()]
 def f() -> None:
     c = C()
     c.b = (((1, 2), 2), 1, 'hi', 'hi2')
@@ -2398,9 +2450,10 @@ def g() -> None:
 def h() -> Tuple[Tuple[Tuple[int, int], int], int, str, object]:
     raise Exception('Intentional exception')
 [file driver.py]
-from native import f, g
+from native import f, g, C
 f()
 g()
+assert not hasattr(C(), 'c')
 [out]
 (((1, 2), 2), 1, 'hi', 'hi2')
 caught the exception
@@ -2678,13 +2731,13 @@ def another_triple() -> Callable:
     return generator
 
 [file driver.py]
-from typing import Generator, Tuple, TypeVar, Sequence, Union
+from typing import Generator, Tuple, TypeVar, Sequence
 from native import normal, generator, triple, another_triple
 
 T = TypeVar('T')
 U = TypeVar('U')
 
-def run_generator(gen: Generator[T, None, U]) -> Tuple[Sequence[T], Union[U, str]]:
+def run_generator(gen: Generator[T, None, U]) -> Tuple[Sequence[T], U, str]:
     res = []
     while True:
         try:

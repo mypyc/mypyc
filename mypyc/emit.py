@@ -169,7 +169,7 @@ class Emitter:
         if len(rtuple.types) == 0:  # empty tuple
             # The behavior of empty structs in C is compiler dependent so we add a dummy variable
             # to avoid empty tuples being defined as empty structs.
-            result.append('int dummy_var_to_avoid_empty_struct;')
+            result.append('int empty_struct_error_flag;')
         else:
             i = 0
             for typ in rtuple.types:
@@ -183,17 +183,17 @@ class Emitter:
     def tuple_undefined_check_cond(
             self, rtuple: RTuple, tuple_expr_in_c: str,
             c_type_compare_val: Callable[[RType], str], compare: str) -> str:
-        item_type = rtuple.types[0]
-        if not isinstance(item_type, RTuple):
-            return '{}.f0 {} {}'.format(
-                tuple_expr_in_c, compare, c_type_compare_val(item_type))
-        elif isinstance(item_type, RTuple) and len(item_type.types) == 0:
+        if len(rtuple.types) == 0:
             # empty tuple
-            return '{}.dummy_var_to_avoid_empty_struct {} {}'.format(
+            return '{}.empty_struct_error_flag {} {}'.format(
                 tuple_expr_in_c, compare, c_type_compare_val(int_rprimitive))
-        else:
+        item_type = rtuple.types[0]
+        if isinstance(item_type, RTuple):
             return self.tuple_undefined_check_cond(
                 item_type, tuple_expr_in_c + '.f0', c_type_compare_val, compare)
+        else:
+            return '{}.f0 {} {}'.format(
+                tuple_expr_in_c, compare, c_type_compare_val(item_type))
 
     def tuple_undefined_value(self, rtuple: RTuple) -> str:
         context = self.context
@@ -397,13 +397,18 @@ class Emitter:
         if declare_dest:
             self.emit_line('PyObject *{};'.format(dest))
         good_label = self.new_label()
+        if optional:
+            self.emit_line('if ({} == NULL) {{'.format(src))
+            self.emit_line('{} = {};'.format(dest, self.c_error_value(typ)))
+            self.emit_line('goto {};'.format(good_label))
+            self.emit_line('}')
         for item in typ.items:
             self.emit_cast(src,
                            dest,
                            item,
                            declare_dest=False,
                            custom_message='',
-                           optional=optional)
+                           optional=False)
             self.emit_line('if ({} != NULL) goto {};'.format(dest, good_label))
         # Handle cast failure.
         self.emit_line(err)
@@ -474,6 +479,8 @@ class Emitter:
                     src, src, len(typ.types)), optional)
             self.emit_lines(*failure)  # TODO: Decrease refcount?
             self.emit_line('} else {')
+            if not typ.types:
+                self.emit_line('{}.empty_struct_error_flag = 0;'.format(dest))
             for i, item_type in enumerate(typ.types):
                 temp = self.temp_name()
                 self.emit_line('PyObject *{} = PyTuple_GetItem({}, {});'.format(temp, src, i))

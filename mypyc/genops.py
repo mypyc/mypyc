@@ -325,7 +325,7 @@ def prepare_class_def(module_name: str, cdef: ClassDef, mapper: Mapper) -> None:
     for name, node in info.names.items():
         if isinstance(node.node, Var):
             assert node.node.type, "Class member missing type"
-            if not node.node.is_classvar:
+            if not node.node.is_classvar and name != '__slots__':
                 ir.attributes[name] = mapper.type_to_rtype(node.node.type)
         elif isinstance(node.node, FuncDef):
             ir.method_decls[name] = prepare_func_def(module_name, cdef.name, node.node, mapper)
@@ -789,13 +789,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
             # If the attribute is initialized to None and type isn't optional,
             # don't initialize it to anything.
+            attr_type = cls.attr_type(lvalue.name)
             if isinstance(stmt.rvalue, RefExpr) and stmt.rvalue.fullname == 'builtins.None':
-                attr_type = cls.attr_type(lvalue.name)
                 if (not is_optional_type(attr_type) and not is_object_rprimitive(attr_type)
                         and not is_none_rprimitive(attr_type)):
                     continue
 
-            val = self.accept(stmt.rvalue)
+            val = self.coerce(self.accept(stmt.rvalue), attr_type, stmt.line)
             self.add(SetAttr(self_var, lvalue.name, val, -1))
 
         self.add(Return(self.primitive_op(true_op, [], -1)))
@@ -946,7 +946,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         error_block, body_block = BasicBlock(), BasicBlock()
         self.add(Branch(target.register, error_block, body_block, Branch.IS_ERROR))
         self.activate_block(error_block)
-        self.add(Assign(target.register, val))
+        self.add(Assign(target.register,
+                        self.coerce(val, target.register.type, self.fn_info.fitem.line)))
         self.goto(body_block)
         self.activate_block(body_block)
 
@@ -1869,7 +1870,16 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             coerced_arg_regs.append(self.coerce(reg, arg.type, line))
         return coerced_arg_regs
 
-    def call(self, decl: FuncDecl, args: Sequence[Value], line: int) -> Value:
+    def call(self, decl: FuncDecl, args: Sequence[Value],
+             arg_kinds: List[int],
+             arg_names: List[Optional[str]],
+             line: int) -> Value:
+        # Normalize keyword args to positionals.
+        arg_values_with_nones = self.keyword_args_to_positional(
+            args, arg_kinds, arg_names, decl.sig)
+        # Put in errors for missing args
+        args = self.missing_args_to_error_values(arg_values_with_nones, decl.sig)
+
         args = self.coerce_native_call_args(args, decl.sig, line)
         return self.add(Call(decl, args, line))
 
@@ -1940,13 +1950,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 and all(kind in (ARG_POS, ARG_NAMED) for kind in expr.arg_kinds)):
             decl = self.mapper.func_to_decl[callee.node]
 
-            # Normalize keyword args to positionals.
-            arg_values_with_nones = self.keyword_args_to_positional(
-                arg_values, expr.arg_kinds, expr.arg_names, decl.sig)
-            # Put in errors for missing args, potentially to be filled in with default args later.
-            arg_values = self.missing_args_to_error_values(arg_values_with_nones, decl.sig)
-
-            return self.call(decl, arg_values, expr.line)
+            return self.call(decl, arg_values, expr.arg_kinds, expr.arg_names, expr.line)
 
         # Fall back to a Python call
         function = self.accept(callee)
@@ -1984,11 +1988,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             ir = self.mapper.type_to_ir[callee.expr.node]
             decl = ir.method_decl(callee.name)
             args = []
+            arg_kinds, arg_names = expr.arg_kinds[:], expr.arg_names[:]
             if decl.kind == FUNC_CLASSMETHOD:  # Add the class argument for class methods
                 args.append(self.load_native_type_object(callee.expr.node.fullname()))
+                arg_kinds.insert(0, ARG_POS)
+                arg_names.insert(0, None)
             args += [self.accept(arg) for arg in expr.args]
 
-            return self.call(decl, args, expr.line)
+            return self.call(decl, args, arg_kinds, arg_names, expr.line)
 
         elif self.is_module_member_expr(callee):
             # Fall back to a PyCall for non-native module calls
@@ -2020,9 +2027,18 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.translate_call(expr, callee)
 
         decl = base.method_decl(callee.name)
-        vself = next(iter(self.environment.indexes))  # grab first argument
-        arg_values = [vself] + [self.accept(arg) for arg in expr.args]
-        return self.call(decl, arg_values, expr.line)
+        arg_values = [self.accept(arg) for arg in expr.args]
+        arg_kinds, arg_names = expr.arg_kinds[:], expr.arg_names[:]
+
+        if decl.kind != FUNC_STATICMETHOD:
+            vself = next(iter(self.environment.indexes))  # grab first argument
+            if decl.kind == FUNC_CLASSMETHOD:
+                vself = self.primitive_op(type_op, [vself], expr.line)
+            arg_values.insert(0, vself)
+            arg_kinds.insert(0, ARG_POS)
+            arg_names.insert(0, None)
+
+        return self.call(decl, arg_values, arg_kinds, arg_names, expr.line)
 
     def gen_method_call(self,
                         base: Value,
@@ -2090,30 +2106,44 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         target_type = self.type_to_rtype(expr.type)
         return self.coerce(src, target_type, expr.line)
 
-    def shortcircuit_expr(self, expr: OpExpr) -> Value:
-        expr_type = self.node_type(expr)
+    def shortcircuit_helper(self, op: str,
+                            expr_type: RType,
+                            left: Callable[[], Value],
+                            right: Callable[[], Value], line: int) -> Value:
         # Having actual Phi nodes would be really nice here!
         target = self.alloc_temp(expr_type)
+        # left_body takes the value of the left side, right_body the right
         left_body, right_body, next = BasicBlock(), BasicBlock(), BasicBlock()
+        # true_body is taken if the left is true, false_body if it is false.
+        # For 'and' the value is the right side if the left is true, and for 'or'
+        # it is the right side if the left is false.
         true_body, false_body = (
-            (right_body, left_body) if expr.op == 'and' else (left_body, right_body))
+            (right_body, left_body) if op == 'and' else (left_body, right_body))
 
-        left_value = self.accept(expr.left)
+        left_value = left()
         self.add_bool_branch(left_value, true_body, false_body)
 
         self.activate_block(left_body)
-        left_coerced = self.coerce(left_value, expr_type, expr.line)
+        left_coerced = self.coerce(left_value, expr_type, line)
         self.add(Assign(target, left_coerced))
         self.goto(next)
 
         self.activate_block(right_body)
-        right_value = self.accept(expr.right)
-        right_coerced = self.coerce(right_value, expr_type, expr.line)
+        right_value = right()
+        right_coerced = self.coerce(right_value, expr_type, line)
         self.add(Assign(target, right_coerced))
         self.goto(next)
 
         self.activate_block(next)
         return target
+
+    def shortcircuit_expr(self, expr: OpExpr) -> Value:
+        return self.shortcircuit_helper(
+            expr.op, self.node_type(expr),
+            lambda: self.accept(expr.left),
+            lambda: self.accept(expr.right),
+            expr.line
+        )
 
     def visit_conditional_expr(self, expr: ConditionalExpr) -> Value:
         if_body, else_body, next = BasicBlock(), BasicBlock(), BasicBlock()
@@ -2216,22 +2246,43 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             reg = self.accept(e)
             self.add_bool_branch(reg, true, false)
 
-    def visit_comparison_expr(self, e: ComparisonExpr) -> Value:
-        assert len(e.operators) == 1, 'more than 1 operator not supported'
-        op = e.operators[0]
+    def visit_basic_comparison(self, op: str, left: Value, right: Value, line: int) -> Value:
         negate = False
         if op == 'is not':
             op, negate = 'is', True
         elif op == 'not in':
             op, negate = 'in', True
 
-        left = self.accept(e.operands[0])
-        right = self.accept(e.operands[1])
-        target = self.binary_op(left, right, op, e.line)
+        target = self.binary_op(left, right, op, line)
 
         if negate:
-            target = self.unary_op(target, 'not', e.line)
+            target = self.unary_op(target, 'not', line)
         return target
+
+    def visit_comparison_expr(self, e: ComparisonExpr) -> Value:
+        # TODO: Don't produce an expression when used in conditional context
+
+        # All of the trickiness here is due to support for chained conditionals
+        # (`e1 < e2 > e3`, etc). `e1 < e2 > e3` is approximately equivalent to
+        # `e1 < e2 and e2 > e3` except that `e2` is only evaluated once.
+        expr_type = self.node_type(e)
+
+        # go(i, prev) generates code for `ei opi e{i+1} op{i+1} ... en`,
+        # assuming that prev contains the value of `ei`.
+        def go(i: int, prev: Value) -> Value:
+            if i == len(e.operators) - 1:
+                return self.visit_basic_comparison(
+                    e.operators[i], prev, self.accept(e.operands[i + 1]), e.line)
+
+            next = self.accept(e.operands[i + 1])
+            return self.shortcircuit_helper(
+                'and', expr_type,
+                lambda: self.visit_basic_comparison(
+                    e.operators[i], prev, next, e.line),
+                lambda: go(i + 1, next),
+                e.line)
+
+        return go(0, self.accept(e.operands[0]))
 
     def add_bool_branch(self, value: Value, true: BasicBlock, false: BasicBlock) -> None:
         if is_same_type(value.type, int_rprimitive):
@@ -2741,6 +2792,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.comprehension_helper(loop_params, gen_inner_stmts, o.line)
         return d
 
+    def visit_generator_expr(self, o: GeneratorExpr) -> Value:
+        print('{}:{}: Warning: treating generator comprehension as list'.format(
+            self.module_path, o.line))
+
+        gen = o
+        list_ops = self.primitive_op(new_list_op, [], o.line)
+        loop_params = list(zip(gen.indices, gen.sequences, gen.condlists))
+
+        def gen_inner_stmts() -> None:
+            e = self.accept(gen.left_expr)
+            self.primitive_op(list_append_op, [list_ops, e], o.line)
+
+        self.comprehension_helper(loop_params, gen_inner_stmts, o.line)
+        return list_ops
+
     def comprehension_helper(self,
                              loop_params: List[Tuple[Lvalue, Expression, List[Expression]]],
                              gen_inner_stmts: Callable[[], None],
@@ -2894,9 +2960,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         raise NotImplementedError
 
     def visit_exec_stmt(self, o: ExecStmt) -> None:
-        raise NotImplementedError
-
-    def visit_generator_expr(self, o: GeneratorExpr) -> Value:
         raise NotImplementedError
 
     def visit_namedtuple_expr(self, o: NamedTupleExpr) -> Value:
@@ -3277,7 +3340,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         func_reg = self.add(Call(fn_info.callable_class.ir.ctor, [], fitem.line))
 
         # Set the callable class' environment attribute to point at the environment class
-        # defined in the callable class' immediate outer scope.
+        # defined in the callable class' immediate outer scope. Note that there are three possible
+        # environment class registers we may use. If the encapsulating function is:
+        # - a generator function, then the callable class is instantiated from the generator class'
+        #   __next__' function, and hence the generator class' environment register is used.
+        # - a nested function, then the callable class is instantiated from the current callable
+        #   class' '__call__' function, and hence the callable class' environment register is used.
+        # - neither, then we use the environment register of the original function.
         if self.fn_info.is_generator:
             curr_env_reg = self.fn_info.generator_class.curr_env_reg
         elif self.fn_info.is_nested:
@@ -3394,7 +3463,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.enter(fn_info)
         self_reg = self.read(self.add_self_to_env(fn_info.generator_class.ir))
         none_reg = self.none()
-        result = self.call(fn_decl, [self_reg, none_reg, none_reg, none_reg], fn_info.fitem.line)
+        result = self.add(Call(fn_decl, [self_reg, none_reg, none_reg, none_reg], fn_info.fitem.line))
         self.add(Return(result))
         blocks, env, _, fn_info = self.leave()
 
@@ -3420,9 +3489,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.assign_if_null(value, none_reg)
         self.assign_if_null(traceback, none_reg)
 
-        result = self.call(fn_decl,
-                           [self_reg, self.read(typ), self.read(value), self.read(traceback)],
-                           fn_info.fitem.line)
+        result = self.add(Call(fn_decl,
+                               [self_reg, self.read(typ), self.read(value), self.read(traceback)],
+                               fn_info.fitem.line))
         self.add(Return(result))
 
         blocks, env, _, fn_info = self.leave()
@@ -3460,6 +3529,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def instantiate_generator_class(self) -> Value:
         fitem = self.fn_info.fitem
         generator_reg = self.add(Call(self.fn_info.generator_class.ir.ctor, [], fitem.line))
+
+        # Get the current environment register. If the current function is nested, then the
+        # generator class gets instantiated from the callable class' '__call__' method, and hence
+        # we use the callable class' environment register. Otherwise, we use the original
+        # function's environment register.
         if self.fn_info.is_nested:
             curr_env_reg = self.fn_info.callable_class.curr_env_reg
         else:
@@ -3546,7 +3620,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         For example, int -> object boxes the source int; int -> int emits nothing;
         object -> int unboxes the object. All conversions preserve object value.
 
-        If force is true, always generate an op (even if it is just an assingment) so
+        If force is true, always generate an op (even if it is just an assignment) so
         that the result will have exactly target_type as the type.
 
         Returns the register with the converted value (may be same as src).
@@ -3569,11 +3643,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return src
 
     def keyword_args_to_positional(self,
-                                   args: List[Value],
+                                   args: Sequence[Value],
                                    arg_kinds: List[int],
                                    arg_names: List[Optional[str]],
                                    sig: FuncSignature) -> List[Optional[Value]]:
-        # NOTE: This doesn't support default argument values, *args or **kwargs.
+        # NOTE: This doesn't support *args or **kwargs.
         sig_arg_kinds = [arg.kind for arg in sig.args]
         sig_arg_names = [arg.name for arg in sig.args]
         formal_to_actual = map_actuals_to_formals(arg_kinds,
