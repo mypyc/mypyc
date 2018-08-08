@@ -70,6 +70,8 @@ static inline void CPy_FixupTraitVtable(CPyVTableItem *vtable, int count) {
 
 // Create a heap type based on a template non-heap type.
 // This is super hacky and maybe we should suck it up and use PyType_FromSpec instead.
+// We allow bases to be NULL to represent just inheriting from object.
+// We don't support NULL bases and a non-type metaclass.
 static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
                                              PyObject *bases,
                                              PyObject *modname) {
@@ -109,6 +111,8 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
     // but for the case of GenericMeta setting a bunch of properties
     // on the class we should be fine.
     if (metaclass != &PyType_Type) {
+        assert(bases && "non-type metaclasses require non-NULL bases");
+
         PyObject *ns = PyDict_New();
         if (!ns) goto error;
 
