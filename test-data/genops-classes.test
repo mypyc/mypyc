@@ -372,7 +372,7 @@ L0:
     r9 = unicode_2 :: static  ('__main__')
     r10 = __main__.C_template :: type
     r11 = pytype_from_template(r10, r8, r9)
-    r12 = C__trait_vtable_setup()
+    r12 = C_trait_vtable_setup()
     __main__.C = r11 :: type
     r13 = __main__.globals :: static
     r14 = unicode_3 :: static  ('C')
@@ -382,7 +382,7 @@ L0:
     r18 = unicode_2 :: static  ('__main__')
     r19 = __main__.S_template :: type
     r20 = pytype_from_template(r19, r17, r18)
-    r21 = S__trait_vtable_setup()
+    r21 = S_trait_vtable_setup()
     __main__.S = r20 :: type
     r22 = __main__.globals :: static
     r23 = unicode_4 :: static  ('S')
@@ -402,7 +402,7 @@ L0:
     r37 = unicode_2 :: static  ('__main__')
     r38 = __main__.D_template :: type
     r39 = pytype_from_template(r38, r36, r37)
-    r40 = D__trait_vtable_setup()
+    r40 = D_trait_vtable_setup()
     __main__.D = r39 :: type
     r41 = __main__.globals :: static
     r42 = unicode_6 :: static  ('D')

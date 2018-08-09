@@ -118,7 +118,8 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
         assert(bases && "non-type metaclasses require non-NULL bases");
 
         PyObject *ns = PyDict_New();
-        if (!ns) goto error;
+        if (!ns)
+            goto error;
 
         dummy_class = (PyTypeObject *)PyObject_CallFunctionObjArgs(
             (PyObject *)metaclass, name, bases, ns, NULL);

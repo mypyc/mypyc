@@ -40,7 +40,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
 
     getseters_name = '{}_getseters'.format(name_prefix)
     methods_name = '{}_methods'.format(name_prefix)
-    vtable_setup_name = '{}__trait_vtable_setup'.format(name_prefix)
+    vtable_setup_name = '{}_trait_vtable_setup'.format(name_prefix)
 
     def emit_line() -> None:
         emitter.emit_line()

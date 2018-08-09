@@ -833,7 +833,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                [template, tp_bases, modname], cdef.line)
         # Immediately fix up the trait vtables, before doing anything with the class.
         self.add(Call(
-            FuncDecl(cdef.name + '__trait_vtable_setup',
+            FuncDecl(cdef.name + '_trait_vtable_setup',
                      None, self.module_name,
                      FuncSignature([], bool_rprimitive)), [], -1))
         # Save the class
