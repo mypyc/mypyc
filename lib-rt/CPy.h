@@ -73,17 +73,21 @@ static inline void CPy_FixupTraitVtable(CPyVTableItem *vtable, int count) {
 // We allow bases to be NULL to represent just inheriting from object.
 // We don't support NULL bases and a non-type metaclass.
 static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
-                                             PyObject *bases,
+                                             PyObject *orig_bases,
                                              PyObject *modname) {
     PyHeapTypeObject *t = NULL;
     PyTypeObject *dummy_class = NULL;
     PyObject *name = NULL;
+    PyObject *bases = NULL;
 
     PyTypeObject *metaclass = Py_TYPE(template_);
 
-    PyObject *old_bases = bases;
-    if (bases) {
-        bases = update_bases(old_bases);
+    if (orig_bases) {
+        bases = update_bases(orig_bases);
+        // update_bases doesn't increment the refcount if nothing changes,
+        // so we do it to make sure we have distinct "references" to both
+        if (bases == orig_bases)
+            Py_INCREF(bases);
 
         // Find the appropriate metaclass from our base classes. We
         // care about this because Generic uses a metaclass prior to
@@ -138,17 +142,17 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
            (char *)template_ + sizeof(PyVarObject),
            sizeof(PyTypeObject) - sizeof(PyVarObject));
 
-    if (bases != old_bases) {
-        if (PyObject_SetAttrString((PyObject *)t, "__orig_bases__", old_bases) < 0)
+    if (bases != orig_bases) {
+        if (PyObject_SetAttrString((PyObject *)t, "__orig_bases__", orig_bases) < 0)
             goto error;
     }
 
     t->ht_name = name;
     Py_INCREF(name);
     t->ht_qualname = name;
-    name = NULL;  // last ref to name stolen by ht_qualname, so NULL it out
-    Py_XINCREF(bases);
     t->ht_type.tp_bases = bases;
+    // references stolen so NULL these out
+    bases = name = NULL;
 
     if (PyType_Ready((PyTypeObject *)t) < 0)
         goto error;
@@ -173,8 +177,6 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
 
     if (init_subclass((PyTypeObject *)t, NULL))
         goto error;
-
-    Py_XDECREF(bases);
 
     return (PyObject *)t;
 

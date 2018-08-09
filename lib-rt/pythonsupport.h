@@ -123,7 +123,6 @@ init_subclass(PyTypeObject *type, PyObject *kwds)
 static PyObject*
 update_bases(PyObject *bases)
 {
-    Py_INCREF(bases);
     return bases;
 }
 
