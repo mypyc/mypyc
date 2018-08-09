@@ -9,7 +9,6 @@ cache:
 matrix:
   include:
     - os: linux
-      dist: xenial
       sudo: false
       python: "3.5"
       env: PYTHON_DEBUG_BUILD=0
