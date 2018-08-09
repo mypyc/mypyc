@@ -89,9 +89,17 @@ error:
     Py_XDECREF(new_bases);
     return NULL;
 }
+#else
+static PyObject*
+update_bases(PyObject *bases)
+{
+    return bases;
+}
+#endif
 
-_Py_IDENTIFIER(__init_subclass__);
 // From Python 3.7's typeobject.c
+#if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 6
+_Py_IDENTIFIER(__init_subclass__);
 static int
 init_subclass(PyTypeObject *type, PyObject *kwds)
 {
@@ -120,12 +128,6 @@ init_subclass(PyTypeObject *type, PyObject *kwds)
 }
 
 #else
-static PyObject*
-update_bases(PyObject *bases)
-{
-    return bases;
-}
-
 static int
 init_subclass(PyTypeObject *type, PyObject *kwds)
 {
