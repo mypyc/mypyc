@@ -65,8 +65,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     # extract the args (which we'll use for the native constructor)
     init_fn = cl.get_method('__init__')
     if init_fn:
-        init_name = '{}_init'.format(name_prefix)
-        generate_init_for_class(cl, init_name, init_fn, emitter)
+        init_name = generate_init_for_class(cl, init_fn, emitter)
         fields['tp_init'] = init_name
 
     call_fn = cl.get_method('__call__')
@@ -329,15 +328,16 @@ def generate_constructor_for_class(cl: ClassIR,
 
 
 def generate_init_for_class(cl: ClassIR,
-                            func_name: str,
                             init_fn: FuncIR,
-                            emitter: Emitter) -> None:
+                            emitter: Emitter) -> str:
     """Generate an init function suitable for use as tp_init.
 
     tp_init needs to be a function that returns an int, and our
     __init__ methods return a PyObject. Translate NULL to -1,
     everything else to 0.
     """
+    func_name = '{}_init'.format(cl.name_prefix(emitter.names))
+
     emitter.emit_line('static int')
     emitter.emit_line(
         '{}(PyObject *self, PyObject *args, PyObject *kwds)'.format(func_name))
@@ -345,6 +345,8 @@ def generate_init_for_class(cl: ClassIR,
     emitter.emit_line('return {}{}(self, args, kwds) != NULL ? 0 : -1;'.format(
         PREFIX, init_fn.cname(emitter.names)))
     emitter.emit_line('}')
+
+    return func_name
 
 
 def generate_new_for_class(cl: ClassIR,
