@@ -77,7 +77,7 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
                                              PyObject *modname) {
     PyHeapTypeObject *t = NULL;
     PyTypeObject *dummy_class = NULL;
-    PyObject *name;
+    PyObject *name = NULL;
 
     PyTypeObject *metaclass = Py_TYPE(template_);
 
@@ -146,6 +146,7 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
     t->ht_name = name;
     Py_INCREF(name);
     t->ht_qualname = name;
+    name = NULL;  // last ref to name stolen by ht_qualname, so NULL it out
     Py_XINCREF(bases);
     t->ht_type.tp_bases = bases;
 
@@ -181,6 +182,7 @@ error:
     Py_XDECREF(t);
     Py_XDECREF(bases);
     Py_XDECREF(dummy_class);
+    Py_XDECREF(name);
     return NULL;
 }
 
