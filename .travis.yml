@@ -14,18 +14,16 @@ matrix:
       python: "3.5"
       env: PYTHON_DEBUG_BUILD=0
     - os: linux
-      dist: xenial
       sudo: false
       python: "3.6"
       env: PYTHON_DEBUG_BUILD=0
     - os: linux
-      dist: xenial
       sudo: false
       python: "3.6"
       env: PYTHON_DEBUG_BUILD=1
     - os: linux
       dist: xenial
-      sudo: false
+      sudo: required
       python: "3.7"
       env: PYTHON_DEBUG_BUILD=0
     - os: osx
