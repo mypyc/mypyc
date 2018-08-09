@@ -163,7 +163,6 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
         // to the proxy.
         if (PyDict_SetItemString(t->ht_type.tp_dict, "_gorg", (PyObject *)t) < 0)
             goto error;
-        Py_DECREF(dummy_class);
     }
 
     if (PyObject_SetAttrString((PyObject *)t, "__module__", modname) < 0)
@@ -171,6 +170,8 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
 
     if (init_subclass((PyTypeObject *)t, NULL))
         goto error;
+
+    Py_XDECREF(dummy_class);
 
     return (PyObject *)t;
 
