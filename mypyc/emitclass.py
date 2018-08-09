@@ -405,7 +405,7 @@ def generate_new_for_class(cl: ClassIR,
     emitter.emit_line('if (type != {}) {{'.format(emitter.type_struct_name(cl)))
     emitter.emit_line(
         'PyErr_SetString(PyExc_TypeError, "interpreted classes cannot inherit from compiled");')
-    emitter.emit_line('return NULL;');
+    emitter.emit_line('return NULL;')
     emitter.emit_line('}')
 
     emitter.emit_line('return {}();'.format(setup_name))
