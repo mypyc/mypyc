@@ -9,7 +9,7 @@ from mypyc.ops import (
     ControlOp,
     BasicBlock, OpVisitor, Assign, LoadInt, LoadErrorValue, RegisterOp, Goto, Branch, Return, Call,
     Environment, Box, Unbox, Cast, Op, Unreachable, TupleGet, TupleSet, GetAttr, SetAttr,
-    LoadStatic, PrimitiveOp, MethodCall, RaiseStandardError,
+    LoadStatic, PrimitiveOp, MethodCall, RaiseStandardError, IncRef
 )
 
 
@@ -138,6 +138,9 @@ class BaseAnalysisVisitor(OpVisitor[GenAndKill]):
         return self.visit_register_op(op)
 
     def visit_raise_standard_error(self, op: RaiseStandardError) -> GenAndKill:
+        return self.visit_register_op(op)
+
+    def visit_inc_ref(self, op: IncRef) -> GenAndKill:
         return self.visit_register_op(op)
 
 

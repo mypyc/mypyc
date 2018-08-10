@@ -2753,65 +2753,93 @@ assert run_generator(another_triple()()) == ((1,), None)
 
 [case testYieldThrow]
 from typing import Generator
+from traceback import print_tb
+from contextlib import contextmanager
+import wrapsys
 
 def generator() -> Generator:
-    print('hi!')
     try:
         yield 1
         yield 2
         yield 3
     except Exception as e:
-        print('caught exception with value ' + str(e))
+        print_tb(wrapsys.exc_info()[2])
+        s = str(e)
+        if s:
+            print('caught exception with value ' + s)
+        else:
+            print('caught exception without value')
         return 0
+
+def foo() -> Generator:
+    try:
+        yield 1
+    except Exception as e:
+        print(str(e))
+    finally:
+        print('goodbye')
+
+ctx_manager = contextmanager(foo)
+
+[file wrapsys.py]
+# This is a gross hack around some limitations of the test system/mypyc.
+from typing import Any
+import sys
+def exc_info() -> Any:
+    return sys.exc_info()  # type: ignore
 
 [file driver.py]
 import sys
-from native import generator
+from native import generator, ctx_manager
 
 g = generator()
-g.throw(Exception, 'hello')
-# try:
-#     g.throw(Exception, 'hello')
-# except StopIteration as e:
-#     assert e.value == 0
+try:
+    g.throw(Exception, 'hello')
+except Exception as e:
+    assert str(e) == 'hello'
 
-# g = generator()
-# assert next(g) == 1
-# assert next(g) == 2
-# assert next(g) == 3
-# try:
-#     g.throw(Exception)
-# except StopIteration as e:
-#     assert e.value == 0
+g = generator()
+assert next(g) == 1
+assert next(g) == 2
+assert next(g) == 3
+try:
+    g.throw(Exception)
+except StopIteration as e:
+    assert e.value == 0
 
-# g = generator()
-# assert next(g) == 1
-# assert next(g) == 2
-# try:
-#     g.throw(Exception, 'some string')
-# except StopIteration as e:
-#     assert e.value == 0
+g = generator()
+assert next(g) == 1
+assert next(g) == 2
+try:
+    g.throw(Exception, 'some string')
+except StopIteration as e:
+    assert e.value == 0
 
-# g = generator()
-# assert next(g) == 1
-# try:
-#     raise Exception()
-# except Exception as e:
-#     tb = sys.exc_info()[2]
-#     try:
-#         g.throw(Exception, 'some other string', tb)
-#     except StopIteration as e:
-#         assert e.value == 0
+g = generator()
+assert next(g) == 1
+try:
+    raise Exception()
+except Exception as e:
+    tb = sys.exc_info()[2]
+    try:
+        g.throw(Exception, 'some other string', tb)
+    except StopIteration as e:
+        assert e.value == 0
+
+with ctx_manager() as c:
+    raise Exception('exception')
 
 [out]
-Traceback (most recent call last):
-  File "tmp/driver.py", line 5, in <module>
-    g.throw(Exception, 'hello')
-  File "tmp/py/native.py", line 3, in throw
-    def generator() -> Generator:
-  File "tmp/py/native.py", line 3, in __mypyc_next_h__
-    def generator() -> Generator:
-Exception: hello
-Fatal Python error: Objects/tupleobject.c:243 object at 0x107357930 has negative ref count -2604246222170760230
-
-Current thread 0x00007fff8d2b1380 (most recent call first):
+  File "tmp/py/native.py", line 10, in __mypyc_next_h__
+    yield 3
+  File "tmp/py/native.py", line 9, in __mypyc_next_h__
+    yield 2
+  File "tmp/py/native.py", line 8, in __mypyc_next_h__
+    yield 1
+  File "tmp/driver.py", line 30, in <module>
+    raise Exception()
+caught exception without value
+caught exception with value some string
+caught exception with value some other string
+exception
+goodbye

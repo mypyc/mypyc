@@ -58,7 +58,7 @@ from mypyc.ops import (
     LoadErrorValue, ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap,
     FuncSignature, VTableAttr, VTableMethod, VTableEntries, NAMESPACE_TYPE, RaiseStandardError,
     LoadErrorValue, NO_TRACEBACK_LINE_NO, FuncDecl, FUNC_NORMAL, FUNC_STATICMETHOD,
-    FUNC_CLASSMETHOD, RUnion, is_optional_type, optional_value_type
+    FUNC_CLASSMETHOD, RUnion, is_optional_type, optional_value_type, IncRef
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import (
@@ -3216,11 +3216,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Add the type, value, traceback variables to the environment
         type_var, value_var, traceback_var = Var('type'), Var('value'), Var('traceback')
         generator_class.exc_type_reg = self.read(self.environment.add_local_reg(type_var,
-                                                                            object_rprimitive))
+                                                                            object_rprimitive, True))
         generator_class.exc_value_reg = self.read(self.environment.add_local_reg(value_var,
-                                                                             object_rprimitive))
+                                                                             object_rprimitive, True))
         generator_class.exc_traceback_reg = self.read(
-            self.environment.add_local_reg(traceback_var, object_rprimitive))
+            self.environment.add_local_reg(traceback_var, object_rprimitive, True))
 
         generator_class.self_reg = self.read(self_target, fitem.line)
         generator_class.curr_env_reg = self.load_outer_env(generator_class.self_reg,
@@ -3543,6 +3543,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def add_generator_raise_exception_blocks(self, line: int) -> None:
         gen_cls = self.fn_info.generator_class
+
+        # self.add(IncRef(gen_cls.exc_value_reg))
+        # self.add(IncRef(gen_cls.exc_traceback_reg))
 
         # Check to see if an exception was raised
         error_block = BasicBlock()

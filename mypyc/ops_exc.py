@@ -26,7 +26,7 @@ raise_exception_with_tb_op = custom_op(
     result_type=bool_rprimitive,
     error_kind=ERR_FALSE,
     format_str = 'raise_exception({args[0]}, {args[1]}, {args[2]}); {dest} = 0',
-    emit=simple_emit('PyErr_Restore({args[0]}, {args[1]}, {args[2]}); {dest} = 0;'))
+    emit=simple_emit('CPyErr_SetObjectAndTraceback({args[0]}, {args[1]}, {args[2]}); {dest} = 0;'))
 
 reraise_exception_op = custom_op(
     arg_types=[],
