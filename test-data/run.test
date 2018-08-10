@@ -2758,7 +2758,7 @@ from native import normal, generator, triple, another_triple
 T = TypeVar('T')
 U = TypeVar('U')
 
-def run_generator(gen: Generator[T, None, U]) -> Tuple[Sequence[T], U, str]:
+def run_generator(gen: Generator[T, None, U]) -> Tuple[Sequence[T], U]:
     res = []
     while True:
         try:
@@ -2773,12 +2773,12 @@ assert run_generator(triple()()) == ((1, 2, 3), None)
 assert run_generator(another_triple()()) == ((1,), None)
 
 [case testYieldThrow]
-from typing import Generator
+from typing import Generator, Iterable
 from traceback import print_tb
 from contextlib import contextmanager
 import wrapsys
 
-def generator() -> Generator:
+def generator() -> Iterable[int]:
     try:
         yield 1
         yield 2
@@ -2792,7 +2792,7 @@ def generator() -> Generator:
             print('caught exception without value')
         return 0
 
-def foo() -> Generator:
+def foo() -> Generator[int, None, None]:
     try:
         yield 1
     except Exception as e:
@@ -2811,54 +2811,52 @@ def exc_info() -> Any:
 
 [file driver.py]
 import sys
+from typing import Generator, Tuple, TypeVar, Sequence
 from native import generator, ctx_manager
 
-g = generator()
-try:
-    g.throw(Exception, 'hello')
-except Exception as e:
-    assert str(e) == 'hello'
+T = TypeVar('T')
+U = TypeVar('U')
 
-g = generator()
-assert next(g) == 1
-assert next(g) == 2
-assert next(g) == 3
-try:
-    g.throw(Exception)
-except StopIteration as e:
-    assert e.value == 0
+def run_generator_and_throw(gen: Generator[T, None, U], 
+                            num_times: int,
+                            value: object = None,
+                            traceback: object = None) -> Tuple[Sequence[T], U]:
+    res = []
+    for i in range(num_times):
+        res.append(next(gen))
+    try:
+        if value is not None and traceback is not None:
+            gen.throw(Exception, value, traceback)
+        elif value is not None:
+            gen.throw(Exception, value)
+        else:
+            gen.throw(Exception)
+    except StopIteration as e:
+        return (tuple(res), e.value)
+    except Exception as e:
+        return (tuple(res), str(e))
 
-g = generator()
-assert next(g) == 1
-assert next(g) == 2
+assert run_generator_and_throw(generator(), 0, 'hello') == ((), 'hello')
+assert run_generator_and_throw(generator(), 3) == ((1, 2, 3), 0)
+assert run_generator_and_throw(generator(), 2, 'some string') == ((1, 2), 0)
 try:
-    g.throw(Exception, 'some string')
-except StopIteration as e:
-    assert e.value == 0
-
-g = generator()
-assert next(g) == 1
-try:
-    raise Exception()
+    raise Exception
 except Exception as e:
     tb = sys.exc_info()[2]
-    try:
-        g.throw(Exception, 'some other string', tb)
-    except StopIteration as e:
-        assert e.value == 0
+    assert run_generator_and_throw(generator(), 1, 'some other string', tb) == ((1,), 0)
 
 with ctx_manager() as c:
     raise Exception('exception')
 
 [out]
-  File "tmp/py/native.py", line 10, in __mypyc_next_h__
+  File "tmp/py/native.py", line 10, in __mypyc_generator_helper__
     yield 3
-  File "tmp/py/native.py", line 9, in __mypyc_next_h__
+  File "tmp/py/native.py", line 9, in __mypyc_generator_helper__
     yield 2
-  File "tmp/py/native.py", line 8, in __mypyc_next_h__
+  File "tmp/py/native.py", line 8, in __mypyc_generator_helper__
     yield 1
-  File "tmp/driver.py", line 30, in <module>
-    raise Exception()
+  File "tmp/driver.py", line 31, in <module>
+    raise Exception
 caught exception without value
 caught exception with value some string
 caught exception with value some other string

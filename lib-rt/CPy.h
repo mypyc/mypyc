@@ -744,6 +744,10 @@ static void CPy_Reraise(void) {
 }
 
 static void CPyErr_SetObjectAndTraceback(PyObject *type, PyObject *value, PyObject *traceback) {
+    // Set the value and traceback of an error. Because calling
+    // PyErr_Restore takes away a reference to each object passed in
+    // as an argument, we manually increase the reference count of
+    // each argument before calling it.
     Py_INCREF(type);
     Py_INCREF(value);
     Py_INCREF(traceback);

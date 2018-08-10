@@ -1644,22 +1644,19 @@ L0:
     return r18
 
 [case testFunctionCallWithDefaultArgs]
-def f(x: int, y: int = 3, s: str = "test", z: object = 5) -> None:
+def f(x: int, y: int = 3, z: str = "test") -> None:
     return None
 
 def g() -> None:
     f(2)
     f(y = 3, x = 6)
 [out]
-def f(x, y, s, z):
+def f(x, y, z):
     x, y :: int
-    s :: str
-    z :: object
+    z :: str
     r0 :: int
     r1 :: str
-    r2 :: int
-    r3 :: object
-    r4 :: None
+    r2 :: None
 L0:
     r0 = 3
     if is_error(y) goto L1 else goto L2
@@ -1667,40 +1664,30 @@ L1:
     y = r0
 L2:
     r1 = unicode_0 :: static  ('test')
-    if is_error(s) goto L3 else goto L4
+    if is_error(z) goto L3 else goto L4
 L3:
-    s = r1
+    z = r1
 L4:
-    r2 = 5
-    if is_error(z) goto L5 else goto L6
-L5:
-    r3 = box(int, r2)
-    z = r3
-L6:
-    r4 = None
-    return r4
+    r2 = None
+    return r2
 def g():
     r0, r1 :: int
     r2 :: str
-    r3 :: object
-    r4 :: None
-    r5, r6 :: int
-    r7 :: str
-    r8 :: object
-    r9, r10 :: None
+    r3 :: None
+    r4, r5 :: int
+    r6 :: str
+    r7, r8 :: None
 L0:
     r0 = 2
     r1 = <error> :: int
     r2 = <error> :: str
-    r3 = <error> :: object
-    r4 = f(r0, r1, r2, r3)
-    r5 = 3
-    r6 = 6
-    r7 = <error> :: str
-    r8 = <error> :: object
-    r9 = f(r6, r5, r7, r8)
-    r10 = None
-    return r10
+    r3 = f(r0, r1, r2)
+    r4 = 3
+    r5 = 6
+    r6 = <error> :: str
+    r7 = f(r5, r4, r6)
+    r8 = None
+    return r8
 
 [case testMethodCallWithDefaultArgs]
 class A:

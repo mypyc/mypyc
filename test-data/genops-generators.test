@@ -4,10 +4,9 @@ from typing import Iterable
 def yield_three_times() -> Iterable:
     yield 1
     yield 2
-    yield 3
 
 [out]
-def yield_three_times__gen.__mypyc_next_h__(self, type, value, traceback):
+def yield_three_times__gen.__mypyc_generator_helper__(self, type, value, traceback):
     self :: yield_three_times__gen
     type, value, traceback :: object
     r0 :: yield_three_times__env
@@ -33,30 +32,19 @@ def yield_three_times__gen.__mypyc_next_h__(self, type, value, traceback):
     r24 :: bool
     r25 :: None
     r26, r27, r28 :: bool
-    r29 :: None
-    r30 :: int
-    r31 :: object
-    r32 :: int
-    r33 :: bool
-    r34 :: None
+    r29, r30 :: None
+    r31 :: int
+    r32, r33 :: bool
+    r34 :: int
     r35 :: bool
-    r36 :: None
-    r37, r38, r39 :: bool
-    r40, r41 :: None
-    r42 :: int
-    r43, r44 :: bool
-    r45 :: int
-    r46 :: bool
-    r47 :: int
-    r48 :: bool
-    r49 :: int
-    r50 :: bool
-    r51 :: int
-    r52, r53 :: bool
+    r36 :: int
+    r37 :: bool
+    r38 :: int
+    r39, r40 :: bool
 L0:
     r0 = self.__mypyc_env__
     r1 = r0.__mypyc_next_label__
-    goto L25
+    goto L19
 L1:
     r2 = None
     r3 = type is not r2
@@ -113,50 +101,25 @@ L16:
     raise_exception(type, value); r28 = 0
 L17:
     r29 = None
+    r30 = None
+    r31 = -1
+    r0.__mypyc_next_label__ = r31; r32 = is_error
 L18:
-    r30 = 3
-    r31 = box(int, r30)
-    r32 = 3
-    r0.__mypyc_next_label__ = r32; r33 = is_error
-    return r31
-L19:
-    r34 = None
-    r35 = type is not r34
-    if r35 goto L20 else goto L23 :: bool
-L20:
-    r36 = None
-    r37 = traceback is not r36
-    if r37 goto L21 else goto L22 :: bool
-L21:
-    raise_exception(type, value, traceback); r38 = 0
-    goto L23
-L22:
-    raise_exception(type, value); r39 = 0
-L23:
-    r40 = None
-    r41 = None
-    r42 = -1
-    r0.__mypyc_next_label__ = r42; r43 = is_error
-L24:
-    raise StopIteration(r41)
+    raise StopIteration(r30)
     unreachable
-L25:
-    r45 = 0
-    r46 = r1 == r45 :: int
-    if r46 goto L1 else goto L26 :: bool
-L26:
-    r47 = 1
-    r48 = r1 == r47 :: int
-    if r48 goto L7 else goto L27 :: bool
-L27:
-    r49 = 2
-    r50 = r1 == r49 :: int
-    if r50 goto L13 else goto L28 :: bool
-L28:
-    r51 = 3
-    r52 = r1 == r51 :: int
-    if r52 goto L19 else goto L29 :: bool
-L29:
+L19:
+    r34 = 0
+    r35 = r1 == r34 :: int
+    if r35 goto L1 else goto L20 :: bool
+L20:
+    r36 = 1
+    r37 = r1 == r36 :: int
+    if r37 goto L7 else goto L21 :: bool
+L21:
+    r38 = 2
+    r39 = r1 == r38 :: int
+    if r39 goto L13 else goto L22 :: bool
+L22:
     raise StopIteration
     unreachable
 def yield_three_times__gen.__next__(self):
@@ -165,7 +128,7 @@ def yield_three_times__gen.__next__(self):
     r1 :: object
 L0:
     r0 = None
-    r1 = yield_three_times__gen.__mypyc_next_h__(self, r0, r0, r0)
+    r1 = yield_three_times__gen.__mypyc_generator_helper__(self, r0, r0, r0)
     return r1
 def yield_three_times__gen.__iter__(self):
     self :: yield_three_times__gen
@@ -186,7 +149,7 @@ L2:
 L3:
     traceback = r0
 L4:
-    r1 = yield_three_times__gen.__mypyc_next_h__(self, type, value, traceback)
+    r1 = yield_three_times__gen.__mypyc_generator_helper__(self, type, value, traceback)
     return r1
 def yield_three_times():
     r0 :: yield_three_times__env
@@ -212,7 +175,7 @@ def yield_while_loop() -> Generator:
         i += 1
 
 [out]
-def yield_while_loop__gen.__mypyc_next_h__(self, type, value, traceback):
+def yield_while_loop__gen.__mypyc_generator_helper__(self, type, value, traceback):
     self :: yield_while_loop__gen
     type, value, traceback :: object
     r0 :: yield_while_loop__env
@@ -319,7 +282,7 @@ def yield_while_loop__gen.__next__(self):
     r1 :: object
 L0:
     r0 = None
-    r1 = yield_while_loop__gen.__mypyc_next_h__(self, r0, r0, r0)
+    r1 = yield_while_loop__gen.__mypyc_generator_helper__(self, r0, r0, r0)
     return r1
 def yield_while_loop__gen.__iter__(self):
     self :: yield_while_loop__gen
@@ -340,7 +303,7 @@ L2:
 L3:
     traceback = r0
 L4:
-    r1 = yield_while_loop__gen.__mypyc_next_h__(self, type, value, traceback)
+    r1 = yield_while_loop__gen.__mypyc_generator_helper__(self, type, value, traceback)
     return r1
 def yield_while_loop():
     r0 :: yield_while_loop__env
@@ -374,7 +337,7 @@ def yield_for_loop_range() -> Iterable:
         yield i
 
 [out]
-def yield_for_loop_list__gen.__mypyc_next_h__(self, type, value, traceback):
+def yield_for_loop_list__gen.__mypyc_generator_helper__(self, type, value, traceback):
     self :: yield_for_loop_list__gen
     type, value, traceback :: object
     r0 :: yield_for_loop_list__env
@@ -508,7 +471,7 @@ def yield_for_loop_list__gen.__next__(self):
     r1 :: object
 L0:
     r0 = None
-    r1 = yield_for_loop_list__gen.__mypyc_next_h__(self, r0, r0, r0)
+    r1 = yield_for_loop_list__gen.__mypyc_generator_helper__(self, r0, r0, r0)
     return r1
 def yield_for_loop_list__gen.__iter__(self):
     self :: yield_for_loop_list__gen
@@ -529,7 +492,7 @@ L2:
 L3:
     traceback = r0
 L4:
-    r1 = yield_for_loop_list__gen.__mypyc_next_h__(self, type, value, traceback)
+    r1 = yield_for_loop_list__gen.__mypyc_generator_helper__(self, type, value, traceback)
     return r1
 def yield_for_loop_list():
     r0 :: yield_for_loop_list__env
@@ -544,7 +507,7 @@ L0:
     r3 = 0
     r0.__mypyc_next_label__ = r3; r4 = is_error
     return r1
-def yield_for_loop_dict__gen.__mypyc_next_h__(self, type, value, traceback):
+def yield_for_loop_dict__gen.__mypyc_generator_helper__(self, type, value, traceback):
     self :: yield_for_loop_dict__gen
     type, value, traceback :: object
     r0 :: yield_for_loop_dict__env
@@ -689,7 +652,7 @@ def yield_for_loop_dict__gen.__next__(self):
     r1 :: object
 L0:
     r0 = None
-    r1 = yield_for_loop_dict__gen.__mypyc_next_h__(self, r0, r0, r0)
+    r1 = yield_for_loop_dict__gen.__mypyc_generator_helper__(self, r0, r0, r0)
     return r1
 def yield_for_loop_dict__gen.__iter__(self):
     self :: yield_for_loop_dict__gen
@@ -710,7 +673,7 @@ L2:
 L3:
     traceback = r0
 L4:
-    r1 = yield_for_loop_dict__gen.__mypyc_next_h__(self, type, value, traceback)
+    r1 = yield_for_loop_dict__gen.__mypyc_generator_helper__(self, type, value, traceback)
     return r1
 def yield_for_loop_dict():
     r0 :: yield_for_loop_dict__env
@@ -725,7 +688,7 @@ L0:
     r3 = 0
     r0.__mypyc_next_label__ = r3; r4 = is_error
     return r1
-def yield_for_loop_range__gen.__mypyc_next_h__(self, type, value, traceback):
+def yield_for_loop_range__gen.__mypyc_generator_helper__(self, type, value, traceback):
     self :: yield_for_loop_range__gen
     type, value, traceback :: object
     r0 :: yield_for_loop_range__env
@@ -837,7 +800,7 @@ def yield_for_loop_range__gen.__next__(self):
     r1 :: object
 L0:
     r0 = None
-    r1 = yield_for_loop_range__gen.__mypyc_next_h__(self, r0, r0, r0)
+    r1 = yield_for_loop_range__gen.__mypyc_generator_helper__(self, r0, r0, r0)
     return r1
 def yield_for_loop_range__gen.__iter__(self):
     self :: yield_for_loop_range__gen
@@ -858,7 +821,7 @@ L2:
 L3:
     traceback = r0
 L4:
-    r1 = yield_for_loop_range__gen.__mypyc_next_h__(self, type, value, traceback)
+    r1 = yield_for_loop_range__gen.__mypyc_generator_helper__(self, type, value, traceback)
     return r1
 def yield_for_loop_range():
     r0 :: yield_for_loop_range__env
@@ -885,7 +848,7 @@ def yield_with_vars(a: int, b: float) -> Generator[int, None, float]:
     return b
 
 [out]
-def yield_with_vars__gen.__mypyc_next_h__(self, type, value, traceback):
+def yield_with_vars__gen.__mypyc_generator_helper__(self, type, value, traceback):
     self :: yield_with_vars__gen
     type, value, traceback :: object
     r0 :: yield_with_vars__env
@@ -992,7 +955,7 @@ def yield_with_vars__gen.__next__(self):
     r1 :: object
 L0:
     r0 = None
-    r1 = yield_with_vars__gen.__mypyc_next_h__(self, r0, r0, r0)
+    r1 = yield_with_vars__gen.__mypyc_generator_helper__(self, r0, r0, r0)
     return r1
 def yield_with_vars__gen.__iter__(self):
     self :: yield_with_vars__gen
@@ -1013,7 +976,7 @@ L2:
 L3:
     traceback = r0
 L4:
-    r1 = yield_with_vars__gen.__mypyc_next_h__(self, type, value, traceback)
+    r1 = yield_with_vars__gen.__mypyc_generator_helper__(self, type, value, traceback)
     return r1
 def yield_with_vars(a, b):
     a :: int
@@ -1042,7 +1005,7 @@ class A(object):
         yield 0
 
 [out]
-def generator__gen.__mypyc_next_h__(self, type, value, traceback):
+def generator__gen.__mypyc_generator_helper__(self, type, value, traceback):
     self :: generator__gen
     type, value, traceback :: object
     r0 :: generator__env
@@ -1128,7 +1091,7 @@ def generator__gen.__next__(self):
     r1 :: object
 L0:
     r0 = None
-    r1 = generator__gen.__mypyc_next_h__(self, r0, r0, r0)
+    r1 = generator__gen.__mypyc_generator_helper__(self, r0, r0, r0)
     return r1
 def generator__gen.__iter__(self):
     self :: generator__gen
@@ -1149,7 +1112,7 @@ L2:
 L3:
     traceback = r0
 L4:
-    r1 = generator__gen.__mypyc_next_h__(self, type, value, traceback)
+    r1 = generator__gen.__mypyc_generator_helper__(self, type, value, traceback)
     return r1
 def A.generator(self):
     self :: A
@@ -1178,7 +1141,7 @@ def generator(a: int) -> Generator:
         return
 
 [out]
-def generator__gen.__mypyc_next_h__(self, type, value, traceback):
+def generator__gen.__mypyc_generator_helper__(self, type, value, traceback):
     self :: generator__gen
     type, value, traceback :: object
     r0 :: generator__env
@@ -1283,7 +1246,7 @@ def generator__gen.__next__(self):
     r1 :: object
 L0:
     r0 = None
-    r1 = generator__gen.__mypyc_next_h__(self, r0, r0, r0)
+    r1 = generator__gen.__mypyc_generator_helper__(self, r0, r0, r0)
     return r1
 def generator__gen.__iter__(self):
     self :: generator__gen
@@ -1304,7 +1267,7 @@ L2:
 L3:
     traceback = r0
 L4:
-    r1 = generator__gen.__mypyc_next_h__(self, type, value, traceback)
+    r1 = generator__gen.__mypyc_generator_helper__(self, type, value, traceback)
     return r1
 def generator(a):
     a :: int
@@ -1358,7 +1321,7 @@ L0:
     r1 = r0.a
     r2 = r1 + x :: int
     return r2
-def generator__gen.__mypyc_next_h__(self, type, value, traceback):
+def generator__gen.__mypyc_generator_helper__(self, type, value, traceback):
     self :: generator__gen
     type, value, traceback :: object
     r0 :: generator__env
@@ -1455,7 +1418,7 @@ def generator__gen.__next__(self):
     r1 :: object
 L0:
     r0 = None
-    r1 = generator__gen.__mypyc_next_h__(self, r0, r0, r0)
+    r1 = generator__gen.__mypyc_generator_helper__(self, r0, r0, r0)
     return r1
 def generator__gen.__iter__(self):
     self :: generator__gen
@@ -1476,7 +1439,7 @@ L2:
 L3:
     traceback = r0
 L4:
-    r1 = generator__gen.__mypyc_next_h__(self, type, value, traceback)
+    r1 = generator__gen.__mypyc_generator_helper__(self, type, value, traceback)
     return r1
 def generator(a):
     a :: int
@@ -1494,7 +1457,7 @@ L0:
     r4 = 0
     r0.__mypyc_next_label__ = r4; r5 = is_error
     return r2
-def generator_normal_gen.__mypyc_next_h__(self, type, value, traceback):
+def generator_normal_gen.__mypyc_generator_helper__(self, type, value, traceback):
     self :: generator_normal_gen
     type, value, traceback :: object
     r0 :: generator_normal_env
@@ -1618,7 +1581,7 @@ def generator_normal_gen.__next__(self):
     r1 :: object
 L0:
     r0 = None
-    r1 = generator_normal_gen.__mypyc_next_h__(self, r0, r0, r0)
+    r1 = generator_normal_gen.__mypyc_generator_helper__(self, r0, r0, r0)
     return r1
 def generator_normal_gen.__iter__(self):
     self :: generator_normal_gen
@@ -1639,7 +1602,7 @@ L2:
 L3:
     traceback = r0
 L4:
-    r1 = generator_normal_gen.__mypyc_next_h__(self, type, value, traceback)
+    r1 = generator_normal_gen.__mypyc_generator_helper__(self, type, value, traceback)
     return r1
 def generator_normal_obj.__call__(self, x):
     self :: generator_normal_obj
@@ -1691,7 +1654,7 @@ L0:
     r0.x = r4; r5 = is_error
     r6 = r0.x
     return r6
-def generator_triple_gen.__mypyc_next_h__(self, type, value, traceback):
+def generator_triple_gen.__mypyc_generator_helper__(self, type, value, traceback):
     self :: generator_triple_gen
     type, value, traceback :: object
     r0 :: generator_triple_env
@@ -1801,7 +1764,7 @@ def generator_triple_gen.__next__(self):
     r1 :: object
 L0:
     r0 = None
-    r1 = generator_triple_gen.__mypyc_next_h__(self, r0, r0, r0)
+    r1 = generator_triple_gen.__mypyc_generator_helper__(self, r0, r0, r0)
     return r1
 def generator_triple_gen.__iter__(self):
     self :: generator_triple_gen
@@ -1822,7 +1785,7 @@ L2:
 L3:
     traceback = r0
 L4:
-    r1 = generator_triple_gen.__mypyc_next_h__(self, type, value, traceback)
+    r1 = generator_triple_gen.__mypyc_generator_helper__(self, type, value, traceback)
     return r1
 def generator_triple_obj.__call__(self):
     self :: generator_triple_obj
@@ -1868,7 +1831,7 @@ def yield_try_finally() -> Generator[int, None, str]:
         print('goodbye!')
 
 [out]
-def yield_try_finally__gen.__mypyc_next_h__(self, type, value, traceback):
+def yield_try_finally__gen.__mypyc_generator_helper__(self, type, value, traceback):
     self :: yield_try_finally__gen
     type, value, traceback :: object
     r0 :: yield_try_finally__env
@@ -2080,7 +2043,7 @@ def yield_try_finally__gen.__next__(self):
     r1 :: object
 L0:
     r0 = None
-    r1 = yield_try_finally__gen.__mypyc_next_h__(self, r0, r0, r0)
+    r1 = yield_try_finally__gen.__mypyc_generator_helper__(self, r0, r0, r0)
     return r1
 def yield_try_finally__gen.__iter__(self):
     self :: yield_try_finally__gen
@@ -2101,7 +2064,7 @@ L2:
 L3:
     traceback = r0
 L4:
-    r1 = yield_try_finally__gen.__mypyc_next_h__(self, type, value, traceback)
+    r1 = yield_try_finally__gen.__mypyc_generator_helper__(self, type, value, traceback)
     return r1
 def yield_try_finally():
     r0 :: yield_try_finally__env
@@ -2112,182 +2075,6 @@ def yield_try_finally():
 L0:
     r0 = yield_try_finally__env()
     r1 = yield_try_finally__gen()
-    r1.__mypyc_env__ = r0; r2 = is_error
-    r3 = 0
-    r0.__mypyc_next_label__ = r3; r4 = is_error
-    return r1
-
-[case testYieldThrow]
-from typing import Generator
-
-def generator() -> Generator:
-    try:
-        yield 1
-    except Exception as e:
-        return 0
-
-[out]
-def generator__gen.__mypyc_next_h__(self, type, value, traceback):
-    self :: generator__gen
-    type, value, traceback :: object
-    r0 :: generator__env
-    r1 :: int
-    r2 :: None
-    r3 :: bool
-    r4 :: None
-    r5, r6, r7 :: bool
-    r8 :: int
-    r9 :: object
-    r10 :: int
-    r11 :: bool
-    r12 :: None
-    r13 :: bool
-    r14 :: None
-    r15, r16, r17 :: bool
-    r18 :: None
-    r19 :: tuple[object, object, object]
-    r20 :: object
-    r21 :: str
-    r22 :: object
-    r23 :: bool
-    r24 :: object
-    r25 :: bool
-    r26 :: int
-    r27 :: object
-    r28 :: int
-    r29, r30, r31, r32 :: bool
-    r33 :: None
-    r34 :: int
-    r35, r36 :: bool
-    r37 :: int
-    r38 :: bool
-    r39 :: int
-    r40, r41 :: bool
-L0:
-    r0 = self.__mypyc_env__
-    r1 = r0.__mypyc_next_label__
-    goto L21
-L1:
-    r2 = None
-    r3 = type is not r2
-    if r3 goto L2 else goto L5 :: bool
-L2:
-    r4 = None
-    r5 = traceback is not r4
-    if r5 goto L3 else goto L4 :: bool
-L3:
-    raise_exception(type, value, traceback); r6 = 0
-    goto L5
-L4:
-    raise_exception(type, value); r7 = 0
-L5:
-L6:
-L7:
-    r8 = 1
-    r9 = box(int, r8)
-    r10 = 1
-    r0.__mypyc_next_label__ = r10; r11 = is_error
-    return r9
-L8:
-    r12 = None
-    r13 = type is not r12
-    if r13 goto L9 else goto L12 :: bool
-L9:
-    r14 = None
-    r15 = traceback is not r14
-    if r15 goto L10 else goto L11 :: bool
-L10:
-    raise_exception(type, value, traceback); r16 = 0
-    goto L12
-L11:
-    raise_exception(type, value); r17 = 0
-L12:
-    r18 = None
-    goto L19
-L13: (handler for L10, L11, L12, L6, L7, L8, L9)
-    r19 = error_catch
-    r20 = builtins.module :: static
-    r21 = unicode_0 :: static  ('Exception')
-    r22 = getattr r20, r21
-    r23 = exc_matches r22
-    if r23 goto L14 else goto L16 :: bool
-L14:
-    r24 = get_exc_value
-    r0.e = r24; r25 = is_error
-    r26 = 0
-    r27 = box(int, r26)
-    restore_exc_info r19
-    r28 = -1
-    r0.__mypyc_next_label__ = r28; r29 = is_error
-L15:
-    raise StopIteration(r27)
-    unreachable
-L16:
-    reraise_exc; r31 = 0
-    unreachable
-L17:
-    restore_exc_info r19
-    goto L19
-L18: (handler for L13, L14, L16)
-    restore_exc_info r19
-    r32 = keep_propagating
-    unreachable
-L19:
-    r33 = None
-    r34 = -1
-    r0.__mypyc_next_label__ = r34; r35 = is_error
-L20:
-    raise StopIteration(r33)
-    unreachable
-L21:
-    r37 = 0
-    r38 = r1 == r37 :: int
-    if r38 goto L1 else goto L22 :: bool
-L22:
-    r39 = 1
-    r40 = r1 == r39 :: int
-    if r40 goto L8 else goto L23 :: bool
-L23:
-    raise StopIteration
-    unreachable
-def generator__gen.__next__(self):
-    self :: generator__gen
-    r0 :: None
-    r1 :: object
-L0:
-    r0 = None
-    r1 = generator__gen.__mypyc_next_h__(self, r0, r0, r0)
-    return r1
-def generator__gen.__iter__(self):
-    self :: generator__gen
-L0:
-    return self
-def generator__gen.throw(self, type, value, traceback):
-    self :: generator__gen
-    type, value, traceback :: object
-    r0 :: None
-    r1 :: object
-L0:
-    r0 = None
-    if is_error(value) goto L1 else goto L2
-L1:
-    value = r0
-L2:
-    if is_error(traceback) goto L3 else goto L4
-L3:
-    traceback = r0
-L4:
-    r1 = generator__gen.__mypyc_next_h__(self, type, value, traceback)
-    return r1
-def generator():
-    r0 :: generator__env
-    r1 :: generator__gen
-    r2 :: bool
-    r3 :: int
-    r4 :: bool
-L0:
-    r0 = generator__env()
-    r1 = generator__gen()
     r1.__mypyc_env__ = r0; r2 = is_error
     r3 = 0
     r0.__mypyc_next_label__ = r3; r4 = is_error
