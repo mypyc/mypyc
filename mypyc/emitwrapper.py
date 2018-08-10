@@ -2,9 +2,13 @@
 
 from mypyc.common import PREFIX, NATIVE_PREFIX, DUNDER_PREFIX
 from mypyc.emit import Emitter
-from mypyc.ops import ClassIR, FuncIR, RType, RuntimeArg, is_object_rprimitive, FUNC_STATICMETHOD
+from mypyc.ops import (
+    ClassIR, FuncIR, RType, RuntimeArg,
+    is_object_rprimitive, is_int_rprimitive,
+    FUNC_STATICMETHOD,
+)
 from mypyc.namegen import NameGenerator
-from typing import List
+from typing import List, Optional
 
 
 def wrapper_function_header(fn: FuncIR, names: NameGenerator) -> str:
@@ -66,16 +70,79 @@ def generate_dunder_wrapper(cl: ClassIR, fn: FuncIR, emitter: Emitter) -> str:
     return name
 
 
+RICHCOMPARE_OPS = {
+    '__lt__': 'Py_LT',
+    '__gt__': 'Py_GT',
+    '__le__': 'Py_LE',
+    '__ge__': 'Py_GE',
+    '__eq__': 'Py_EQ',
+    '__ne__': 'Py_NE',
+}
+
+
+def generate_richcompare_wrapper(cl: ClassIR, emitter: Emitter) -> Optional[str]:
+    """Generates a wrapper for richcompare dunder methods."""
+    matches = [name for name in RICHCOMPARE_OPS if cl.has_method(name)]
+    if not matches:
+        return None
+
+    name = '{}RichCompare_{}'.format(DUNDER_PREFIX, cl.name_prefix(emitter.names))
+    emitter.emit_line(
+        'static PyObject *{name}(PyObject *obj_lhs, PyObject *obj_rhs, int op) {{'.format(
+            name=name)
+    )
+    emitter.emit_line('switch (op) {')
+    for func in matches:
+        emitter.emit_line('case {}: {{'.format(RICHCOMPARE_OPS[func]))
+        method = cl.get_method(func)
+        assert method is not None
+        generate_wrapper_core(method, emitter, arg_names=['lhs', 'rhs'])
+        emitter.emit_line('}')
+    emitter.emit_line('}')
+
+    emitter.emit_line('Py_INCREF(Py_NotImplemented);')
+    emitter.emit_line('return Py_NotImplemented;')
+
+    emitter.emit_line('}')
+
+    return name
+
+
+def generate_hash_wrapper(cl: ClassIR, fn: FuncIR, emitter: Emitter) -> str:
+    """Generates a wrapper for native __hash__ methods."""
+    name = '{}_{}'.format(DUNDER_PREFIX, fn.cname(emitter.names))
+    emitter.emit_line('static Py_ssize_t {name}(PyObject *self) {{'.format(
+        name=name
+    ))
+    emitter.emit_line('{}retval = {}{}(self);'.format(emitter.ctype_spaced(fn.ret_type),
+                                                      NATIVE_PREFIX,
+                                                      fn.cname(emitter.names)))
+    emitter.emit_error_check('retval', fn.ret_type, 'return -1;')
+    if is_int_rprimitive(fn.ret_type):
+        emitter.emit_line('Py_ssize_t val = CPyTagged_AsLongLong(retval);')
+    else:
+        emitter.emit_line('Py_ssize_t val = PyLong_AsLongLong(retval);')
+    emitter.emit_line('if (PyErr_Occurred()) return -1;')
+    # We can't return -1 from a hash function..
+    emitter.emit_line('if (val == -1) return -2;')
+    emitter.emit_line('return val;')
+    emitter.emit_line('}')
+
+    return name
+
+
 def generate_wrapper_core(fn: FuncIR, emitter: Emitter,
-                          optional_args: List[RuntimeArg] = []) -> None:
+                          optional_args: List[RuntimeArg] = [],
+                          arg_names: Optional[List[str]] = None) -> None:
     """Generates the core part of a wrapper function for a native function.
     This expects each argument as a PyObject * named obj_{arg} as a precondition.
     It converts the PyObject *s to the necessary types, checking and unboxing if necessary,
     makes the call, then boxes the result if necessary and returns it.
     """
-    for arg in fn.args:
-        generate_arg_check(arg.name, arg.type, emitter, arg in optional_args)
-    native_args = ', '.join('arg_{}'.format(arg.name) for arg in fn.args)
+    arg_names = arg_names or [arg.name for arg in fn.args]
+    for arg_name, arg in zip(arg_names, fn.args):
+        generate_arg_check(arg_name, arg.type, emitter, arg in optional_args)
+    native_args = ', '.join('arg_{}'.format(arg) for arg in arg_names)
     if fn.ret_type.is_unboxed:
         # TODO: The Py_RETURN macros return the correct PyObject * with reference count handling.
         #       Are they relevant?
