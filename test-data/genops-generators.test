@@ -1348,126 +1348,6 @@ def triple() -> Callable:
     return generator
 
 [out]
-
-[case testYieldIfElse]
-from typing import Generator
-
-def generator(a: int) -> Generator:
-    if a < 5:
-        yield a
-    else:
-        return
-
-[out]
-def generator__gen.__next__(self):
-    self :: generator__gen
-    r0 :: generator__env
-    r1, r2, r3 :: int
-    r4 :: bool
-    r5 :: int
-    r6 :: object
-    r7 :: int
-    r8 :: bool
-    r9, r10 :: None
-    r11 :: int
-    r12, r13 :: bool
-    r14 :: None
-    r15 :: int
-    r16, r17 :: bool
-    r18 :: int
-    r19 :: bool
-    r20 :: int
-    r21, r22 :: bool
-L0:
-    r0 = self.__mypyc_env__
-    r1 = r0.__mypyc_next_label__
-    goto L9
-L1:
-    r2 = r0.a
-    r3 = 5
-    r4 = r2 < r3 :: int
-    if r4 goto L2 else goto L5 :: bool
-L2:
-L3:
-    r5 = r0.a
-    r6 = box(int, r5)
-    r7 = 1
-    r0.__mypyc_next_label__ = r7; r8 = is_error
-    return r6
-L4:
-    r9 = None
-    goto L7
-L5:
-    r10 = None
-    r11 = -1
-    r0.__mypyc_next_label__ = r11; r12 = is_error
-L6:
-    raise StopIteration(r10)
-    unreachable
-L7:
-    r14 = None
-    r15 = -1
-    r0.__mypyc_next_label__ = r15; r16 = is_error
-L8:
-    raise StopIteration(r14)
-    unreachable
-L9:
-    r18 = 0
-    r19 = r1 == r18 :: int
-    if r19 goto L1 else goto L10 :: bool
-L10:
-    r20 = 1
-    r21 = r1 == r20 :: int
-    if r21 goto L4 else goto L11 :: bool
-L11:
-    raise StopIteration
-    unreachable
-def generator__gen.__iter__(self):
-    self :: generator__gen
-L0:
-    return self
-def generator(a):
-    a :: int
-    r0 :: generator__env
-    r1 :: bool
-    r2 :: generator__gen
-    r3 :: bool
-    r4 :: int
-    r5 :: bool
-L0:
-    r0 = generator__env()
-    r0.a = a; r1 = is_error
-    r2 = generator__gen()
-    r2.__mypyc_env__ = r0; r3 = is_error
-    r4 = 0
-    r0.__mypyc_next_label__ = r4; r5 = is_error
-    return r2
-
-[case testYieldNested]
-from typing import Callable, Generator
-
-def generator(a: int) -> Generator:
-    def normal(x: int) -> int:
-        return a + x
-    yield normal(1)
-
-def normal(a: int) -> Callable:
-    def generator(x: int) -> Generator:
-        yield a
-        yield x
-    return generator
-
-def triple() -> Callable:
-    def generator() -> Generator:
-        x = 0
-        def inner() -> int:
-            x += 1
-            return x
-        while x < 3:
-            yield inner()
-    return generator
-
-[out]
 def normal_generator_obj.__call__(self, x):
     self :: normal_generator_obj
     x :: int
@@ -1478,66 +1358,126 @@ L0:
     r1 = r0.a
     r2 = r1 + x :: int
     return r2
-def generator__gen.__next__(self):
+def generator__gen.__mypyc_next_h__(self, type, value, traceback):
     self :: generator__gen
+    type, value, traceback :: object
     r0 :: generator__env
     r1 :: int
-    r2 :: normal_generator_obj
-    r3, r4 :: bool
-    r5 :: int
-    r6, r7, r8 :: object
-    r9 :: int
-    r10 :: object
+    r2 :: None
+    r3 :: bool
+    r4 :: None
+    r5, r6, r7 :: bool
+    r8 :: normal_generator_obj
+    r9, r10 :: bool
     r11 :: int
-    r12 :: bool
-    r13, r14 :: None
+    r12, r13, r14 :: object
     r15 :: int
-    r16, r17 :: bool
-    r18 :: int
-    r19 :: bool
-    r20 :: int
-    r21, r22 :: bool
+    r16 :: object
+    r17 :: int
+    r18 :: bool
+    r19 :: None
+    r20 :: bool
+    r21 :: None
+    r22, r23, r24 :: bool
+    r25, r26 :: None
+    r27 :: int
+    r28, r29 :: bool
+    r30 :: int
+    r31 :: bool
+    r32 :: int
+    r33, r34 :: bool
 L0:
     r0 = self.__mypyc_env__
     r1 = r0.__mypyc_next_label__
-    goto L5
+    goto L13
 L1:
-    r2 = normal_generator_obj()
-    r2.__mypyc_env__ = r0; r3 = is_error
-    r0.normal = r2; r4 = is_error
+    r2 = None
+    r3 = type is not r2
+    if r3 goto L2 else goto L5 :: bool
 L2:
-    r5 = 1
-    r6 = r0.normal
-    r7 = box(int, r5)
-    r8 = py_call(r6, r7)
-    r9 = unbox(int, r8)
-    r10 = box(int, r9)
-    r11 = 1
-    r0.__mypyc_next_label__ = r11; r12 = is_error
-    return r10
+    r4 = None
+    r5 = traceback is not r4
+    if r5 goto L3 else goto L4 :: bool
 L3:
-    r13 = None
-    r14 = None
-    r15 = -1
-    r0.__mypyc_next_label__ = r15; r16 = is_error
+    raise_exception(type, value, traceback); r6 = 0
+    goto L5
 L4:
-    raise StopIteration(r14)
-    unreachable
+    raise_exception(type, value); r7 = 0
 L5:
-    r18 = 0
-    r19 = r1 == r18 :: int
-    if r19 goto L1 else goto L6 :: bool
+    r8 = normal_generator_obj()
+    r8.__mypyc_env__ = r0; r9 = is_error
+    r0.normal = r8; r10 = is_error
 L6:
-    r20 = 1
-    r21 = r1 == r20 :: int
-    if r21 goto L3 else goto L7 :: bool
+    r11 = 1
+    r12 = r0.normal
+    r13 = box(int, r11)
+    r14 = py_call(r12, r13)
+    r15 = unbox(int, r14)
+    r16 = box(int, r15)
+    r17 = 1
+    r0.__mypyc_next_label__ = r17; r18 = is_error
+    return r16
 L7:
+    r19 = None
+    r20 = type is not r19
+    if r20 goto L8 else goto L11 :: bool
+L8:
+    r21 = None
+    r22 = traceback is not r21
+    if r22 goto L9 else goto L10 :: bool
+L9:
+    raise_exception(type, value, traceback); r23 = 0
+    goto L11
+L10:
+    raise_exception(type, value); r24 = 0
+L11:
+    r25 = None
+    r26 = None
+    r27 = -1
+    r0.__mypyc_next_label__ = r27; r28 = is_error
+L12:
+    raise StopIteration(r26)
+    unreachable
+L13:
+    r30 = 0
+    r31 = r1 == r30 :: int
+    if r31 goto L1 else goto L14 :: bool
+L14:
+    r32 = 1
+    r33 = r1 == r32 :: int
+    if r33 goto L7 else goto L15 :: bool
+L15:
     raise StopIteration
     unreachable
+def generator__gen.__next__(self):
+    self :: generator__gen
+    r0 :: None
+    r1 :: object
+L0:
+    r0 = None
+    r1 = generator__gen.__mypyc_next_h__(self, r0, r0, r0)
+    return r1
 def generator__gen.__iter__(self):
     self :: generator__gen
 L0:
     return self
+def generator__gen.throw(self, type, value, traceback):
+    self :: generator__gen
+    type, value, traceback :: object
+    r0 :: None
+    r1 :: object
+L0:
+    r0 = None
+    if is_error(value) goto L1 else goto L2
+L1:
+    value = r0
+L2:
+    if is_error(traceback) goto L3 else goto L4
+L3:
+    traceback = r0
+L4:
+    r1 = generator__gen.__mypyc_next_h__(self, type, value, traceback)
+    return r1
 def generator(a):
     a :: int
     r0 :: generator__env
@@ -1554,77 +1494,153 @@ L0:
     r4 = 0
     r0.__mypyc_next_label__ = r4; r5 = is_error
     return r2
-def generator_normal_gen.__next__(self):
+def generator_normal_gen.__mypyc_next_h__(self, type, value, traceback):
     self :: generator_normal_gen
+    type, value, traceback :: object
     r0 :: generator_normal_env
     r1 :: int
     r2 :: normal__env
-    r3 :: int
-    r4 :: object
-    r5 :: int
-    r6 :: bool
-    r7 :: None
-    r8 :: int
-    r9 :: object
-    r10 :: int
-    r11 :: bool
-    r12, r13 :: None
-    r14 :: int
-    r15, r16 :: bool
-    r17 :: int
-    r18 :: bool
-    r19 :: int
-    r20 :: bool
-    r21 :: int
-    r22, r23 :: bool
+    r3 :: None
+    r4 :: bool
+    r5 :: None
+    r6, r7, r8 :: bool
+    r9 :: int
+    r10 :: object
+    r11 :: int
+    r12 :: bool
+    r13 :: None
+    r14 :: bool
+    r15 :: None
+    r16, r17, r18 :: bool
+    r19 :: None
+    r20 :: int
+    r21 :: object
+    r22 :: int
+    r23 :: bool
+    r24 :: None
+    r25 :: bool
+    r26 :: None
+    r27, r28, r29 :: bool
+    r30, r31 :: None
+    r32 :: int
+    r33, r34 :: bool
+    r35 :: int
+    r36 :: bool
+    r37 :: int
+    r38 :: bool
+    r39 :: int
+    r40, r41 :: bool
 L0:
     r0 = self.__mypyc_env__
     r1 = r0.__mypyc_next_label__
     r2 = r0.__mypyc_env__
-    goto L7
+    goto L19
 L1:
+    r3 = None
+    r4 = type is not r3
+    if r4 goto L2 else goto L5 :: bool
 L2:
-    r3 = r2.a
-    r4 = box(int, r3)
-    r5 = 1
-    r0.__mypyc_next_label__ = r5; r6 = is_error
-    return r4
+    r5 = None
+    r6 = traceback is not r5
+    if r6 goto L3 else goto L4 :: bool
 L3:
-    r7 = None
+    raise_exception(type, value, traceback); r7 = 0
+    goto L5
 L4:
-    r8 = r0.x
-    r9 = box(int, r8)
-    r10 = 2
-    r0.__mypyc_next_label__ = r10; r11 = is_error
-    return r9
+    raise_exception(type, value); r8 = 0
 L5:
-    r12 = None
-    r13 = None
-    r14 = -1
-    r0.__mypyc_next_label__ = r14; r15 = is_error
 L6:
-    raise StopIteration(r13)
-    unreachable
+    r9 = r2.a
+    r10 = box(int, r9)
+    r11 = 1
+    r0.__mypyc_next_label__ = r11; r12 = is_error
+    return r10
 L7:
-    r17 = 0
-    r18 = r1 == r17 :: int
-    if r18 goto L1 else goto L8 :: bool
+    r13 = None
+    r14 = type is not r13
+    if r14 goto L8 else goto L11 :: bool
 L8:
-    r19 = 1
-    r20 = r1 == r19 :: int
-    if r20 goto L3 else goto L9 :: bool
+    r15 = None
+    r16 = traceback is not r15
+    if r16 goto L9 else goto L10 :: bool
 L9:
-    r21 = 2
-    r22 = r1 == r21 :: int
-    if r22 goto L5 else goto L10 :: bool
+    raise_exception(type, value, traceback); r17 = 0
+    goto L11
 L10:
+    raise_exception(type, value); r18 = 0
+L11:
+    r19 = None
+L12:
+    r20 = r0.x
+    r21 = box(int, r20)
+    r22 = 2
+    r0.__mypyc_next_label__ = r22; r23 = is_error
+    return r21
+L13:
+    r24 = None
+    r25 = type is not r24
+    if r25 goto L14 else goto L17 :: bool
+L14:
+    r26 = None
+    r27 = traceback is not r26
+    if r27 goto L15 else goto L16 :: bool
+L15:
+    raise_exception(type, value, traceback); r28 = 0
+    goto L17
+L16:
+    raise_exception(type, value); r29 = 0
+L17:
+    r30 = None
+    r31 = None
+    r32 = -1
+    r0.__mypyc_next_label__ = r32; r33 = is_error
+L18:
+    raise StopIteration(r31)
+    unreachable
+L19:
+    r35 = 0
+    r36 = r1 == r35 :: int
+    if r36 goto L1 else goto L20 :: bool
+L20:
+    r37 = 1
+    r38 = r1 == r37 :: int
+    if r38 goto L7 else goto L21 :: bool
+L21:
+    r39 = 2
+    r40 = r1 == r39 :: int
+    if r40 goto L13 else goto L22 :: bool
+L22:
     raise StopIteration
     unreachable
+def generator_normal_gen.__next__(self):
+    self :: generator_normal_gen
+    r0 :: None
+    r1 :: object
+L0:
+    r0 = None
+    r1 = generator_normal_gen.__mypyc_next_h__(self, r0, r0, r0)
+    return r1
 def generator_normal_gen.__iter__(self):
     self :: generator_normal_gen
 L0:
     return self
-
+def generator_normal_gen.throw(self, type, value, traceback):
+    self :: generator_normal_gen
+    type, value, traceback :: object
+    r0 :: None
+    r1 :: object
+L0:
+    r0 = None
+    if is_error(value) goto L1 else goto L2
+L1:
+    value = r0
+L2:
+    if is_error(traceback) goto L3 else goto L4
+L3:
+    traceback = r0
+L4:
+    r1 = generator_normal_gen.__mypyc_next_h__(self, type, value, traceback)
+    return r1
 def generator_normal_obj.__call__(self, x):
     self :: generator_normal_obj
     x :: int
@@ -1675,7 +1691,139 @@ L0:
     r0.x = r4; r5 = is_error
     r6 = r0.x
     return r6
-
+def generator_triple_gen.__mypyc_next_h__(self, type, value, traceback):
+    self :: generator_triple_gen
+    type, value, traceback :: object
+    r0 :: generator_triple_env
+    r1 :: int
+    r2 :: triple__env
+    r3 :: None
+    r4 :: bool
+    r5 :: None
+    r6, r7, r8 :: bool
+    r9 :: int
+    r10 :: bool
+    r11 :: inner_triple_generator_obj
+    r12, r13 :: bool
+    r14, r15 :: int
+    r16 :: bool
+    r17, r18 :: object
+    r19 :: int
+    r20 :: object
+    r21 :: int
+    r22 :: bool
+    r23 :: None
+    r24 :: bool
+    r25 :: None
+    r26, r27, r28 :: bool
+    r29, r30 :: None
+    r31 :: int
+    r32, r33 :: bool
+    r34 :: int
+    r35 :: bool
+    r36 :: int
+    r37, r38 :: bool
+L0:
+    r0 = self.__mypyc_env__
+    r1 = r0.__mypyc_next_label__
+    r2 = r0.__mypyc_env__
+    goto L16
+L1:
+    r3 = None
+    r4 = type is not r3
+    if r4 goto L2 else goto L5 :: bool
+L2:
+    r5 = None
+    r6 = traceback is not r5
+    if r6 goto L3 else goto L4 :: bool
+L3:
+    raise_exception(type, value, traceback); r7 = 0
+    goto L5
+L4:
+    raise_exception(type, value); r8 = 0
+L5:
+    r9 = 0
+    r0.x = r9; r10 = is_error
+    r11 = inner_triple_generator_obj()
+    r11.__mypyc_env__ = r0; r12 = is_error
+    r0.inner = r11; r13 = is_error
+L6:
+    r14 = r0.x
+    r15 = 3
+    r16 = r14 < r15 :: int
+    if r16 goto L7 else goto L14 :: bool
+L7:
+L8:
+    r17 = r0.inner
+    r18 = py_call(r17)
+    r19 = unbox(int, r18)
+    r20 = box(int, r19)
+    r21 = 1
+    r0.__mypyc_next_label__ = r21; r22 = is_error
+    return r20
+L9:
+    r23 = None
+    r24 = type is not r23
+    if r24 goto L10 else goto L13 :: bool
+L10:
+    r25 = None
+    r26 = traceback is not r25
+    if r26 goto L11 else goto L12 :: bool
+L11:
+    raise_exception(type, value, traceback); r27 = 0
+    goto L13
+L12:
+    raise_exception(type, value); r28 = 0
+L13:
+    r29 = None
+    goto L6
+L14:
+    r30 = None
+    r31 = -1
+    r0.__mypyc_next_label__ = r31; r32 = is_error
+L15:
+    raise StopIteration(r30)
+    unreachable
+L16:
+    r34 = 0
+    r35 = r1 == r34 :: int
+    if r35 goto L1 else goto L17 :: bool
+L17:
+    r36 = 1
+    r37 = r1 == r36 :: int
+    if r37 goto L9 else goto L18 :: bool
+L18:
+    raise StopIteration
+    unreachable
+def generator_triple_gen.__next__(self):
+    self :: generator_triple_gen
+    r0 :: None
+    r1 :: object
+L0:
+    r0 = None
+    r1 = generator_triple_gen.__mypyc_next_h__(self, r0, r0, r0)
+    return r1
+def generator_triple_gen.__iter__(self):
+    self :: generator_triple_gen
+L0:
+    return self
+def generator_triple_gen.throw(self, type, value, traceback):
+    self :: generator_triple_gen
+    type, value, traceback :: object
+    r0 :: None
+    r1 :: object
+L0:
+    r0 = None
+    if is_error(value) goto L1 else goto L2
+L1:
+    value = r0
+L2:
+    if is_error(traceback) goto L3 else goto L4
+L3:
+    traceback = r0
+L4:
+    r1 = generator_triple_gen.__mypyc_next_h__(self, type, value, traceback)
+    return r1
 def generator_triple_obj.__call__(self):
     self :: generator_triple_obj
     r0 :: triple__env

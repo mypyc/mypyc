@@ -13,8 +13,7 @@ from mypyc.emit import EmitterContext, Emitter, HeaderDeclaration
 from mypyc.emitfunc import generate_native_function, native_function_header
 from mypyc.emitclass import generate_class_type_decl, generate_class
 from mypyc.emitwrapper import (
-    generate_wrapper_function, wrapper_function_header, generate_dunder_wrapper,
-    dunder_wrapper_header
+    generate_wrapper_function, wrapper_function_header,
 )
 from mypyc.ops import FuncIR, ClassIR, ModuleIR
 from mypyc.refcount import insert_ref_count_opcodes
@@ -59,15 +58,10 @@ def compile_modules_to_c(sources: List[BuildSource], module_names: List[str], op
     return generator.generate_c_for_modules()
 
 
-dunder_methods_to_generate = ['__getitem__']
-
-
 def generate_function_declaration(fn: FuncIR, emitter: Emitter) -> None:
     emitter.emit_line('{};'.format(native_function_header(fn.decl, emitter)))
     if fn.name != TOP_LEVEL_NAME:
         emitter.emit_line('{};'.format(wrapper_function_header(fn, emitter.names)))
-        if fn.name in dunder_methods_to_generate:
-            emitter.emit_line('{};'.format(dunder_wrapper_header(fn, emitter)))
 
 
 def encode_as_c_string(s: str) -> Tuple[str, int]:
@@ -137,9 +131,6 @@ class ModuleGenerator:
                 if fn.name != TOP_LEVEL_NAME:
                     emitter.emit_line()
                     generate_wrapper_function(fn, emitter)
-                    if fn.name in dunder_methods_to_generate:
-                        emitter.emit_line()
-                        generate_dunder_wrapper(fn, emitter)
 
         declarations = Emitter(self.context)
         declarations.emit_line('#include <Python.h>')
@@ -218,26 +209,15 @@ class ModuleGenerator:
             emitter,
         )
 
+        # HACK: Manually instantiate generated classes here
         for cl in module.classes:
-            type_struct = emitter.type_struct_name(cl)
-            # FIXME: This ought to be driven by emitclass, maybe?
-            real_base = cl.real_base()
-            if real_base or cl.traits:
-                bases = ([real_base] if real_base else []) + cl.traits
-                emitter.emit_lines('{}_template.tp_bases = PyTuple_Pack({}, {});'.format(
-                    type_struct,
-                    len(bases),
-                    ', '.join('{}'.format(emitter.type_struct_name(b)) for b in bases)))
-
-            emitter.emit_lines('{t} = CPyType_FromTemplate(&{t}_template, modname);'.format(
-                t=type_struct))
-            emitter.emit_lines('if (!{})'.format(type_struct),
-                               '    return NULL;')
-
-            type_struct = emitter.type_struct_name(cl)
-            if cl.trait_vtables and not cl.is_trait:
-                emitter.emit_lines('CPy_FixupTraitVtable({}_vtable, {});'.format(
-                    cl.name_prefix(emitter.names), len(cl.trait_vtables)))
+            if cl.is_generated:
+                type_struct = emitter.type_struct_name(cl)
+                emitter.emit_lines(
+                    '{t} = (PyTypeObject *)CPyType_FromTemplate({t}_template, NULL, modname);'.
+                    format(t=type_struct))
+                emitter.emit_lines('if (!{})'.format(type_struct),
+                                   '    return NULL;')
 
         for (_, literal), identifier in module.literals.items():
             symbol = emitter.static_name(identifier, None)
@@ -267,14 +247,6 @@ class ModuleGenerator:
             else:
                 assert False, ('Literals must be integers, floating point numbers, or strings,',
                                'but the provided literal is of type {}'.format(type(literal)))
-
-        for cl in module.classes:
-            name = cl.name
-            type_struct = emitter.type_struct_name(cl)
-            emitter.emit_lines(
-                'Py_INCREF({});'.format(type_struct),
-                'PyModule_AddObject({}, "{}", (PyObject *){});'.format(module_static, name,
-                                                                       type_struct))
 
         self.generate_top_level_call(module, emitter)
 

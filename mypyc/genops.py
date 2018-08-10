@@ -51,14 +51,15 @@ from mypyc.ops import (
     BasicBlock, AssignmentTarget, AssignmentTargetRegister, AssignmentTargetIndex,
     AssignmentTargetAttr, AssignmentTargetTuple, Environment, Op, LoadInt, RType, Value, Register,
     Return, FuncIR, Assign, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple, Unreachable,
-    TupleGet, TupleSet, ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, MethodCall,
-    INVALID_FUNC_DEF, int_rprimitive, float_rprimitive, bool_rprimitive, list_rprimitive,
-    is_list_rprimitive, dict_rprimitive, set_rprimitive, str_rprimitive, tuple_rprimitive,
-    none_rprimitive, is_none_rprimitive, object_rprimitive, exc_rtuple, PrimitiveOp, ControlOp,
-    LoadErrorValue, ERR_FALSE, OpDescription, RegisterOp, is_object_rprimitive, LiteralsMap,
-    FuncSignature, VTableAttr, VTableMethod, VTableEntries, NAMESPACE_TYPE, RaiseStandardError,
-    LoadErrorValue, NO_TRACEBACK_LINE_NO, FuncDecl, FUNC_NORMAL, FUNC_STATICMETHOD,
-    FUNC_CLASSMETHOD, RUnion, is_optional_type, optional_value_type, IncRef
+    TupleGet, TupleSet, ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, InitStatic,
+    MethodCall, INVALID_FUNC_DEF, int_rprimitive, float_rprimitive, bool_rprimitive,
+    list_rprimitive, is_list_rprimitive, dict_rprimitive, set_rprimitive, str_rprimitive,
+    tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, exc_rtuple,
+    PrimitiveOp, ControlOp, LoadErrorValue, ERR_FALSE, OpDescription, RegisterOp,
+    is_object_rprimitive, LiteralsMap, FuncSignature, VTableAttr, VTableMethod, VTableEntries,
+    NAMESPACE_TYPE, RaiseStandardError, LoadErrorValue, NO_TRACEBACK_LINE_NO, FuncDecl,
+    FUNC_NORMAL, FUNC_STATICMETHOD, FUNC_CLASSMETHOD,
+    RUnion, is_optional_type, optional_value_type
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_list import (
@@ -71,7 +72,7 @@ from mypyc.ops_misc import (
     none_op, true_op, false_op, iter_op, next_op, py_getattr_op, py_setattr_op, py_delattr_op,
     py_call_op, py_call_with_kwargs_op, py_method_call_op,
     fast_isinstance_op, bool_op, new_slice_op,
-    type_op,
+    type_op, pytype_from_template_op,
 )
 from mypyc.ops_exc import (
     no_err_occurred_op, raise_exception_op, raise_exception_with_tb_op, reraise_exception_op,
@@ -349,18 +350,18 @@ def prepare_class_def(module_name: str, cdef: ClassDef, mapper: Mapper) -> None:
         mapper.func_to_decl[cdef.info] = ir.ctor
 
     # Set up the parent class
-    assert all(base.type in mapper.type_to_ir for base in info.bases
-               if base.type.fullname() != 'builtins.object'), (
-        "Can't subclass cpython types")
     bases = [mapper.type_to_ir[base.type] for base in info.bases
-             if base.type.fullname() != 'builtins.object']
+             if base.type in mapper.type_to_ir]
     assert all(c.is_trait for c in bases[1:]), "Non trait bases must be first"
     ir.traits = [c for c in bases if c.is_trait]
 
     mro = []
     base_mro = []
     for cls in info.mro:
-        if cls.fullname() == 'builtins.object': continue
+        if cls not in mapper.type_to_ir:
+            if cls.name != 'builtins.object':
+                ir.inherits_python = True
+            continue
         base_ir = mapper.type_to_ir[cls]
         if not base_ir.is_trait:
             base_mro.append(base_ir)
@@ -810,6 +811,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         cls.methods[ir.name] = ir
 
     def visit_class_def(self, cdef: ClassDef) -> None:
+        self.allocate_class(cdef)
+
         for stmt in cdef.defs.body:
             if isinstance(stmt, FuncDef):
                 with self.catch_errors(stmt.line):
@@ -842,6 +845,33 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     assert False, "Unsupported statement in class body"
 
         self.generate_attr_defaults(cdef)
+
+    def allocate_class(self, cdef: ClassDef) -> None:
+        # OK AND NOW THE FUN PART
+        base_exprs = cdef.base_type_exprs + cdef.removed_base_type_exprs
+        if base_exprs:
+            bases = [self.accept(x) for x in base_exprs]
+            tp_bases = self.box(self.add(TupleSet(bases, cdef.line)))
+        else:
+            tp_bases = self.add(LoadErrorValue(object_rprimitive, is_borrowed=True))
+        modname = self.load_static_unicode(self.module_name)
+        template = self.add(LoadStatic(object_rprimitive, cdef.name + "_template",
+                                       self.module_name, NAMESPACE_TYPE))
+        # Create the class
+        tp = self.primitive_op(pytype_from_template_op,
+                               [template, tp_bases, modname], cdef.line)
+        # Immediately fix up the trait vtables, before doing anything with the class.
+        self.add(Call(
+            FuncDecl(cdef.name + '_trait_vtable_setup',
+                     None, self.module_name,
+                     FuncSignature([], bool_rprimitive)), [], -1))
+        # Save the class
+        self.add(InitStatic(tp, cdef.name, self.module_name, NAMESPACE_TYPE))
+
+        # Add it to the dict
+        self.primitive_op(dict_set_item_op,
+                          [self.load_globals_dict(), self.load_static_unicode(cdef.name),
+                           tp], cdef.line)
 
     def visit_import(self, node: Import) -> None:
         if node.is_unreachable or node.is_mypy_only:
@@ -1149,11 +1179,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def visit_assignment_stmt(self, stmt: AssignmentStmt) -> None:
         assert len(stmt.lvalues) >= 1
         self.disallow_class_assignments(stmt.lvalues)
-        if isinstance(stmt.rvalue, CallExpr) and isinstance(stmt.rvalue.analyzed, TypeVarExpr):
-            # Just ignore type variable declarations -- they are a compile-time only thing.
-            # TODO: It would be nice to actually construct TypeVar objects to match Python
-            #       semantics.
-            return
         lvalue = stmt.lvalues[0]
         if stmt.type and isinstance(stmt.rvalue, TempNode):
             # This is actually a variable annotation without initializer. Don't generate
@@ -1707,7 +1732,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.get_attr(obj, expr.name, self.node_type(expr), expr.line)
 
     def get_attr(self, obj: Value, attr: str, result_type: RType, line: int) -> Value:
-        if isinstance(obj.type, RInstance):
+        if isinstance(obj.type, RInstance) and obj.type.class_ir.has_attr(attr):
             return self.add(GetAttr(obj, attr, line))
         elif isinstance(obj.type, RUnion):
             return self.union_get_attr(obj, obj.type, attr, result_type, line)
@@ -1969,9 +1994,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         ret_args = []  # type: List[Value]
         for reg, arg in zip(args, sig.args):
             if reg is None:
-                reg = LoadErrorValue(arg.type)
-                reg.is_borrowed = True
-                self.add(reg)
+                reg = self.add(LoadErrorValue(arg.type, is_borrowed=True))
             ret_args.append(reg)
         return ret_args
 
@@ -2006,7 +2029,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                 arg_kinds=expr.arg_kinds, arg_names=expr.arg_names)
         else:
             args = [self.accept(arg) for arg in expr.args]
-            assert callee.expr in self.types
             obj = self.accept(callee.expr)
             return self.gen_method_call(obj,
                                         callee.name,
@@ -3216,9 +3238,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Add the type, value, traceback variables to the environment
         type_var, value_var, traceback_var = Var('type'), Var('value'), Var('traceback')
         generator_class.exc_type_reg = self.read(self.environment.add_local_reg(type_var,
-                                                                            object_rprimitive, True))
+                                                                                object_rprimitive,
+                                                                                is_arg=True))
         generator_class.exc_value_reg = self.read(self.environment.add_local_reg(value_var,
-                                                                             object_rprimitive, True))
+                                                                                 object_rprimitive,
+                                                                                 is_arg=True))
         generator_class.exc_traceback_reg = self.read(
             self.environment.add_local_reg(traceback_var, object_rprimitive, True))
 
@@ -3291,7 +3315,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         # Define the actual callable class ClassIR, and set its environment to point at the
         # previously defined environment class.
-        callable_class_ir = ClassIR(name, self.module_name)
+        callable_class_ir = ClassIR(name, self.module_name, is_generated=True)
         callable_class_ir.attributes[ENV_ATTR_NAME] = RInstance(self.fn_infos[-2].env_class)
         callable_class_ir.mro = [callable_class_ir]
         self.fn_info.callable_class = ImplicitClass(callable_class_ir)
@@ -3544,9 +3568,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def add_generator_raise_exception_blocks(self, line: int) -> None:
         gen_cls = self.fn_info.generator_class
 
-        # self.add(IncRef(gen_cls.exc_value_reg))
-        # self.add(IncRef(gen_cls.exc_traceback_reg))
-
         # Check to see if an exception was raised
         error_block = BasicBlock()
         ok_block = BasicBlock()
@@ -3565,7 +3586,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # value that was passed in.
         self.activate_block(if_tb_block)
         self.primitive_op(raise_exception_with_tb_op,
-                          [gen_cls.exc_type_reg, gen_cls.exc_value_reg, gen_cls.exc_traceback_reg], line)
+                          [gen_cls.exc_type_reg, gen_cls.exc_value_reg, gen_cls.exc_traceback_reg],
+                          line)
         self.goto(ok_block)
 
         # Otherwise, raise a normal exception and use the default value for the traceback.
