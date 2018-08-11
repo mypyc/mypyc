@@ -13,7 +13,7 @@ It would be translated to something that conceptually looks like this:
    r3 = r2 + r1 :: int
    return r3
 """
-from typing import Callable, Dict, List, Tuple, Optional, Union, Sequence, Set, Any, overload
+from typing import Callable, Dict, List, Tuple, Optional, Union, Sequence, Set, Any, cast, overload
 from abc import abstractmethod
 import sys
 import traceback
@@ -512,9 +512,7 @@ class GeneratorClass(ImplicitClass):
 
         # These registers hold the error values for the generator object for the case that the
         # 'throw' function is called.
-        self._exc_type_reg = None  # type: Optional[Value]
-        self._exc_value_reg = None  # type: Optional[Value]
-        self._exc_exc_tb_reg = None  # type: Optional[Value]
+        self.exc_regs = None  # type: Optional[Tuple[Value, Value, Value]]
 
         # The switch block is used to decide which instruction to go using the value held in the
         # next-label register.
@@ -538,33 +536,6 @@ class GeneratorClass(ImplicitClass):
     @next_label_target.setter
     def next_label_target(self, target: AssignmentTarget) -> None:
         self._next_label_target = target
-
-    @property
-    def exc_type_reg(self) -> Value:
-        assert self._exc_type_reg is not None
-        return self._exc_type_reg
-
-    @exc_type_reg.setter
-    def exc_type_reg(self, reg: Value) -> None:
-        self._exc_type_reg = reg
-
-    @property
-    def exc_value_reg(self) -> Value:
-        assert self._exc_value_reg is not None
-        return self._exc_value_reg
-
-    @exc_value_reg.setter
-    def exc_value_reg(self, reg: Value) -> None:
-        self._exc_value_reg = reg
-
-    @property
-    def exc_exc_tb_reg(self) -> Value:
-        assert self._exc_exc_tb_reg is not None
-        return self._exc_exc_tb_reg
-
-    @exc_exc_tb_reg.setter
-    def exc_exc_tb_reg(self, reg: Value) -> None:
-        self._exc_exc_tb_reg = reg
 
 
 class NonlocalControl:
@@ -981,12 +952,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                      cls.name, self.module_name, FuncSignature([rt_arg], return_type)),
             blocks, env)
 
-    def assign_if_null(self, target: AssignmentTargetRegister, val: Value, line: int) -> None:
+    def assign_if_null(self, target: AssignmentTargetRegister,
+                       get_val: Callable[[], Value], line: int) -> None:
         """Generate blocks for registers that NULL values."""
         error_block, body_block = BasicBlock(), BasicBlock()
         self.add(Branch(target.register, error_block, body_block, Branch.IS_ERROR))
         self.activate_block(error_block)
-        self.add(Assign(target.register, self.coerce(val, target.register.type, line)))
+        self.add(Assign(target.register, self.coerce(get_val(), target.register.type, line)))
         self.goto(body_block)
         self.activate_block(body_block)
 
@@ -1033,7 +1005,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                         "Unsupported default argument")
                 target = self.environment.lookup(arg.variable)
                 assert isinstance(target, AssignmentTargetRegister)
-                self.assign_if_null(target, self.accept(arg.initializer), arg.initializer.line)
+                self.assign_if_null(target,
+                                    lambda: self.accept(cast(Expression, arg.initializer)),
+                                    arg.initializer.line)
 
     def gen_func_item(self, fitem: FuncItem, name: str, sig: FuncSignature,
                       class_name: Optional[str] = None) -> Tuple[FuncIR, Optional[Value]]:
@@ -3277,9 +3251,12 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self_target = self.add_self_to_env(cls.ir)
 
         # Add the type, value, and traceback variables to the environment.
-        cls.exc_type_reg = self.environment.add_local(Var('type'), object_rprimitive, True)
-        cls.exc_value_reg = self.environment.add_local(Var('value'), object_rprimitive, True)
-        cls.exc_exc_tb_reg = self.environment.add_local(Var('traceback'), object_rprimitive, True)
+
+        exc_type = self.environment.add_local(Var('type'), object_rprimitive, is_arg=True)
+        exc_val = self.environment.add_local(Var('value'), object_rprimitive, is_arg=True)
+        exc_tb = self.environment.add_local(Var('traceback'), object_rprimitive, is_arg=True)
+
+        cls.exc_regs = (exc_type, exc_val, exc_tb)
 
         cls.self_reg = self.read(self_target, fitem.line)
         cls.curr_env_reg = self.load_outer_env(cls.self_reg, self.environment)
@@ -3543,8 +3520,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Because the value and traceback arguments are optional and hence can be NULL if not
         # passed in, we have to assign them Py_None if they are not passed in.
         none_reg = self.none()
-        self.assign_if_null(val, none_reg, self.fn_info.fitem.line)
-        self.assign_if_null(tb, none_reg, self.fn_info.fitem.line)
+        self.assign_if_null(val, lambda: none_reg, self.fn_info.fitem.line)
+        self.assign_if_null(tb, lambda: none_reg, self.fn_info.fitem.line)
 
         # Call the helper function using the arguments passed in, and return that result.
         result = self.add(Call(fn_decl, [self_reg, self.read(typ), self.read(val), self.read(tb)],
@@ -3612,31 +3589,18 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         generator functions, and raises an exception if those flags are set.
         """
         cls = self.fn_info.generator_class
+        assert cls.exc_regs is not None
+        exc_type, exc_val, exc_tb = cls.exc_regs
 
         # Check to see if an exception was raised.
         error_block = BasicBlock()
         ok_block = BasicBlock()
-        comparison = self.binary_op(cls.exc_type_reg, self.none(), 'is not', line)
+        comparison = self.binary_op(exc_type, self.none(), 'is not', line)
         self.add_bool_branch(comparison, error_block, ok_block)
 
         self.activate_block(error_block)
-
-        # Check to see if the traceback field is set.
-        if_tb_block = BasicBlock()
-        else_block = BasicBlock()
-        comparison = self.binary_op(cls.exc_exc_tb_reg, self.none(), 'is not', line)
-        self.add_bool_branch(comparison, if_tb_block, else_block)
-
-        # If the traceback field is set, then raise an exception and set the traceback field to the
-        # value that was passed in.
-        self.activate_block(if_tb_block)
-        self.primitive_op(raise_exception_with_tb_op,
-                          [cls.exc_type_reg, cls.exc_value_reg, cls.exc_exc_tb_reg], line)
-        self.goto(ok_block)
-
-        # Otherwise, raise a normal exception and use the default value for the traceback.
-        self.activate_block(else_block)
-        self.primitive_op(raise_exception_op, [cls.exc_type_reg, cls.exc_value_reg], line)
+        self.primitive_op(raise_exception_with_tb_op, [exc_type, exc_val, exc_tb], line)
+        self.add(Unreachable())
         self.goto_and_activate(ok_block)
 
     def add_self_to_env(self, cls: ClassIR) -> AssignmentTargetRegister:
