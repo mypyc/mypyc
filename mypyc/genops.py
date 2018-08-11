@@ -292,6 +292,11 @@ class Mapper:
                 arg.kind)
                 for i, arg in enumerate(fdef.arguments)]
         ret = self.type_to_rtype(fdef.type.ret_type)
+        # We force certain dunder methods to return objects to support letting them
+        # return NotImplemented. It also avoids some pointless boxing and unboxing,
+        # since tp_richcompare needs an object anyways.
+        if fdef.name() in ('__eq__', '__ne__', '__lt__', '__gt__', '__le__', '__ge__'):
+            ret = object_rprimitive
         return FuncSignature(args, ret)
 
     def literal_static_name(self, value: Union[int, float, str, bytes]) -> str:
@@ -1975,6 +1980,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # TODO: Allow special cases to have default args or named args. Currently they don't since
         # they check that everything in arg_kinds is ARG_POS.
 
+        # TODO: Generalize special cases
+
         # Special case builtins.len
         if (callee.fullname == 'builtins.len'
                 and len(expr.args) == 1
@@ -1993,6 +2000,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 and self.is_native_module_ref_expr(expr.args[1])):
             # Special case native isinstance() checks as this makes them much faster.
             return self.primitive_op(fast_isinstance_op, arg_values, expr.line)
+
+        # Special case builtins.globals
+        if (callee.fullname == 'builtins.globals'
+                and len(expr.args) == 0):
+            return self.load_globals_dict()
 
         # Handle data-driven special-cased primitive call ops.
         if callee.fullname is not None and expr.arg_kinds == [ARG_POS] * len(arg_values):
