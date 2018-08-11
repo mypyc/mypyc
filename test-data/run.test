@@ -2771,3 +2771,62 @@ assert run_generator(normal(1, 2.0)(3, '4.00')) == ((1, 2.0, 3, '4.00'), None)
 assert run_generator(generator(1)) == ((1, 2, 3), None)
 assert run_generator(triple()()) == ((1, 2, 3), None)
 assert run_generator(another_triple()()) == ((1,), None)
+
+[case testDecorators]
+from typing import Generator, Callable
+from contextlib import contextmanager
+
+def a(f: Callable[[], None]) -> Callable[[], None]:
+    def g() -> None:
+        print('Entering ', f)
+        f()
+        print('Exited ', f)
+    return g
+
+def b(f: Callable[[], None]) -> Callable[[], None]:
+    def g() -> None:
+        print('---')
+        f()
+        print('---')
+    return g
+
+@contextmanager
+def foo() -> Generator:
+    try:
+        print('started')
+        yield 0
+    finally:
+        print('finished')
+
+@a
+@b
+def c() -> None:
+    @a
+    @b
+    def d() -> None:
+        print('d')
+    print('c')
+    d()
+
+[file driver.py]
+from native import foo, c
+
+with foo() as f:
+    print('hello')
+
+c()
+
+[out]
+started
+hello
+finished
+Entering  <native.g_b_obj object at 0x1019a27f0>
+---
+c
+Entering  <native.g_b_obj object at 0x1019a2cf8>
+---
+d
+---
+Exited  <native.g_b_obj object at 0x1019a2cf8>
+---
+Exited  <native.g_b_obj object at 0x1019a27f0>
