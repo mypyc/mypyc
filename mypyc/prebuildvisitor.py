@@ -1,6 +1,8 @@
 from typing import Dict, List, Set
 
-from mypy.nodes import Decorator, FuncDef, FuncItem, LambdaExpr, NameExpr, SymbolNode, Var
+from mypy.nodes import (
+    Decorator, Expression, FuncDef, FuncItem, LambdaExpr, NameExpr, SymbolNode, Var
+)
 from mypy.traverser import TraverserVisitor
 
 
@@ -24,7 +26,7 @@ class PreBuildVisitor(TraverserVisitor):
 
         self.encapsulating_funcs = set()  # type: Set[FuncItem]
         self.nested_funcs = set()  # type: Set[FuncItem]
-        self.decorated_funcs = set()  # type: Set[FuncDef]
+        self.funcs_to_decorators = {}  # type: Dict[FuncDef, List[Expression]]
 
     def add_free_variable(self, symbol: SymbolNode) -> None:
         # Get the FuncItem instance where the free symbol was first declared, and map that FuncItem
@@ -37,8 +39,9 @@ class PreBuildVisitor(TraverserVisitor):
             # Only add the function being decorated if there exist decorators in the decorator
             # list. Note that meaningful decorators (@property, @abstractmethod) are removed from
             # this list by mypy, but functions decorated by those decorators do not need to be
-            # added to the set of decorated functions for the IRBuilder.
-            self.decorated_funcs.add(dec.func)
+            # added to the set of decorated functions for the IRBuilder, because they are handled
+            # in a special way.
+            self.funcs_to_decorators[dec.func] = dec.decorators
         super().visit_decorator(dec)
 
     def visit_func(self, func: FuncItem) -> None:
