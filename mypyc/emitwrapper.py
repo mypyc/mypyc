@@ -4,7 +4,8 @@ from mypyc.common import PREFIX, NATIVE_PREFIX, DUNDER_PREFIX
 from mypyc.emit import Emitter
 from mypyc.ops import (
     ClassIR, FuncIR, RType, RuntimeArg,
-    is_object_rprimitive, is_int_rprimitive,
+    is_object_rprimitive, is_int_rprimitive, is_bool_rprimitive,
+    bool_rprimitive,
     FUNC_STATICMETHOD,
 )
 from mypyc.namegen import NameGenerator
@@ -59,7 +60,7 @@ def generate_dunder_wrapper(cl: ClassIR, fn: FuncIR, emitter: Emitter) -> str:
     as *PyObjects.
     """
     input_args = ', '.join('PyObject *obj_{}'.format(arg.name) for arg in fn.args)
-    name = '{}_{}'.format(DUNDER_PREFIX, fn.cname(emitter.names))
+    name = '{}{}{}'.format(DUNDER_PREFIX, fn.name, cl.name_prefix(emitter.names))
     emitter.emit_line('static PyObject *{name}({input_args}) {{'.format(
         name=name,
         input_args=input_args,
@@ -86,7 +87,7 @@ def generate_richcompare_wrapper(cl: ClassIR, emitter: Emitter) -> Optional[str]
     if not matches:
         return None
 
-    name = '{}RichCompare_{}'.format(DUNDER_PREFIX, cl.name_prefix(emitter.names))
+    name = '{}_RichCompare_{}'.format(DUNDER_PREFIX, cl.name_prefix(emitter.names))
     emitter.emit_line(
         'static PyObject *{name}(PyObject *obj_lhs, PyObject *obj_rhs, int op) {{'.format(
             name=name)
@@ -110,7 +111,7 @@ def generate_richcompare_wrapper(cl: ClassIR, emitter: Emitter) -> Optional[str]
 
 def generate_hash_wrapper(cl: ClassIR, fn: FuncIR, emitter: Emitter) -> str:
     """Generates a wrapper for native __hash__ methods."""
-    name = '{}_{}'.format(DUNDER_PREFIX, fn.cname(emitter.names))
+    name = '{}{}{}'.format(DUNDER_PREFIX, fn.name, cl.name_prefix(emitter.names))
     emitter.emit_line('static Py_ssize_t {name}(PyObject *self) {{'.format(
         name=name
     ))
@@ -125,6 +126,26 @@ def generate_hash_wrapper(cl: ClassIR, fn: FuncIR, emitter: Emitter) -> str:
     emitter.emit_line('if (PyErr_Occurred()) return -1;')
     # We can't return -1 from a hash function..
     emitter.emit_line('if (val == -1) return -2;')
+    emitter.emit_line('return val;')
+    emitter.emit_line('}')
+
+    return name
+
+
+def generate_bool_wrapper(cl: ClassIR, fn: FuncIR, emitter: Emitter) -> str:
+    """Generates a wrapper for native __bool__ methods."""
+    name = '{}{}{}'.format(DUNDER_PREFIX, fn.name, cl.name_prefix(emitter.names))
+    emitter.emit_line('static int {name}(PyObject *self) {{'.format(
+        name=name
+    ))
+    emitter.emit_line('{}val = {}{}(self);'.format(emitter.ctype_spaced(fn.ret_type),
+                                                   NATIVE_PREFIX,
+                                                   fn.cname(emitter.names)))
+    emitter.emit_error_check('val', fn.ret_type, 'return -1;')
+    # This wouldn't be that hard to fix but it seems unimportant and
+    # getting error handling and unboxing right would be fiddly. (And
+    # way easier to do in IR!)
+    assert is_bool_rprimitive(fn.ret_type), "Only bool return supported for __bool__"
     emitter.emit_line('return val;')
     emitter.emit_line('}')
 

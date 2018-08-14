@@ -64,7 +64,9 @@ class bytes:
     def __ne__(self, x: object) -> bool: pass
     def join(self, x: Iterable[object]) -> bytes: pass
 
-class bool: pass
+class bool:
+    def __init__(self, o: object = ...) -> None: ...
+
 
 class tuple(Generic[T], Sized):
     def __init__(self, i: Iterable[T]) -> None: pass
@@ -156,7 +158,10 @@ def range(x: int) -> Iterator[int]: pass
 def isinstance(x: object, t: object) -> bool: pass
 def next(i: Iterator[T]) -> T: pass
 def hash(o: object) -> int: ...
+def globals() -> Dict[str, Any]: ...
 
 # Dummy definitions.
 class classmethod: pass
 class staticmethod: pass
+
+NotImplemented = ...  # type: Any
