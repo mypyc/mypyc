@@ -43,7 +43,7 @@ def compile_modules_to_c(sources: List[BuildSource], module_names: List[str], op
 
     # Generate basic IR, with missing exception and refcount handling.
     file_nodes = [result.files[name] for name in module_names]
-    modules = genops.build_ir(file_nodes, result.types)
+    modules = genops.build_ir(file_nodes, result.graph, result.types)
     # Insert exception handling.
     for _, module in modules:
         for fn in module.functions:

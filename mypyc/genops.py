@@ -19,6 +19,7 @@ import sys
 import traceback
 import itertools
 
+from mypy.build import Graph
 from mypy.nodes import (
     Node, MypyFile, SymbolNode, Statement, FuncItem, FuncDef, ReturnStmt, AssignmentStmt, OpExpr,
     IntExpr, NameExpr, LDEF, Var, IfStmt, UnaryExpr, ComparisonExpr, WhileStmt, Argument, CallExpr,
@@ -87,6 +88,7 @@ GenFunc = Callable[[], None]
 
 
 def build_ir(modules: List[MypyFile],
+             graph: Graph,
              types: Dict[Expression, Type]) -> List[Tuple[str, ModuleIR]]:
     result = []
     mapper = Mapper()
@@ -124,7 +126,7 @@ def build_ir(modules: List[MypyFile],
         module.accept(fvv)
 
         # Second pass.
-        builder = IRBuilder(types, mapper, module_names, fvv)
+        builder = IRBuilder(types, graph, mapper, module_names, fvv)
         builder.visit_mypy_file(module)
         module_ir = ModuleIR(
             builder.imports,
@@ -617,10 +619,12 @@ class GeneratorNonlocalControl(BaseNonlocalControl):
 class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def __init__(self,
                  types: Dict[Expression, Type],
+                 graph: Graph,
                  mapper: Mapper,
                  modules: List[str],
                  fvv: FreeVariablesVisitor) -> None:
         self.types = types
+        self.graph = graph
         self.environment = Environment()
         self.environments = [self.environment]
         self.ret_types = []  # type: List[RType]
@@ -893,9 +897,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # probably doesn't matter much: we always load the values from
         # the *other* module and not from our *own*, where they have
         # been copied to.
-        if node.is_top_level:
-            globals = self.load_globals_dict()
-            for name, maybe_as_name in node.names:
+        globals = self.load_globals_dict()
+        for name, maybe_as_name in node.names:
+            fullname = node.id + '.' + name
+            if fullname in self.graph or fullname in self.graph[self.module_name].suppressed:
+                self.gen_import(fullname, node.line)
+
+            if node.is_top_level:
                 as_name = maybe_as_name or name
                 obj = self.py_get_attr(module, name, node.line)
                 self.translate_special_method_call(
