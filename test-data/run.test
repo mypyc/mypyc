@@ -2778,16 +2778,16 @@ from contextlib import contextmanager
 
 def a(f: Callable[[], None]) -> Callable[[], None]:
     def g() -> None:
-        print('Entering ', f)
+        print('Entering')
         f()
-        print('Exited ', f)
+        print('Exited')
     return g
 
 def b(f: Callable[[], None]) -> Callable[[], None]:
     def g() -> None:
-        print('---')
+        print('***')
         f()
-        print('---')
+        print('***')
     return g
 
 @contextmanager
@@ -2815,43 +2815,18 @@ with foo() as f:
     print('hello')
 
 c()
-A().c()
 
 [out]
 started
 hello
 finished
-Entering  <native.g_b_obj object at 0x1063e3860>
----
+Entering
+***
 c
-Entering  <native.g_b_obj object at 0x1063e3d68>
----
+Entering
+***
 d
----
-Exited  <native.g_b_obj object at 0x1063e3d68>
----
-Exited  <native.g_b_obj object at 0x1063e3860>
-Traceback (most recent call last):
-  File "tmp/driver.py", line 7, in <module>
-    A().c()
-NameError: name 'A' is not defined
-
-[case testDecoratedMethodsRun]
-from typing import Generator
-from contextlib import contextmanager
-
-class A:
-    @contextmanager
-    def c(self) -> Generator[int, None, None]:
-        try:
-            print('A.c started')
-            yield 0
-        finally:
-            print('A.c finished')
-
-[file driver.py]
-from native import A
-
-A().c()
-
-[out]
+***
+Exited
+***
+Exited

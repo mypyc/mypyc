@@ -1117,20 +1117,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 # Return the FuncIR for the decorated function.
                 func_ir = call_fn_ir
             else:
-                self.functions.append(call_fn_ir)
-
-                # If this is a decorated class method, then we need to also generate the FuncIR
-                # representing the actual class method. The class method will simply return the
-                # decorated function.
-                self.enter(fn_info)
-                self.environment.add_local_reg(Var('self'), object_rprimitive, is_arg=True)
-                orig_func = self.instantiate_callable_class(fn_info)
-                decorated_func = self.load_decorated_func(fitem, orig_func)
-                self.add(Return(decorated_func))
-                blocks, env, ret_type, _ = self.leave()
-
-                # Return the FuncIR for the class method.
-                func_ir = FuncIR(self.mapper.func_to_decl[fitem], blocks, env)
+                # TODO: Implement decorated methods.
+                raise NotImplementedError
 
         elif fn_info.is_nested:
             func_ir = self.add_call_to_callable_class(blocks, sig, env, fn_info)
