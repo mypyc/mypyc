@@ -2,11 +2,12 @@
 # test cases.
 
 from typing import (
-    TypeVar, Generic, List, Iterator, Iterable, Sized, Dict, Optional, Tuple, Any,
+    TypeVar, Generic, List, Iterator, Iterable, Sized, Dict, Optional, Tuple, Any, Set,
     overload, Mapping, Union, Callable
 )
 
 T = TypeVar('T')
+T_co = TypeVar('T_co', covariant=True)
 S = TypeVar('S')
 K = TypeVar('K') # for keys in mapping
 V = TypeVar('V') # for values in mapping
@@ -68,10 +69,11 @@ class bool:
     def __init__(self, o: object = ...) -> None: ...
 
 
-class tuple(Generic[T], Sized):
-    def __init__(self, i: Iterable[T]) -> None: pass
-    def __getitem__(self, i: int) -> T: pass
+class tuple(Generic[T_co], Sized):
+    def __init__(self, i: Iterable[T_co]) -> None: pass
+    def __getitem__(self, i: int) -> T_co: pass
     def __len__(self) -> int: pass
+    def __iter__(self) -> Iterator[T_co]: ...
 
 class function: pass
 
@@ -113,6 +115,7 @@ class set(Generic[T]):
     def discard(self, x: T) -> None: pass
     def clear(self) -> None: pass
     def pop(self) -> T: pass
+    def __or__(self, s: Set[S]) -> Set[Union[T, S]]: ...
 
 class slice: pass
 
@@ -154,7 +157,7 @@ class NotImplementedError(RuntimeError): pass
 def id(o: object) -> int: pass
 def len(o: Sized) -> int: pass
 def print(*object) -> None: pass
-def range(x: int) -> Iterator[int]: pass
+def range(x: int, y: int = ..., z: int = ...) -> Iterator[int]: pass
 def isinstance(x: object, t: object) -> bool: pass
 def next(i: Iterator[T]) -> T: pass
 def hash(o: object) -> int: ...

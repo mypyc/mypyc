@@ -29,6 +29,12 @@ false_op = name_ref_op('builtins.False',
                        error_kind=ERR_NEVER,
                        emit=simple_emit('{dest} = 0;'))
 
+ellipsis_op = custom_op(name='...',
+                        arg_types=[],
+                        result_type=object_rprimitive,
+                        error_kind=ERR_NEVER,
+                        emit=simple_emit('{dest} = Py_Ellipsis; Py_INCREF({dest});'))
+
 iter_op = func_op(name='builtins.iter',
                   arg_types=[object_rprimitive],
                   result_type=object_rprimitive,
@@ -221,6 +227,14 @@ py_method_call_op = custom_op(
     error_kind=ERR_MAGIC,
     format_str = '{dest} = py_method_call({comma_args})',
     emit=simple_emit('{dest} = PyObject_CallMethodObjArgs({comma_args}, NULL);'))
+
+
+import_op = custom_op(
+    name='import',
+    arg_types=[str_rprimitive],
+    result_type=object_rprimitive,
+    error_kind=ERR_MAGIC,
+    emit=simple_emit('{dest} = PyImport_Import({args[0]});'))
 
 
 func_op('builtins.isinstance',

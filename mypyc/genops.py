@@ -19,6 +19,7 @@ import sys
 import traceback
 import itertools
 
+from mypy.build import Graph
 from mypy.nodes import (
     Node, MypyFile, SymbolNode, Statement, FuncItem, FuncDef, ReturnStmt, AssignmentStmt, OpExpr,
     IntExpr, NameExpr, LDEF, Var, IfStmt, UnaryExpr, ComparisonExpr, WhileStmt, Argument, CallExpr,
@@ -36,7 +37,7 @@ from mypy.nodes import (
 import mypy.nodes
 from mypy.types import (
     Type, Instance, CallableType, NoneTyp, TupleType, UnionType, AnyType, TypeVarType, PartialType,
-    TypeType, FunctionLike, Overloaded, TypeOfAny
+    TypeType, FunctionLike, Overloaded, TypeOfAny, UninhabitedType,
 )
 from mypy.visitor import ExpressionVisitor, StatementVisitor
 from mypy.subtypes import is_named_instance
@@ -72,7 +73,7 @@ from mypyc.ops_misc import (
     none_op, true_op, false_op, iter_op, next_op, py_getattr_op, py_setattr_op, py_delattr_op,
     py_call_op, py_call_with_kwargs_op, py_method_call_op,
     fast_isinstance_op, bool_op, new_slice_op,
-    type_op, pytype_from_template_op,
+    type_op, pytype_from_template_op, import_op, ellipsis_op,
 )
 from mypyc.ops_exc import (
     no_err_occurred_op, raise_exception_op, raise_exception_with_tb_op, reraise_exception_op,
@@ -87,6 +88,7 @@ GenFunc = Callable[[], None]
 
 
 def build_ir(modules: List[MypyFile],
+             graph: Graph,
              types: Dict[Expression, Type]) -> List[Tuple[str, ModuleIR]]:
     result = []
     mapper = Mapper()
@@ -127,11 +129,10 @@ def build_ir(modules: List[MypyFile],
         module.accept(pbv)
 
         # Second pass.
-        builder = IRBuilder(types, mapper, module_names, pbv)
+        builder = IRBuilder(types, graph, mapper, module_names, pbv)
         builder.visit_mypy_file(module)
         module_ir = ModuleIR(
             builder.imports,
-            builder.from_imports,
             mapper.literals,
             builder.functions,
             builder.classes
@@ -286,6 +287,9 @@ class Mapper:
             assert typ.var.type is not None
             return self.type_to_rtype(typ.var.type)
         elif isinstance(typ, Overloaded):
+            return object_rprimitive
+        elif isinstance(typ, UninhabitedType):
+            # Sure, whatever!
             return object_rprimitive
         assert False, '%s unsupported' % type(typ)
 
@@ -613,10 +617,12 @@ class GeneratorNonlocalControl(BaseNonlocalControl):
 class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def __init__(self,
                  types: Dict[Expression, Type],
+                 graph: Graph,
                  mapper: Mapper,
                  modules: List[str],
                  pbv: PreBuildVisitor) -> None:
         self.types = types
+        self.graph = graph
         self.environment = Environment()
         self.environments = [self.environment]
         self.ret_types = []  # type: List[RType]
@@ -654,8 +660,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         self.mapper = mapper
         self.imports = []  # type: List[str]
-        self.from_imports = {}  # type: Dict[str, List[Tuple[str, str]]]
-        self.imports = []  # type: List[str]
 
     def visit_mypy_file(self, mypyfile: MypyFile) -> None:
         if mypyfile.fullname() in ('typing', 'abc'):
@@ -674,6 +678,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.classes.append(ir)
 
         self.enter(FuncInfo(name='<top level>'))
+
+        # Make sure we have a builtins import
+        self.gen_import('builtins', -1)
 
         # Generate ops.
         for node in mypyfile.defs:
@@ -855,36 +862,61 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                           [self.load_globals_dict(), self.load_static_unicode(cdef.name),
                            tp], cdef.line)
 
+    def gen_import(self, id: str, line: int) -> None:
+        # Unfortunate hack:
+        if id == 'os':
+            self.gen_import('os.path', line)
+            self.gen_import('posix', line)
+
+        self.imports.append(id)
+
+        needs_import, out = BasicBlock(), BasicBlock()
+        first_load = self.add(LoadStatic(object_rprimitive, 'module', id))
+        comparison = self.binary_op(first_load, self.none(), 'is not', line)
+        self.add_bool_branch(comparison, out, needs_import)
+
+        self.activate_block(needs_import)
+        value = self.primitive_op(import_op, [self.load_static_unicode(id)], line)
+        self.add(InitStatic(value, 'module', id))
+        self.goto_and_activate(out)
+
     def visit_import(self, node: Import) -> None:
         if node.is_unreachable or node.is_mypy_only:
             return
-        if not node.is_top_level:
-            assert False, "non-toplevel imports not supported"
-
         for node_id, _ in node.ids:
-            self.imports.append(node_id)
+            self.gen_import(node_id, node.line)
 
     def visit_import_from(self, node: ImportFrom) -> None:
         if node.is_unreachable or node.is_mypy_only:
             return
-
         # TODO support these?
         assert not node.relative
 
-        if node.id not in self.from_imports:
-            self.from_imports[node.id] = []
+        self.gen_import(node.id, node.line)
+        module = self.add(LoadStatic(object_rprimitive, 'module', node.id))
 
+        # Copy everything into our module's dict.
+        # Note that we miscompile import from inside of functions here,
+        # since that case *shouldn't* load it into the globals dict.
+        # This probably doesn't matter much and the code runs basically right.
+        globals = self.load_globals_dict()
         for name, maybe_as_name in node.names:
+            # If one of the things we are importing is a module,
+            # import it as a module also.
+            fullname = node.id + '.' + name
+            if fullname in self.graph or fullname in self.graph[self.module_name].suppressed:
+                self.gen_import(fullname, node.line)
+
             as_name = maybe_as_name or name
-            self.from_imports[node.id].append((name, as_name))
+            obj = self.py_get_attr(module, name, node.line)
+            self.translate_special_method_call(
+                globals, '__setitem__', [self.load_static_unicode(as_name), obj],
+                result_type=None, line=node.line)
 
     def visit_import_all(self, node: ImportAll) -> None:
         if node.is_unreachable or node.is_mypy_only:
             return
-        if not node.is_top_level:
-            assert False, "non-toplevel imports not supported"
-
-        self.imports.append(node.id)
+        self.gen_import(node.id, node.line)
 
     def gen_glue_method(self, sig: FuncSignature, target: FuncIR,
                         cls: ClassIR, base: ClassIR, line: int) -> FuncIR:
@@ -1048,6 +1080,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         | c_obj |   --------------------------+
         +-------+
         """
+        assert not any(kind in (ARG_STAR, ARG_STAR2) for kind in fitem.arg_kinds)
+
         func_reg = None  # type: Optional[Value]
 
         is_nested = fitem in self.nested_fitems
@@ -1491,23 +1525,30 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Determine where we want to exit, if our condition check fails.
         normal_loop_exit = else_block if else_insts is not None else exit_block
 
+        # Only support 1 and 2 arg forms for now
         if (isinstance(expr, CallExpr)
                 and isinstance(expr.callee, RefExpr)
-                and expr.callee.fullname == 'builtins.range'):
+                and expr.callee.fullname == 'builtins.range'
+                and len(expr.args) <= 2):
 
             condition_block = BasicBlock()
             self.push_loop_stack(increment_block, exit_block)
 
             # Special case for x in range(...)
             # TODO: Check argument counts and kinds; check the lvalue
-            end = expr.args[0]
-            end_reg = self.accept(end)
+            if len(expr.args) == 1:
+                start_reg = self.add(LoadInt(0))
+                end_reg = self.accept(expr.args[0])
+            else:
+                start_reg = self.accept(expr.args[0])
+                end_reg = self.accept(expr.args[1])
+
             end_target = self.maybe_spill(end_reg)
 
             # Initialize loop index to 0. Assert that the index target is assignable.
             index_target = self.get_assignment_target(
                 index)  # type: Union[Register, AssignmentTarget]
-            self.assign(index_target, self.add(LoadInt(0)), line)
+            self.assign(index_target, start_reg, line)
             self.goto(condition_block)
 
             # Add loop condition check.
@@ -1579,7 +1620,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # for the for-loop. If we are inside of a generator function, spill these into the
             # environment class.
             expr_reg = self.accept(expr)
-            iter_reg = self.add(PrimitiveOp([expr_reg], iter_op, line))
+            iter_reg = self.primitive_op(iter_op, [expr_reg], line)
             expr_target = self.maybe_spill(expr_reg)
             iter_target = self.maybe_spill(iter_reg)
 
@@ -1588,7 +1629,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # the Iterable being traversed or an exception being raised. Note that Branch.IS_ERROR
             # checks only for NULL (an exception does not necessarily have to be raised).
             self.goto_and_activate(increment_block)
-            next_reg = self.add(PrimitiveOp([self.read(iter_target, line)], next_op, line))
+            next_reg = self.primitive_op(next_op, [self.read(iter_target, line)], line)
             self.add(Branch(next_reg, error_check_block, body_block, Branch.IS_ERROR))
 
             # Create a new block for the body of the loop. Set the previous branch to go here if
@@ -1605,7 +1646,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # err_reg wil be set to True. If no_err_occurred_op returns False, then the exception
             # will be propagated using the ERR_FALSE flag.
             self.activate_block(error_check_block)
-            self.add(PrimitiveOp([], no_err_occurred_op, line))
+            self.primitive_op(no_err_occurred_op, [], line)
             self.goto(normal_loop_exit)
 
             self.pop_loop_stack()
@@ -1683,8 +1724,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def visit_index_expr(self, expr: IndexExpr) -> Value:
         base = self.accept(expr.base)
 
-        if isinstance(base.type, RTuple):
-            assert isinstance(expr.index, IntExpr)  # TODO
+        if isinstance(base.type, RTuple) and isinstance(expr.index, IntExpr):
             return self.add(TupleGet(base, expr.index.value, expr.line))
 
         index_reg = self.accept(expr.index)
@@ -2380,23 +2420,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.add(Unreachable())
             return
 
-        assert s.from_expr is None, "from_expr not implemented"
-
-        # TODO: Do we want to dynamically handle the case where the
-        # type is Any so we don't statically know what to do?
-        typ = self.types[s.expr]
-        if isinstance(typ, TypeType):
-            typ = typ.item
-        assert not isinstance(typ, AnyType), "can't raise Any"
-
-        if isinstance(typ, FunctionLike) and typ.is_type_obj():
-            etyp = self.accept(s.expr)
-            exc = self.py_call(etyp, [], s.expr.line)
-        else:
-            exc = self.accept(s.expr)
-            etyp = self.primitive_op(type_op, [exc], s.expr.line)
-
-        self.primitive_op(raise_exception_op, [etyp, exc], s.line)
+        exc = self.accept(s.expr)
+        self.primitive_op(raise_exception_op, [exc], s.line)
         self.add(Unreachable())
 
     class ExceptNonlocalControl(CleanupNonlocalControl):
@@ -2794,7 +2819,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             message = self.accept(a.msg)
             exc_type = self.load_module_attr_by_fullname('builtins.AssertionError', a.line)
             exc = self.py_call(exc_type, [message], a.line)
-            self.primitive_op(raise_exception_op, [exc_type, exc], a.line)
+            self.primitive_op(raise_exception_op, [exc], a.line)
         self.add(Unreachable())
         self.activate_block(ok_block)
 
@@ -2994,6 +3019,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # TODO: Replace this value with the value that is sent into the generator when we support
         #       the 'send' function.
         return self.none()
+
+    def visit_ellipsis(self, o: EllipsisExpr) -> Value:
+        return self.primitive_op(ellipsis_op, [], o.line)
 
     # Unimplemented constructs
     # TODO: some of these are actually things that should never show up,

@@ -133,7 +133,7 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
     }
 
     // Allocate the type and then copy the main stuff in.
-    t = (PyHeapTypeObject*)PyType_GenericAlloc(metaclass, 0);
+    t = (PyHeapTypeObject*)PyType_GenericAlloc(&PyType_Type, 0);
     if (!t)
         goto error;
     memcpy((char *)t + sizeof(PyVarObject),
@@ -154,6 +154,12 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
 
     if (PyType_Ready((PyTypeObject *)t) < 0)
         goto error;
+
+    // XXX: This is a terrible hack to work around a cpython check on
+    // the mro. It was needed for mypy.stats. I need to investigate
+    // what is actually going on here.
+    Py_INCREF(metaclass);
+    Py_TYPE(t) = metaclass;
 
     if (dummy_class) {
         if (PyDict_Merge(t->ht_type.tp_dict, dummy_class->tp_dict, 0) != 0)
@@ -635,6 +641,74 @@ static PyObject *CPySequenceTuple_GetItem(PyObject *tuple, CPyTagged index) {
     }
 }
 
+static inline int CPy_ObjectToStatus(PyObject *obj) {
+    if (obj) {
+        Py_DECREF(obj);
+        return 0;
+    } else {
+        return -1;
+    }
+}
+
+// dict subclasses like defaultdict override things in interesting
+// ways, so we don't want to just directly use the dict methods. Not
+// sure if it is actually worth doing all this stuff, but it saves
+// some indirections.
+static PyObject *CPyDict_GetItem(PyObject *dict, PyObject *key) {
+    if (PyDict_CheckExact(dict)) {
+        PyObject *res = PyDict_GetItemWithError(dict, key);
+        if (!res) {
+            PyErr_SetObject(PyExc_KeyError, key);
+        } else {
+            Py_INCREF(res);
+        }
+        return res;
+    } else {
+        return PyObject_GetItem(dict, key);
+    }
+}
+
+static int CPyDict_SetItem(PyObject *dict, PyObject *key, PyObject *value) {
+    if (PyDict_CheckExact(dict)) {
+        return PyDict_SetItem(dict, key, value);
+    } else {
+        return PyObject_SetItem(dict, key, value);
+    }
+}
+
+static int CPyDict_UpdateGeneral(PyObject *dict, PyObject *stuff) {
+    static PyObject *update_str = NULL;
+    if (!update_str) {
+        update_str = PyUnicode_FromString("update");
+        if (!update_str) {
+            return -1;
+        }
+    }
+    PyObject *res = PyObject_CallMethodObjArgs(dict, update_str, stuff, NULL);
+    return CPy_ObjectToStatus(res);
+}
+
+static int CPyDict_Update(PyObject *dict, PyObject *stuff) {
+    if (PyDict_CheckExact(dict)) {
+        return PyDict_Update(dict, stuff);
+    } else {
+        return CPyDict_UpdateGeneral(dict, stuff);
+    }
+}
+
+static int CPyDict_UpdateFromSeq(PyObject *dict, PyObject *stuff) {
+    if (PyDict_CheckExact(dict)) {
+        // Argh this sucks
+        if (PyDict_Check(stuff)) {
+            return PyDict_Update(dict, stuff);
+        } else {
+            return PyDict_MergeFromSeq2(dict, stuff, 1);
+        }
+    } else {
+        return CPyDict_UpdateGeneral(dict, stuff);
+    }
+}
+
 static PyCodeObject *CPy_CreateCodeObject(const char *filename, const char *funcname, int line) {
     PyObject *filename_obj = PyUnicode_FromString(filename);
     PyObject *funcname_obj = PyUnicode_FromString(funcname);
@@ -735,6 +809,18 @@ static void CPy_CatchError(PyObject **p_type, PyObject **p_value, PyObject **p_t
 static void CPy_RestoreExcInfo(PyObject *type, PyObject *value, PyObject *traceback) {
     // PyErr_SetExcInfo steals the references to the values passed to it.
     PyErr_SetExcInfo(_CPy_FromDummy(type), _CPy_FromDummy(value), _CPy_FromDummy(traceback));
+}
+
+static void CPy_Raise(PyObject *exc) {
+    if (PyObject_IsInstance(exc, (PyObject *)&PyType_Type)) {
+        PyObject *obj = PyObject_CallFunctionObjArgs(exc, NULL);
+        if (!obj)
+            return;
+        PyErr_SetObject(exc, obj);
+        Py_DECREF(obj);
+    } else {
+        PyErr_SetObject((PyObject *)Py_TYPE(exc), exc);
+    }
 }
 
 static void CPy_Reraise(void) {

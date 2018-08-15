@@ -48,13 +48,17 @@ from typing import List
 def count(n: int) -> None:
     for i in range(n):
         print(i)
+def count_between(n: int, k: int) -> None:
+    for i in range(n, k):
+        print(i)
 def list_iter(l: List[int]) -> None:
     for i in l:
         print(i)
 [file driver.py]
-from native import count, list_iter
+from native import count, list_iter, count_between
 count(5)
 list_iter(list(reversed(range(5))))
+count_between(11, 15)
 [out]
 0
 1
@@ -66,6 +70,10 @@ list_iter(list(reversed(range(5))))
 2
 1
 0
+11
+12
+13
+14
 
 [case testLoopElse]
 from typing import Iterator
@@ -300,14 +308,27 @@ False
 True
 
 [case testTuple]
+from typing import List, Optional, Tuple
 from typing import Tuple
 def f(x: Tuple[int, int]) -> Tuple[int,int]:
     return x
+
+def lurr(x: List[Optional[Tuple[int, str]]]) -> object:
+    return x[0]
 [file driver.py]
-from native import f
+from native import f, lurr
 print(f((1,2)))
+print(lurr([(1, '2')]))
+try:
+    print(lurr([(1, 2)]))
+except TypeError:
+    pass
+else:
+    assert False
+
 [out]
 (1, 2)
+(1, '2')
 
 [case testEmptyTupleFunctionWithTupleType]
 from typing import Tuple
@@ -436,22 +457,30 @@ a = A()
 assert a.f(2) == (5, "test")
 assert a.f(s = "123", x = -2) == (1, "123")
 
-[case testPycall]
+[case testImports]
 import testmodule
 
 def f(x: int) -> int:
     return testmodule.factorial(5)
+def g(x: int) -> int:
+    from welp import foo
+    return foo(x)
 [file testmodule.py]
 def factorial(x: int) -> int:
     if x == 0:
         return 1
     else:
         return x * factorial(x-1)
+[file welp.py]
+def foo(x: int) -> int:
+    return x
 [file driver.py]
-from native import f
+from native import f, g
 print(f(5))
+print(g(5))
 [out]
 120
+5
 
 [case testBuiltins]
 y = 10
@@ -635,20 +664,46 @@ except KeyError as e:
 1
 'pop from an empty set'
 
+[case testDictStuff]
+from typing import Dict, Any
+from defaultdictwrap import make_dict
 
-[case testDictUpdate]
-from typing import Dict
 def f(x: int) -> int:
     dict1 = {} # type: Dict[int, int]
     dict1[1] = 1
     dict2 = {} # type: Dict[int, int]
     dict2[x] = 2
     dict1.update(dict2)
+
+    l = [(5, 2)]  # type: Any
+    dict1.update(l)
+    d2 = {6: 4}  # type: Any
+    dict1.update(d2)
+
     return dict1[1]
+
+def g() -> int:
+    d = make_dict()
+    d['a'] = 10
+    d['a'] += 10
+    d['b'] += 10
+    l = [('c', 2)]  # type: Any
+    d.update(l)
+    d2 = {'d': 4}  # type: Any
+    d.update(d2)
+    return d['a'] + d['b']
+
+[file defaultdictwrap.py]
+from typing import Dict
+from collections import defaultdict  # type: ignore
+def make_dict() -> Dict[str, int]:
+    return defaultdict(int)
+
 [file driver.py]
-from native import f
+from native import f, g
 assert f(1) == 2
 assert f(2) == 1
+assert g() == 30
 
 [case testPyMethodCall]
 from typing import List
@@ -1438,7 +1493,7 @@ big_int()
 2147483647
 
 [case testForIterable]
-from typing import Iterable, Dict, Any
+from typing import Iterable, Dict, Any, Tuple
 def iterate_over_any(a: Any) -> None:
     for element in a:
         print(element)
@@ -1475,8 +1530,12 @@ def sum_over_two_values(d: Dict[int, int]) -> int:
         i = i + 1
     return s
 
+def iterate_over_tuple(iterable: Tuple[int, int, int]) -> None:
+    for element in iterable:
+        print(element)
+
 [file driver.py]
-from native import iterate_over_any, iterate_over_iterable, iterate_and_delete, sum_over_values, sum_over_even_values, sum_over_two_values
+from native import iterate_over_any, iterate_over_iterable, iterate_and_delete, sum_over_values, sum_over_even_values, sum_over_two_values, iterate_over_tuple
 import traceback
 def broken_generator(n):
     num = 0
@@ -1502,6 +1561,8 @@ try:
     iterate_and_delete(d)
 except RuntimeError:
     traceback.print_exc()
+
+iterate_over_tuple((1, 2, 3))
 [out]
 Traceback (most recent call last):
   File "tmp/driver.py", line 16, in <module>
@@ -1531,6 +1592,9 @@ RuntimeError: dictionary changed size during iteration
 2
 3
 4
+1
+2
+3
 
 [case testNeg]
 def neg(x: int) -> int:
@@ -2841,7 +2905,7 @@ from native import generator, ctx_manager
 T = TypeVar('T')
 U = TypeVar('U')
 
-def run_generator_and_throw(gen: Generator[T, None, U], 
+def run_generator_and_throw(gen: Generator[T, None, U],
                             num_times: int,
                             value: object = None,
                             traceback: object = None) -> Tuple[Sequence[T], U]:
