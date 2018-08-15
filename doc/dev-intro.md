@@ -6,15 +6,13 @@ Only a subset of Python is supported. If you try to compile
 something that is not supported, you are not likely to get a good
 error message.
 
-We aren't focused on feature completeness. Instead, we aim to support
-a Python subset that allows us to compile mypy for now.
+Here are some major things that aren't supported:
 
-Here are some major things that can't be compiled:
-
+* Unannotated functions
 * Functions that take `*args` or `**kwargs`
 * Decorated functions
 * Many dunder methods (only some work, such as `__init__` and `__eq__`)
-* Monkey patching
+* Monkey patching compiled functions or classes
 * Metaclasses
 * Async features
 * Enums
@@ -24,12 +22,17 @@ Here are some major things that can't be compiled:
 * Classes or functions that use type variables with value restrictions
 * Self types
 * TypedDicts
+* Named tuple defined using the class-based syntax
 * Complex numbers
 * Defining protocols
 * Defining overloaded functions
 * `# type: ignore`
-* Named tuple defined using the class-based syntax
 * `del name`
+
+We aren't focused on feature completeness right now. Instead, we aim
+to support a Python subset that is just good enough to compile
+mypy. We'll likely also add some features that aren't necessary for
+compiling mypy (as long as they are easy enough to implement).
 
 ## High-level Overview
 
