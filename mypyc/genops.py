@@ -1117,32 +1117,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         """
         func_reg = None  # type: Optional[Value]
         fitem = fn_info.fitem
-        if fn_info.is_decorated:
-            assert isinstance(fitem, FuncDef)
-            call_fn_ir = self.add_call_to_callable_class(blocks, sig, env, fn_info)
-
-            if class_name is None:
-                # If this is a decorated function (as opposed to a decorated class method), then
-                # add the decorated function to the environment if it is nested, or otherwise add
-                # it to the globals dictionary.
-                orig_func = self.instantiate_callable_class(fn_info)
-                decorated_func = self.load_decorated_func(fitem, orig_func)
-                if fn_info.is_nested:
-                    self.assign(self.get_func_target(fitem), decorated_func, fitem.line)
-                    func_reg = decorated_func
-                else:
-                    self.primitive_op(dict_set_item_op,
-                                      [self.load_globals_dict(),
-                                       self.load_static_unicode(fitem.name()), decorated_func],
-                                      decorated_func.line)
-
-                # Return the FuncIR for the decorated function.
-                func_ir = call_fn_ir
-            else:
-                # TODO: Implement decorated methods.
-                raise NotImplementedError
-
-        elif fn_info.is_nested:
+        if fn_info.is_nested:
             func_ir = self.add_call_to_callable_class(blocks, sig, env, fn_info)
             func_reg = self.instantiate_callable_class(fn_info)
         else:
@@ -2935,6 +2910,27 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def visit_decorator(self, dec: Decorator) -> None:
         func_ir, _ = self.gen_func_item(dec.func, dec.func.name(),
                                         self.mapper.fdef_to_sig(dec.func))
+        if class_name is None:
+            # If this is a decorated function (as opposed to a decorated class method), then
+            # add the decorated function to the environment if it is nested, or otherwise add
+            # it to the globals dictionary.
+            module, _, name = fullname.rpartition('.')
+            helper_name = '__mypyc_{}_helper__'.format(name)
+            fullname = '{}.{}'.format(module, helper_name)
+
+            orig_func = self.load_module_attr_by_fullname(fullname)
+            decorated_func = self.load_decorated_func(dec.func, orig_func)
+            if fn_info.is_nested:
+                self.assign(self.get_func_target(dec.func), decorated_func, dec.func.line)
+                func_reg = decorated_func
+            else:
+                self.primitive_op(dict_set_item_op,
+                                  [self.load_globals_dict(),
+                                   self.load_static_unicode(dec.func.name()), decorated_func],
+                                  decorated_func.line)
+        else:
+            # TODO: Implement decorated methods.
+            raise NotImplementedError
         self.functions.append(func_ir)
 
     def visit_del_stmt(self, o: DelStmt) -> None:
