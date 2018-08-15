@@ -45,7 +45,7 @@ from mypy.checkexpr import map_actuals_to_formals
 
 from mypyc.common import (
     ENV_ATTR_NAME, NEXT_LABEL_ATTR_NAME, TEMP_ATTR_NAME, LAMBDA_NAME,
-    MAX_SHORT_INT, TOP_LEVEL_NAME
+    MAX_SHORT_INT, TOP_LEVEL_NAME, decorator_helper_name
 )
 from mypyc.prebuildvisitor import PreBuildVisitor
 from mypyc.ops import (
@@ -402,7 +402,7 @@ class FuncInfo(object):
                  contains_nested: bool = False,
                  is_decorated: bool = False) -> None:
         self.fitem = fitem
-        self.name = name if not is_decorated else '__mypyc_{}_helper__'.format(name)
+        self.name = name if not is_decorated else decorator_helper_name(name)
         self.ns = namespace
         # Callable classes implement the '__call__' method, and are used to represent functions
         # that are nested inside of other functions.
@@ -698,6 +698,24 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         class_ir = self.mapper.type_to_ir[cdef.info]
         func_ir, _ = self.gen_func_item(fdef, name, class_ir.method_sig(name), cdef.name)
         self.functions.append(func_ir)
+
+        if self.is_decorated(fdef):
+            # Obtain the the function name in order to construct the name of the helper function.
+            _, _, name = fdef.fullname().rpartition('.')
+            helper_name = decorator_helper_name(name)
+
+            # Read the PyTypeObject representing the class, get the callable object representing
+            # the non-decorated method, and decorate it.
+            typ = self.load_native_type_object(cdef.fullname)
+            orig_func = self.py_get_attr(typ, helper_name, fdef.line)
+            decorated_func = self.load_decorated_func(fdef, orig_func)
+
+            # Set the callable object representing the decorated method as an attribute of the
+            # class.
+            class_ir.attributes[name] = decorated_func.type
+            self.primitive_op(py_setattr_op,
+                              [typ, self.load_static_unicode(name), decorated_func], fdef.line)
+
         if fdef.is_property:
             class_ir.properties[name] = func_ir
         else:
@@ -1090,7 +1108,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.enter(FuncInfo(fitem, name, self.gen_func_ns(),
                             is_nested, contains_nested, is_decorated))
 
-        if self.fn_info.is_nested or self.fn_info.is_decorated:
+        if self.fn_info.is_nested:
             self.setup_callable_class()
 
         # Functions that contain nested functions need an environment class to store variables that
@@ -1150,13 +1168,16 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         containing the instance of the corresponding callable class.
         """
         func_reg = None  # type: Optional[Value]
-        fitem = fn_info.fitem
         if fn_info.is_nested:
             func_ir = self.add_call_to_callable_class(blocks, sig, env, fn_info)
             func_reg = self.instantiate_callable_class(fn_info)
         else:
-            assert isinstance(fitem, FuncDef)
-            func_ir = FuncIR(self.mapper.func_to_decl[fitem], blocks, env)
+            assert isinstance(fn_info.fitem, FuncDef)
+            if fn_info.is_decorated:
+                func_decl = FuncDecl(fn_info.name, class_name, self.module_name, sig)
+                func_ir = FuncIR(func_decl, blocks, env)
+            else:
+                func_ir = FuncIR(self.mapper.func_to_decl[fn_info.fitem], blocks, env)
         return (func_ir, func_reg)
 
     def load_decorated_func(self, fdef: FuncDef, orig_func_reg: Value) -> Value:
@@ -1166,6 +1187,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         FuncDef and returns a register containing an instance of the callable class representing
         the decorated function.
         """
+        if not self.is_decorated(fdef):
+            # If there are no decorators associated with the function, then just return the
+            # original function.
+            return orig_func_reg
+
         decorators = self.fdefs_to_decorators[fdef]
         func_reg = orig_func_reg
         for d in reversed(decorators):
@@ -1758,6 +1784,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         """Is a type something other than just a class we've created?"""
         return typ.is_named_tuple or typ.is_newtype or typ.typeddict_type is not None
 
+    def is_decorated(self, fdef: FuncDef) -> bool:
+        return fdef in self.fdefs_to_decorators
+
     def is_free_variable(self, symbol: SymbolNode) -> bool:
         fitem = self.fn_info.fitem
         return fitem in self.free_variables and symbol in self.free_variables[fitem]
@@ -1771,10 +1800,12 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             assert desc.result_type is not None
             return self.add(PrimitiveOp([], desc, expr.line))
 
+        # If the expression is locally defined, then read the result from the corresponding
+        # assignment target and return it. Otherwise if the expression is a global, load it from
+        # the globals dictionary.
         if expr.kind == LDEF:
             # TODO: Behavior currently only defined for Var and FuncDef node types.
             return self.read(self.get_assignment_target(expr), expr.line)
-
         return self.load_global(expr)
 
     def is_module_member_expr(self, expr: MemberExpr) -> bool:
@@ -2933,29 +2964,31 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         handle_loop(loop_params)
 
     def visit_decorator(self, dec: Decorator) -> None:
-        func_ir, _ = self.gen_func_item(dec.func, dec.func.name(),
-                                        self.mapper.fdef_to_sig(dec.func))
-        if class_name is None:
-            # If this is a decorated function (as opposed to a decorated class method), then
-            # add the decorated function to the environment if it is nested, or otherwise add
-            # it to the globals dictionary.
-            module, _, name = fullname.rpartition('.')
-            helper_name = '__mypyc_{}_helper__'.format(name)
+        func_ir, func_reg = self.gen_func_item(dec.func, dec.func.name(),
+                                               self.mapper.fdef_to_sig(dec.func))
+
+        if dec.func in self.nested_fitems:
+            assert func_reg is not None
+            decorated_func = self.load_decorated_func(dec.func, func_reg)
+            self.assign(self.get_func_target(dec.func), decorated_func, dec.func.line)
+            func_reg = decorated_func
+        else:
+            # Obtain the the function name in order to construct the name of the helper function.
+            # The module name is later used to load the callable object representing the function.
+            module, _, name = dec.func.fullname().rpartition('.')
+            helper_name = decorator_helper_name(name)
             fullname = '{}.{}'.format(module, helper_name)
 
-            orig_func = self.load_module_attr_by_fullname(fullname)
+            # Load the callable object representing the non-decorated function, and decorate it.
+            orig_func = self.load_module_attr_by_fullname(fullname, dec.func.line)
             decorated_func = self.load_decorated_func(dec.func, orig_func)
-            if fn_info.is_nested:
-                self.assign(self.get_func_target(dec.func), decorated_func, dec.func.line)
-                func_reg = decorated_func
-            else:
-                self.primitive_op(dict_set_item_op,
-                                  [self.load_globals_dict(),
-                                   self.load_static_unicode(dec.func.name()), decorated_func],
-                                  decorated_func.line)
-        else:
-            # TODO: Implement decorated methods.
-            raise NotImplementedError
+
+            # Set the callable object representing the decorated function as a global.
+            self.primitive_op(dict_set_item_op,
+                              [self.load_globals_dict(),
+                               self.load_static_unicode(dec.func.name()), decorated_func],
+                              decorated_func.line)
+
         self.functions.append(func_ir)
 
     def visit_del_stmt(self, o: DelStmt) -> None:
@@ -3037,9 +3070,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         raise NotImplementedError
 
     def visit_complex_expr(self, o: ComplexExpr) -> Value:
-        raise NotImplementedError
-
-    def visit_ellipsis(self, o: EllipsisExpr) -> Value:
         raise NotImplementedError
 
     def visit_enum_call_expr(self, o: EnumCallExpr) -> Value:
@@ -3333,17 +3363,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                         base: Optional[Union[FuncInfo, ImplicitClass]] = None,
                         reassign: bool = True) -> None:
         fn_info = self.fn_info
-
-        # If the function is decorated, then the 'self' variable is already added to the
-        # environment and we do not want to re-add it a second time.
-        args = fn_info.fitem.arguments[1:] if fn_info.is_decorated else fn_info.fitem.arguments
         if local:
-            for arg in args:
+            for arg in fn_info.fitem.arguments:
                 assert arg.variable.type, "Function argument missing type"
                 rtype = self.type_to_rtype(arg.variable.type)
                 self.environment.add_local_reg(arg.variable, rtype, is_arg=True)
         else:
-            for arg in args:
+            for arg in fn_info.fitem.arguments:
                 assert arg.variable.type, "Function argument missing type"
                 if self.is_free_variable(arg.variable) or fn_info.is_generator:
                     rtype = self.type_to_rtype(arg.variable.type)
@@ -3386,12 +3412,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Define the actual callable class ClassIR, and set its environment to point at the
         # previously defined environment class.
         callable_class_ir = ClassIR(name, self.module_name, is_generated=True)
-
-        if self.fn_info.is_nested:
-            # Only set the environment of the callable class if the function it represents is a
-            # nested function. (Note that decorator functions can also generate callable classes.)
-            callable_class_ir.attributes[ENV_ATTR_NAME] = RInstance(self.fn_infos[-2].env_class)
-
+        callable_class_ir.attributes[ENV_ATTR_NAME] = RInstance(self.fn_infos[-2].env_class)
         callable_class_ir.mro = [callable_class_ir]
         self.fn_info.callable_class = ImplicitClass(callable_class_ir)
         self.classes.append(callable_class_ir)
@@ -3413,10 +3434,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         function. Note that a 'self' parameter is added to its list of arguments, as the nested
         function becomes a class method.
         """
-        if not any(arg.name == 'self' for arg in sig.args):
-            # Add a 'self' argument to the signature if it does not contain one already.
-            sig.args = (RuntimeArg('self', object_rprimitive),) + sig.args
-
+        sig = FuncSignature((RuntimeArg('self', object_rprimitive),) + sig.args, sig.ret_type)
         call_fn_decl = FuncDecl('__call__', fn_info.callable_class.ir.name, self.module_name, sig)
         call_fn_ir = FuncIR(call_fn_decl, blocks, env)
         fn_info.callable_class.ir.methods['__call__'] = call_fn_ir
@@ -3429,13 +3447,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         function encapsulating the function being turned into a callable class.
         """
         fitem = fn_info.fitem
-        func_reg = self.add(Call(fn_info.callable_class.ir.ctor, [], fitem.line))
 
-        # Callable classes are instantiated for nested functions and decorated functions. If it is
-        # not nested, then there is no need to set the current environment register for the
-        # callable class and we can simply return.
-        if not fn_info.is_nested:
-            return func_reg
+        func_reg = self.add(Call(fn_info.callable_class.ir.ctor, [], fitem.line))
 
         # Set the callable class' environment attribute to point at the environment class
         # defined in the callable class' immediate outer scope. Note that there are three possible

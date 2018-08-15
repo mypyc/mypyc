@@ -3009,3 +3009,46 @@ d
 Exited
 ***
 Exited
+
+[case testDecoratorsMethods]
+from typing import Generator
+from contextlib import contextmanager
+from decorators import a
+
+class A:
+    @a
+    def foo(self) -> None:
+        print('foo')
+
+    @contextmanager
+    def generator(self) -> Generator[int, None, None]:
+        try:
+            print('contextmanager: entering')
+            yield 0
+        finally:
+            print('contextmanager: exited')
+
+[file decorators.py]
+from typing import Any, Callable
+
+def a(f: Callable[[Any], None]) -> Callable[[Any], None]:
+    def g(a: Any) -> None:
+        print('Entering')
+        f(a)
+        print('Exited')
+    return g
+
+[file driver.py]
+from native import A
+
+A().foo()
+with A().generator() as g:
+    print('hello!')
+
+[out]
+Entering
+foo
+Exited
+contextmanager: entering
+hello!
+contextmanager: exited
