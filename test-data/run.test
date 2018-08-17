@@ -315,12 +315,23 @@ def f(x: Tuple[int, int]) -> Tuple[int,int]:
 
 def lurr(x: List[Optional[Tuple[int, str]]]) -> object:
     return x[0]
+
+def asdf(x: Tuple[int, str]) -> None:
+    pass
+
 [file driver.py]
-from native import f, lurr
+from native import f, lurr, asdf
 print(f((1,2)))
 print(lurr([(1, '2')]))
 try:
     print(lurr([(1, 2)]))
+except TypeError:
+    pass
+else:
+    assert False
+
+try:
+    asdf((1, 2))
 except TypeError:
     pass
 else:
@@ -766,8 +777,16 @@ def r2() -> None:
 
 def q2() -> None:
     raise Exception
+
+class A:
+    def __init__(self) -> None:
+        raise Exception
+
+def hey() -> None:
+    A()
+
 [file driver.py]
-from native import f, r1, r2
+from native import f, r1, r2, hey
 import traceback
 try:
     f([])
@@ -779,6 +798,10 @@ except Exception:
     traceback.print_exc()
 try:
     r2()
+except Exception:
+    traceback.print_exc()
+try:
+    hey()
 except Exception:
     traceback.print_exc()
 [out]
@@ -804,6 +827,14 @@ Traceback (most recent call last):
   File "tmp/py/native.py", line 16, in r2
     q2()
   File "tmp/py/native.py", line 19, in q2
+    raise Exception
+Exception
+Traceback (most recent call last):
+  File "tmp/driver.py", line 16, in <module>
+    hey()
+  File "tmp/py/native.py", line 26, in hey
+    A()
+  File "tmp/py/native.py", line 23, in __init__
     raise Exception
 Exception
 
@@ -1877,6 +1908,39 @@ assert eins(4.0) == 'eins?'
 assert call_other_inner_func(5) == 21
 assert second() == 'second: normal function'
 assert third() == 'third: normal function'
+
+[case testOverloads]
+from typing import overload, Union, Tuple
+
+@overload
+def foo(x: int) -> int: ...
+
+@overload
+def foo(x: str) -> str: ...
+
+def foo(x: Union[int, str]) -> Union[int, str]:
+    return x
+
+class A:
+    @overload
+    def foo(self, x: int) -> int: ...
+
+    @overload
+    def foo(self, x: str) -> str: ...
+
+    def foo(self, x: Union[int, str]) -> Union[int, str]:
+        return x
+
+def call1() -> Tuple[int, str]:
+    return (foo(10), foo('10'))
+def call2() -> Tuple[int, str]:
+    x = A()
+    return (x.foo(10), x.foo('10'))
+
+[file driver.py]
+from native import *
+assert call1() == (10, '10')
+assert call2() == (10, '10')
 
 [case testControlFlowExprs]
 from typing import Tuple
@@ -2959,8 +3023,8 @@ caught exception with value some other string
 exception
 goodbye
 
-[case testDecorators]
-from typing import Generator, Callable
+[case testDecorators1]
+from typing import Generator, Callable, Iterator
 from contextlib import contextmanager
 
 def a(f: Callable[[], None]) -> Callable[[], None]:
@@ -2978,12 +3042,26 @@ def b(f: Callable[[], None]) -> Callable[[], None]:
     return g
 
 @contextmanager
-def foo() -> Generator:
+def foo() -> Iterator[int]:
     try:
         print('started')
         yield 0
     finally:
         print('finished')
+
+@contextmanager
+def catch() -> Iterator[None]:
+    try:
+        print('started')
+        yield
+    except IndexError:
+        print('index')
+        raise
+    except Exception:
+        print('lol')
+
+def thing() -> None:
+    c()
 
 @a
 @b
@@ -2995,13 +3073,26 @@ def c() -> None:
     print('c')
     d()
 
+def hm() -> None:
+    x = [1]
+    with catch():
+        x[2]
+
 [file driver.py]
-from native import foo, c
+from native import foo, c, thing, hm
 
 with foo() as f:
     print('hello')
 
 c()
+thing()
+print('==')
+try:
+    hm()
+except IndexError:
+    pass
+else:
+    assert False
 
 [out]
 started
@@ -3017,27 +3108,23 @@ d
 Exited
 ***
 Exited
+Entering
+***
+c
+Entering
+***
+d
+***
+Exited
+***
+Exited
+==
+started
+index
 
 [case testDecoratorsMethods]
-from typing import Generator
+from typing import Any, Callable, Iterator
 from contextlib import contextmanager
-from decorators import a
-
-class A:
-    @a
-    def foo(self) -> None:
-        print('foo')
-
-    @contextmanager
-    def generator(self) -> Generator[int, None, None]:
-        try:
-            print('contextmanager: entering')
-            yield 0
-        finally:
-            print('contextmanager: exited')
-
-[file decorators.py]
-from typing import Any, Callable
 
 def a(f: Callable[[Any], None]) -> Callable[[Any], None]:
     def g(a: Any) -> None:
@@ -3046,17 +3133,56 @@ def a(f: Callable[[Any], None]) -> Callable[[Any], None]:
         print('Exited')
     return g
 
-[file driver.py]
-from native import A
+class A:
+    @a
+    def foo(self) -> None:
+        print('foo')
 
-A().foo()
+    @contextmanager
+    def generator(self) -> Iterator[int]:
+        try:
+            print('contextmanager: entering')
+            yield 0
+        finally:
+            print('contextmanager: exited')
+
+def inside() -> None:
+    with A().generator() as g:
+        print('hello!')
+
 with A().generator() as g:
     print('hello!')
 
+def lol() -> None:
+    with A().generator() as g:
+        raise Exception
+
+[file driver.py]
+from native import A, lol
+
+A.foo(A())
+A().foo()
+with A().generator() as g:
+    print('hello!')
+try:
+    lol()
+except:
+    pass
+else:
+    assert False
+
 [out]
+contextmanager: entering
+hello!
+contextmanager: exited
+Entering
+foo
+Exited
 Entering
 foo
 Exited
 contextmanager: entering
 hello!
+contextmanager: exited
+contextmanager: entering
 contextmanager: exited

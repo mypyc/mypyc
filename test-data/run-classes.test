@@ -520,7 +520,6 @@ yo!
 3
 yo!
 
--- broken - we need to handle the layout conflicts for it to work
 [case testSubclassException]
 class Failure(Exception):
     def __init__(self, x: int) -> None:
@@ -544,6 +543,25 @@ except Failure as e:
     assert str(e) == '10'
     assert e.x == 10
 heyo()
+
+[case testSubclassDict]
+from typing import Dict
+class WelpDict(Dict[str, int]):
+    def __init__(self) -> None:
+        self.emarhavil = 3
+    def foo(self) -> int:
+        return self.emarhavil
+
+def welp() -> int:
+    x = WelpDict()
+    x['a'] = 10
+    x['b'] = 15
+    x.emarhavil = 5
+    return x['a'] + x['b'] + x.emarhavil + x.foo()
+
+[file driver.py]
+from native import welp
+assert welp() == 35
 
 [case testSubclassPy]
 from b import B, V
@@ -680,3 +698,26 @@ assert b.y == 'rofl'
 assert b.z is None
 # N.B: this doesn't match cpython
 assert not hasattr(b, 'bogus')
+
+[case testMethodOverrideDefault]
+class A:
+    def foo(self, x: int) -> None:
+        pass
+class B(A):
+    def foo(self, x: int, y: int = 10) -> None:
+        print(x, y)
+
+def a(x: A) -> None:
+    x.foo(1)
+def b(x: B) -> None:
+    x.foo(2)
+    x.foo(2, 3)
+
+[file driver.py]
+from native import B, a, b
+a(B())
+b(B())
+[out]
+1 10
+2 10
+2 3

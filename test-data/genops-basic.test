@@ -2094,12 +2094,12 @@ def DerivedProperty.value(self):
 L0:
     r0 = self._incrementer
     return r0
-def DerivedProperty.value__BaseProperty_glue(self):
-    self :: DerivedProperty
+def DerivedProperty.value__BaseProperty_glue(__mypyc_self__):
+    __mypyc_self__ :: DerivedProperty
     r0 :: int
     r1 :: object
 L0:
-    r0 = self.value
+    r0 = __mypyc_self__.value
     r1 = box(int, r0)
     return r1
 def DerivedProperty.bad_value(self):
@@ -2127,10 +2127,10 @@ L0:
     r5 = unbox(int, r4)
     r6 = DerivedProperty(r0, r5)
     return r6
-def DerivedProperty.next__BaseProperty_glue(self):
-    self, r0 :: DerivedProperty
+def DerivedProperty.next__BaseProperty_glue(__mypyc_self__):
+    __mypyc_self__, r0 :: DerivedProperty
 L0:
-    r0 = self.next
+    r0 = __mypyc_self__.next
     return r0
 def DerivedProperty.__init__(self, incr_func, value):
     self :: DerivedProperty
@@ -2168,15 +2168,15 @@ L0:
     r9 = unbox(int, r8)
     r10 = AgainProperty(r0, r9)
     return r10
-def AgainProperty.next__DerivedProperty_glue(self):
-    self, r0 :: AgainProperty
+def AgainProperty.next__DerivedProperty_glue(__mypyc_self__):
+    __mypyc_self__, r0 :: AgainProperty
 L0:
-    r0 = self.next
+    r0 = __mypyc_self__.next
     return r0
-def AgainProperty.next__BaseProperty_glue(self):
-    self, r0 :: AgainProperty
+def AgainProperty.next__BaseProperty_glue(__mypyc_self__):
+    __mypyc_self__, r0 :: AgainProperty
 L0:
-    r0 = self.next
+    r0 = __mypyc_self__.next
     return r0
 def AgainProperty.bad_value(self):
     self :: AgainProperty
@@ -2184,20 +2184,20 @@ def AgainProperty.bad_value(self):
 L0:
     r0 = self._incrementer
     return r0
-def AgainProperty.bad_value__DerivedProperty_glue(self):
-    self :: AgainProperty
+def AgainProperty.bad_value__DerivedProperty_glue(__mypyc_self__):
+    __mypyc_self__ :: AgainProperty
     r0 :: int
     r1 :: object
 L0:
-    r0 = self.bad_value
+    r0 = __mypyc_self__.bad_value
     r1 = box(int, r0)
     return r1
-def AgainProperty.bad_value__BaseProperty_glue(self):
-    self :: AgainProperty
+def AgainProperty.bad_value__BaseProperty_glue(__mypyc_self__):
+    __mypyc_self__ :: AgainProperty
     r0 :: int
     r1 :: object
 L0:
-    r0 = self.bad_value
+    r0 = __mypyc_self__.bad_value
     r1 = box(int, r0)
     return r1
 
@@ -2238,10 +2238,10 @@ def DerivingObject.this(self):
     self :: DerivingObject
 L0:
     return self
-def DerivingObject.this__SubclassedTrait_glue(self):
-    self, r0 :: DerivingObject
+def DerivingObject.this__SubclassedTrait_glue(__mypyc_self__):
+    __mypyc_self__, r0 :: DerivingObject
 L0:
-    r0 = self.this
+    r0 = __mypyc_self__.this
     return r0
 def DerivingObject.boxed(self):
     self :: DerivingObject
@@ -2249,12 +2249,12 @@ def DerivingObject.boxed(self):
 L0:
     r0 = 5
     return r0
-def DerivingObject.boxed__SubclassedTrait_glue(self):
-    self :: DerivingObject
+def DerivingObject.boxed__SubclassedTrait_glue(__mypyc_self__):
+    __mypyc_self__ :: DerivingObject
     r0 :: int
     r1 :: object
 L0:
-    r0 = self.boxed
+    r0 = __mypyc_self__.boxed
     r1 = box(int, r0)
     return r1
 
@@ -2551,8 +2551,22 @@ def c() -> None:
     d()
 
 [out]
-def g_a_obj.__call__(self):
-    self :: g_a_obj
+def g_a_obj.__get__(__mypyc_self__, instance, owner):
+    __mypyc_self__, instance, owner :: object
+    r0 :: None
+    r1 :: bool
+    r2 :: object
+L0:
+    r0 = None
+    r1 = instance is r0
+    if r1 goto L1 else goto L2 :: bool
+L1:
+    return __mypyc_self__
+L2:
+    r2 = method_new __mypyc_self__, instance
+    return r2
+def g_a_obj.__call__(__mypyc_self__):
+    __mypyc_self__ :: g_a_obj
     r0 :: a__env
     g, r1 :: object
     r2 :: str
@@ -2568,7 +2582,7 @@ def g_a_obj.__call__(self):
     r14, r15 :: object
     r16, r17 :: None
 L0:
-    r0 = self.__mypyc_env__
+    r0 = __mypyc_self__.__mypyc_env__
     r1 = r0.g
     g = r1
     r2 = unicode_3 :: static  ('Entering')
@@ -2603,8 +2617,22 @@ L0:
     r0.g = r2; r4 = is_error
     r5 = r0.g
     return r5
-def g_b_obj.__call__(self):
-    self :: g_b_obj
+def g_b_obj.__get__(__mypyc_self__, instance, owner):
+    __mypyc_self__, instance, owner :: object
+    r0 :: None
+    r1 :: bool
+    r2 :: object
+L0:
+    r0 = None
+    r1 = instance is r0
+    if r1 goto L1 else goto L2 :: bool
+L1:
+    return __mypyc_self__
+L2:
+    r2 = method_new __mypyc_self__, instance
+    return r2
+def g_b_obj.__call__(__mypyc_self__):
+    __mypyc_self__ :: g_b_obj
     r0 :: b__env
     g, r1 :: object
     r2 :: str
@@ -2620,7 +2648,7 @@ def g_b_obj.__call__(self):
     r14, r15 :: object
     r16, r17 :: None
 L0:
-    r0 = self.__mypyc_env__
+    r0 = __mypyc_self__.__mypyc_env__
     r1 = r0.g
     g = r1
     r2 = unicode_6 :: static  ('---')
@@ -2655,8 +2683,22 @@ L0:
     r0.g = r2; r4 = is_error
     r5 = r0.g
     return r5
-def __mypyc_d_decorator_helper_____mypyc_c_decorator_helper___obj.__call__(self):
-    self :: __mypyc_d_decorator_helper_____mypyc_c_decorator_helper___obj
+def __mypyc_d_decorator_helper_____mypyc_c_decorator_helper___obj.__get__(__mypyc_self__, instance, owner):
+    __mypyc_self__, instance, owner :: object
+    r0 :: None
+    r1 :: bool
+    r2 :: object
+L0:
+    r0 = None
+    r1 = instance is r0
+    if r1 goto L1 else goto L2 :: bool
+L1:
+    return __mypyc_self__
+L2:
+    r2 = method_new __mypyc_self__, instance
+    return r2
+def __mypyc_d_decorator_helper_____mypyc_c_decorator_helper___obj.__call__(__mypyc_self__):
+    __mypyc_self__ :: __mypyc_d_decorator_helper_____mypyc_c_decorator_helper___obj
     r0 :: __mypyc_c_decorator_helper____env
     d, r1 :: object
     r2 :: str
@@ -2665,7 +2707,7 @@ def __mypyc_d_decorator_helper_____mypyc_c_decorator_helper___obj.__call__(self)
     r5, r6 :: object
     r7, r8 :: None
 L0:
-    r0 = self.__mypyc_env__
+    r0 = __mypyc_self__.__mypyc_env__
     r1 = r0.d
     d = r1
     r2 = unicode_7 :: static  ('d')
@@ -2796,8 +2838,22 @@ def a(f: Callable[[], None]) -> Callable[[], None]:
     return g
 
 [out]
-def g_a_obj.__call__(self):
-    self :: g_a_obj
+def g_a_obj.__get__(__mypyc_self__, instance, owner):
+    __mypyc_self__, instance, owner :: object
+    r0 :: None
+    r1 :: bool
+    r2 :: object
+L0:
+    r0 = None
+    r1 = instance is r0
+    if r1 goto L1 else goto L2 :: bool
+L1:
+    return __mypyc_self__
+L2:
+    r2 = method_new __mypyc_self__, instance
+    return r2
+def g_a_obj.__call__(__mypyc_self__):
+    __mypyc_self__ :: g_a_obj
     r0 :: a__env
     g, r1 :: object
     r2 :: str
@@ -2813,7 +2869,7 @@ def g_a_obj.__call__(self):
     r14, r15 :: object
     r16, r17 :: None
 L0:
-    r0 = self.__mypyc_env__
+    r0 = __mypyc_self__.__mypyc_env__
     r1 = r0.g
     g = r1
     r2 = unicode_3 :: static  ('Entering')

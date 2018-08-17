@@ -45,7 +45,7 @@ from mypy.checkexpr import map_actuals_to_formals
 
 from mypyc.common import (
     ENV_ATTR_NAME, NEXT_LABEL_ATTR_NAME, TEMP_ATTR_NAME, LAMBDA_NAME,
-    MAX_SHORT_INT, TOP_LEVEL_NAME, decorator_helper_name
+    MAX_SHORT_INT, TOP_LEVEL_NAME, SELF_NAME, decorator_helper_name
 )
 from mypyc.prebuildvisitor import PreBuildVisitor
 from mypyc.ops import (
@@ -73,7 +73,7 @@ from mypyc.ops_misc import (
     none_op, true_op, false_op, iter_op, next_op, py_getattr_op, py_setattr_op, py_delattr_op,
     py_call_op, py_call_with_kwargs_op, py_method_call_op,
     fast_isinstance_op, bool_op, new_slice_op,
-    type_op, pytype_from_template_op, import_op, ellipsis_op,
+    type_op, pytype_from_template_op, import_op, ellipsis_op, method_new_op,
 )
 from mypyc.ops_exc import (
     no_err_occurred_op, raise_exception_op, raise_exception_with_tb_op, reraise_exception_op,
@@ -113,10 +113,8 @@ def build_ir(modules: List[MypyFile],
     # Collect all the functions also
     for module in modules:
         for node in module.defs:
-            if isinstance(node, FuncDef):
-                prepare_func_def(module.fullname(), None, node, mapper)
-            elif isinstance(node, Decorator):
-                prepare_func_def(module.fullname(), None, node.func, mapper)
+            if isinstance(node, (FuncDef, Decorator, OverloadedFuncDef)):
+                prepare_func_def(module.fullname(), None, get_func_def(node), mapper)
             # TODO: what else?
 
     # Generate IR for all modules.
@@ -151,6 +149,15 @@ def is_trait(cdef: ClassDef) -> bool:
                if isinstance(d, NameExpr))
 
 
+def get_func_def(op: Union[FuncDef, Decorator, OverloadedFuncDef]) -> FuncDef:
+    if isinstance(op, OverloadedFuncDef):
+        assert op.impl
+        op = op.impl
+    if isinstance(op, Decorator):
+        op = op.func
+    return op
+
+
 def specialize_parent_vtable(cls: ClassIR, parent: ClassIR) -> VTableEntries:
     """Generate the part of a vtable corresponding to a parent class or trait"""
     updated = []
@@ -172,7 +179,8 @@ def specialize_parent_vtable(cls: ClassIR, parent: ClassIR) -> VTableEntries:
                                          cls.glue_methods[(entry.cls, method.name)])
             elif parent.is_trait:
                 assert cls.vtable is not None
-                entry = cls.vtable_entries[cls.vtable[entry.name]]
+                if entry.name in cls.vtable:
+                    entry = cls.vtable_entries[cls.vtable[entry.name]]
         else:
             # If it is an attribute from a trait, we need to find out real class it got
             # mixed in at and point to that.
@@ -210,6 +218,8 @@ def compute_vtable(cls: ClassIR) -> None:
         entries.append(VTableAttr(cls, attr, is_setter=False))
         entries.append(VTableAttr(cls, attr, is_setter=True))
 
+    all_traits = [t for t in cls.mro if t.is_trait]
+
     for t in [cls] + cls.traits:
         for fn in itertools.chain(t.properties.values(), t.methods.values()):
             # TODO: don't generate a new entry when we overload without changing the type
@@ -218,7 +228,6 @@ def compute_vtable(cls: ClassIR) -> None:
                 entries.append(VTableMethod(t, fn.name, fn))
 
     # Compute vtables for all of the traits that the class implements
-    all_traits = [t for t in cls.mro if t.is_trait]
     if not cls.is_trait:
         for trait in all_traits:
             compute_vtable(trait)
@@ -237,7 +246,10 @@ class Mapper:
         # Maps integer, float, and unicode literals to a static name
         self.literals = {}  # type: LiteralsMap
 
-    def type_to_rtype(self, typ: Type) -> RType:
+    def type_to_rtype(self, typ: Optional[Type]) -> RType:
+        if typ is None:
+            return object_rprimitive
+
         if isinstance(typ, Instance):
             if typ.type.fullname() == 'builtins.int':
                 return int_rprimitive
@@ -279,8 +291,7 @@ class Mapper:
             return object_rprimitive
         elif isinstance(typ, TypeVarType):
             # Erase type variable to upper bound.
-            # TODO: Erase to object if object has value restriction -- or union (once supported)?
-            assert not typ.values, 'TypeVar with value restriction not supported'
+            # TODO: Erase to union if object has value restriction?
             return self.type_to_rtype(typ.upper_bound)
         elif isinstance(typ, PartialType):
             assert typ.var.type is not None
@@ -331,6 +342,21 @@ def prepare_func_def(module_name: str, class_name: Optional[str],
     return decl
 
 
+def prepare_method_def(ir: ClassIR, module_name: str, cdef: ClassDef, mapper: Mapper,
+                       node: Union[FuncDef, Decorator]) -> None:
+    if isinstance(node, FuncDef):
+        ir.method_decls[node.name()] = prepare_func_def(module_name, cdef.name, node, mapper)
+    elif isinstance(node, Decorator):
+        # TODO: do something about abstract methods here. Currently, they are handled just like
+        # normal methods.
+        decl = prepare_func_def(module_name, cdef.name, node.func, mapper)
+        if not node.decorators:
+            ir.method_decls[node.name()] = decl
+        if node.func.is_property:
+            assert node.func.type
+            ir.property_types[node.name()] = decl.sig.ret_type
+
+
 def prepare_class_def(module_name: str, cdef: ClassDef, mapper: Mapper) -> None:
     ir = mapper.type_to_ir[cdef.info]
     info = cdef.info
@@ -339,25 +365,25 @@ def prepare_class_def(module_name: str, cdef: ClassDef, mapper: Mapper) -> None:
             assert node.node.type, "Class member missing type"
             if not node.node.is_classvar and name != '__slots__':
                 ir.attributes[name] = mapper.type_to_rtype(node.node.type)
-        elif isinstance(node.node, FuncDef):
-            ir.method_decls[name] = prepare_func_def(module_name, cdef.name, node.node, mapper)
-        elif isinstance(node.node, Decorator):
-            # TODO: do something about abstract methods here. Currently, they are handled just like
-            # normal methods.
-            decl = prepare_func_def(module_name, cdef.name, node.node.func, mapper)
-            ir.method_decls[name] = decl
-            if node.node.func.is_property:
-                assert node.node.func.type
-                ir.property_types[name] = decl.sig.ret_type
+        elif isinstance(node.node, (FuncDef, Decorator)):
+            prepare_method_def(ir, module_name, cdef, mapper, node.node)
+        elif isinstance(node.node, OverloadedFuncDef):
+            assert node.node.impl
+            prepare_method_def(ir, module_name, cdef, mapper, node.node.impl)
 
-    # Special case exceptions
+    # Special case exceptions and dicts
+    # XXX: How do we handle *other* things??
     if info.bases and any(cls.fullname() == 'builtins.Exception' for cls in info.mro):
-        ir.is_exception = True
+        ir.builtin_base = 'PyBaseExceptionObject'
+    if info.bases and any(cls.fullname() == 'builtins.dict' for cls in info.mro):
+        ir.builtin_base = 'PyDictObject'
+
+    if ir.builtin_base:
         ir.attributes.clear()
 
     # Set up a constructor decl
     init_node = cdef.info['__init__'].node
-    if not ir.is_trait and not ir.is_exception and isinstance(init_node, FuncDef):
+    if not ir.is_trait and not ir.builtin_base and isinstance(init_node, FuncDef):
         init_sig = mapper.fdef_to_sig(init_node)
         ctor_sig = FuncSignature(init_sig.args[1:], RInstance(ir))
         ir.ctor = FuncDecl(cdef.name, None, module_name, ctor_sig)
@@ -700,7 +726,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def visit_method(self, cdef: ClassDef, fdef: FuncDef) -> None:
         name = fdef.name()
         class_ir = self.mapper.type_to_ir[cdef.info]
-        func_ir, _ = self.gen_func_item(fdef, name, class_ir.method_sig(name), cdef.name)
+        func_ir, _ = self.gen_func_item(fdef, name, self.mapper.fdef_to_sig(fdef), cdef.name)
         self.functions.append(func_ir)
 
         if self.is_decorated(fdef):
@@ -765,7 +791,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def generate_attr_defaults(self, cdef: ClassDef) -> None:
         """Generate an initialization method for default attr values (from class vars)"""
         cls = self.mapper.type_to_ir[cdef.info]
-        if cls.is_exception:
+        if cls.builtin_base:
             return
 
         # Pull out all assignments in classes in the mro so we can initialize them
@@ -790,7 +816,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.enter(FuncInfo())
         self.ret_types[-1] = bool_rprimitive
 
-        rt_args = (RuntimeArg('self', RInstance(cls)),)
+        rt_args = (RuntimeArg(SELF_NAME, RInstance(cls)),)
         self_var = self.read(self.add_self_to_env(cls), -1)
 
         for stmt in default_assignments:
@@ -826,12 +852,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.allocate_class(cdef)
 
         for stmt in cdef.defs.body:
-            if isinstance(stmt, FuncDef):
+            if isinstance(stmt, (FuncDef, Decorator, OverloadedFuncDef)):
                 with self.catch_errors(stmt.line):
-                    self.visit_method(cdef, stmt)
-            elif isinstance(stmt, Decorator):
-                with self.catch_errors(stmt.line):
-                    self.visit_method(cdef, stmt.func)
+                    self.visit_method(cdef, get_func_def(stmt))
             elif isinstance(stmt, PassStmt):
                 continue
             elif isinstance(stmt, AssignmentStmt):
@@ -970,12 +993,15 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         rt_args = (RuntimeArg(sig.args[0].name, RInstance(cls)),) + sig.args[1:]
 
+        # TODO: could kw only arguments get shuffled?
         # The environment operates on Vars, so we make some up
         fake_vars = [(Var(arg.name), arg.type) for arg in rt_args]
-        args = [self.read(self.environment.add_local_reg(var, type, is_arg=True), line)
-                for var, type in fake_vars]  # type: List[Value]
+        args_opt = [self.read(self.environment.add_local_reg(var, type, is_arg=True), line)
+                    for var, type in fake_vars]  # type: List[Optional[Value]]
+        args_opt += [None] * (len(target.sig.args) - len(args_opt))
         self.ret_types[-1] = sig.ret_type
 
+        args = self.missing_args_to_error_values(args_opt, target.sig)
         args = self.coerce_native_call_args(args, target.sig, line)
         retval = self.add(MethodCall(args[0], target.name, args[1:], line))
         retval = self.coerce(retval, sig.ret_type, line)
@@ -995,7 +1021,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         Further, instead of a method call, an attribute get is performed."""
         self.enter(FuncInfo())
 
-        rt_arg = RuntimeArg('self', RInstance(cls))
+        rt_arg = RuntimeArg(SELF_NAME, RInstance(cls))
         arg = self.read(self.add_self_to_env(cls), line)
         self.ret_types[-1] = sig.ret_type
 
@@ -1176,6 +1202,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         func_reg = None  # type: Optional[Value]
         if fn_info.is_nested:
             func_ir = self.add_call_to_callable_class(blocks, sig, env, fn_info)
+            self.add_get_to_callable_class(fn_info)
             func_reg = self.instantiate_callable_class(fn_info)
         else:
             assert isinstance(fn_info.fitem, FuncDef)
@@ -1220,6 +1247,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         if func_reg:
             self.assign(self.get_func_target(fdef), func_reg, fdef.line)
         self.functions.append(func_ir)
+
+    def visit_overloaded_func_def(self, o: OverloadedFuncDef) -> None:
+        assert o.impl
+        self.accept(o.impl)
 
     def add_implicit_return(self) -> None:
         block = self.blocks[-1][-1]
@@ -2179,7 +2210,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.py_method_call(base, name, arg_values, base.line, arg_kinds, arg_names)
 
         # If the base type is one of ours, do a MethodCall
-        if isinstance(base.type, RInstance):
+        if isinstance(base.type, RInstance) and not base.type.class_ir.builtin_base:
             if base.type.class_ir.has_method(name):
                 decl = base.type.class_ir.method_decl(name)
                 if arg_kinds is None:
@@ -3091,9 +3122,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def visit_newtype_expr(self, o: NewTypeExpr) -> Value:
         raise NotImplementedError
 
-    def visit_overloaded_func_def(self, o: OverloadedFuncDef) -> None:
-        raise NotImplementedError
-
     def visit_print_stmt(self, o: PrintStmt) -> None:
         raise NotImplementedError
 
@@ -3221,7 +3249,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def alloc_temp(self, type: RType) -> Register:
         return self.environment.add_temp(type)
 
-    def type_to_rtype(self, typ: Type) -> RType:
+    def type_to_rtype(self, typ: Optional[Type]) -> RType:
         return self.mapper.type_to_rtype(typ)
 
     def node_type(self, node: Expression) -> RType:
@@ -3384,12 +3412,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         fn_info = self.fn_info
         if local:
             for arg in fn_info.fitem.arguments:
-                assert arg.variable.type, "Function argument missing type"
                 rtype = self.type_to_rtype(arg.variable.type)
                 self.environment.add_local_reg(arg.variable, rtype, is_arg=True)
         else:
             for arg in fn_info.fitem.arguments:
-                assert arg.variable.type, "Function argument missing type"
                 if self.is_free_variable(arg.variable) or fn_info.is_generator:
                     rtype = self.type_to_rtype(arg.variable.type)
                     assert base is not None, 'base cannot be None for adding nonlocal args'
@@ -3453,11 +3479,44 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         function. Note that a 'self' parameter is added to its list of arguments, as the nested
         function becomes a class method.
         """
-        sig = FuncSignature((RuntimeArg('self', object_rprimitive),) + sig.args, sig.ret_type)
+        sig = FuncSignature((RuntimeArg(SELF_NAME, object_rprimitive),) + sig.args, sig.ret_type)
         call_fn_decl = FuncDecl('__call__', fn_info.callable_class.ir.name, self.module_name, sig)
         call_fn_ir = FuncIR(call_fn_decl, blocks, env)
         fn_info.callable_class.ir.methods['__call__'] = call_fn_ir
         return call_fn_ir
+
+    def add_get_to_callable_class(self, fn_info: FuncInfo) -> None:
+        """Generates the '__get__' method for a callable class."""
+        line = fn_info.fitem.line
+        self.enter(fn_info)
+
+        vself = self.read(self.environment.add_local_reg(Var(SELF_NAME), object_rprimitive, True))
+        instance = self.environment.add_local_reg(Var('instance'), object_rprimitive, True)
+        self.environment.add_local_reg(Var('owner'), object_rprimitive, True)
+
+        # If accessed through the class, just return the callable
+        # object. If accessed through an object, create a new bound
+        # instance method object.
+        instance_block, class_block = BasicBlock(), BasicBlock()
+        comparison = self.binary_op(self.read(instance), self.none(), 'is', line)
+        self.add_bool_branch(comparison, class_block, instance_block)
+
+        self.activate_block(class_block)
+        self.add(Return(vself))
+
+        self.activate_block(instance_block)
+        self.add(Return(self.primitive_op(method_new_op, [vself, self.read(instance)], line)))
+
+        blocks, env, _, fn_info = self.leave()
+
+        sig = FuncSignature((RuntimeArg(SELF_NAME, object_rprimitive),
+                             RuntimeArg('instance', object_rprimitive),
+                             RuntimeArg('owner', object_rprimitive)),
+                            object_rprimitive)
+        get_fn_decl = FuncDecl('__get__', fn_info.callable_class.ir.name, self.module_name, sig)
+        get_fn_ir = FuncIR(get_fn_decl, blocks, env)
+        fn_info.callable_class.ir.methods['__get__'] = get_fn_ir
+        self.functions.append(get_fn_ir)
 
     def instantiate_callable_class(self, fn_info: FuncInfo) -> Value:
         """
@@ -3500,7 +3559,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         """
         env_class = ClassIR('{}_{}_env'.format(self.fn_info.name, self.fn_info.ns),
                             self.module_name)
-        env_class.attributes['self'] = RInstance(env_class)
+        env_class.attributes[SELF_NAME] = RInstance(env_class)
         if self.fn_info.is_nested:
             # If the function is nested, its environment class must contain an environment
             # attribute pointing to its encapsulating functions' environment class.
@@ -3562,7 +3621,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                       env: Environment,
                                       fn_info: FuncInfo) -> FuncDecl:
         """Generates a helper method for a generator class, called by '__next__' and 'throw'."""
-        sig = FuncSignature((RuntimeArg('self', object_rprimitive),
+        sig = FuncSignature((RuntimeArg(SELF_NAME, object_rprimitive),
                              RuntimeArg('type', object_rprimitive),
                              RuntimeArg('value', object_rprimitive),
                              RuntimeArg('traceback', object_rprimitive)), sig.ret_type)
@@ -3581,7 +3640,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         blocks, env, _, fn_info = self.leave()
 
         # Next, add the actual function as a method of the generator class.
-        sig = FuncSignature((RuntimeArg('self', object_rprimitive),), object_rprimitive)
+        sig = FuncSignature((RuntimeArg(SELF_NAME, object_rprimitive),), object_rprimitive)
         iter_fn_decl = FuncDecl('__iter__', fn_info.generator_class.ir.name, self.module_name, sig)
         iter_fn_ir = FuncIR(iter_fn_decl, blocks, env)
         fn_info.generator_class.ir.methods['__iter__'] = iter_fn_ir
@@ -3602,7 +3661,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.add(Return(result))
         blocks, env, _, fn_info = self.leave()
 
-        sig = FuncSignature((RuntimeArg('self', object_rprimitive),), sig.ret_type)
+        sig = FuncSignature((RuntimeArg(SELF_NAME, object_rprimitive),), sig.ret_type)
         next_fn_decl = FuncDecl('__next__', fn_info.generator_class.ir.name, self.module_name, sig)
         next_fn_ir = FuncIR(next_fn_decl, blocks, env)
         fn_info.generator_class.ir.methods['__next__'] = next_fn_ir
@@ -3636,7 +3695,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Create the FuncSignature for the throw function. NOte that the value and traceback fields
         # are optional, and are assigned to if they are not passed in inside the body of the throw
         # function.
-        sig = FuncSignature((RuntimeArg('self', object_rprimitive),
+        sig = FuncSignature((RuntimeArg(SELF_NAME, object_rprimitive),
                              RuntimeArg('type', object_rprimitive),
                              RuntimeArg('value', object_rprimitive, ARG_OPT),
                              RuntimeArg('traceback', object_rprimitive, ARG_OPT)),
@@ -3708,7 +3767,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.goto_and_activate(ok_block)
 
     def add_self_to_env(self, cls: ClassIR) -> AssignmentTargetRegister:
-        return self.environment.add_local_reg(Var('self'),
+        return self.environment.add_local_reg(Var(SELF_NAME),
                                               RInstance(cls),
                                               is_arg=True)
 

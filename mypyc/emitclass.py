@@ -10,7 +10,7 @@ from mypyc.emit import Emitter
 from mypyc.emitfunc import native_function_header
 from mypyc.emitwrapper import (
     generate_dunder_wrapper, generate_hash_wrapper, generate_richcompare_wrapper,
-    generate_bool_wrapper,
+    generate_bool_wrapper, generate_get_wrapper
 )
 from mypyc.ops import (
     ClassIR, FuncIR, FuncDecl, RType, RTuple, Environment, object_rprimitive, FuncSignature,
@@ -44,15 +44,16 @@ SLOT_DEFS = {
     '__next__': ('tp_iternext', native_slot),
     '__iter__': ('tp_iter', native_slot),
     '__hash__': ('tp_hash', generate_hash_wrapper),
-}
+    '__get__': ('tp_descr_get', generate_get_wrapper),
+}  # type: SlotTable
 
 AS_MAPPING_SLOT_DEFS = {
     '__getitem__': ('mp_subscript', generate_dunder_wrapper),
-}
+}  # type: SlotTable
 
 AS_NUMBER_SLOT_DEFS = {
     '__bool__': ('nb_bool', generate_bool_wrapper),
-}
+}  # type: SlotTable
 
 SIDE_TABLES = [
     ('as_mapping', 'PyMappingMethods', AS_MAPPING_SLOT_DEFS),
@@ -95,7 +96,7 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     fields = OrderedDict()  # type: Dict[str, str]
     fields['tp_name'] = '"{}"'.format(name)
 
-    generate_full = not cl.is_trait and not cl.is_exception
+    generate_full = not cl.is_trait and not cl.builtin_base
 
     if generate_full:
         fields['tp_new'] = new_name
@@ -135,8 +136,8 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
 
     # If the class inherits from python, make space for a __dict__
     struct_name = cl.struct_name(emitter.names)
-    if cl.is_exception:
-        base_size = 'sizeof(PyBaseExceptionObject)'
+    if cl.builtin_base:
+        base_size = 'sizeof({})'.format(cl.builtin_base)
     elif cl.is_trait:
         base_size = 'sizeof(PyObject)'
     else:
@@ -172,10 +173,9 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     generate_methods_table(cl, methods_name, emitter)
     emit_line()
 
-    flags = ['Py_TPFLAGS_DEFAULT', 'Py_TPFLAGS_HAVE_GC', 'Py_TPFLAGS_HEAPTYPE',
-             'Py_TPFLAGS_BASETYPE']
-    if cl.is_exception:
-        flags.append('Py_TPFLAGS_BASE_EXC_SUBCLASS')
+    flags = ['Py_TPFLAGS_DEFAULT', 'Py_TPFLAGS_HEAPTYPE', 'Py_TPFLAGS_BASETYPE']
+    if generate_full:
+        flags.append('Py_TPFLAGS_HAVE_GC')
     fields['tp_flags'] = ' | '.join(flags)
 
     emitter.emit_line("static PyTypeObject {}_template_ = {{".format(emitter.type_struct_name(cl)))
@@ -373,7 +373,14 @@ def generate_constructor_for_class(cl: ClassIR,
     emitter.emit_line('    return NULL;')
     if init_fn is not None:
         args = ', '.join(['self'] + [REG_PREFIX + arg.name for arg in fn.sig.args])
-        emitter.emit_line('{}{}({});'.format(NATIVE_PREFIX, init_fn.cname(emitter.names), args))
+        emitter.emit_line('PyObject *res = {}{}({});'.format(
+            NATIVE_PREFIX, init_fn.cname(emitter.names), args))
+        emitter.emit_line('if (res) {')
+        emitter.emit_line('Py_DECREF(res);')
+        emitter.emit_line('} else {')
+        emitter.emit_line('Py_DECREF(self);')
+        emitter.emit_line('return NULL;')
+        emitter.emit_line('}')
     emitter.emit_line('return self;')
     emitter.emit_line('}')
 
