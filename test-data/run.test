@@ -1843,6 +1843,15 @@ def eins(num: float) -> str:
     b = zwei('zwei')
     return a
 
+def call_other_inner_func(a: int) -> int:
+    def foo() -> int:
+        return a + 1
+
+    def bar() -> int:
+        return foo()
+
+    return bar()
+
 def inner() -> str:
     return 'inner: normal function'
 
@@ -1853,22 +1862,16 @@ def third() -> str:
     return 'third: normal function'
 
 [file driver.py]
-from native import outer, inner, first, uno, eins, second, third
-print(outer()())
-print(inner())
-print(first()()())
-print(uno(5.0)('uno'))
-print(eins(4.0))
-print(second())
-print(third())
-[out]
-None
-inner: normal function
-third: nested function
-uno!
-eins?
-second: normal function
-third: normal function
+from native import outer, inner, first, uno, eins, call_other_inner_func, second, third
+
+assert outer()() == None
+assert inner() == 'inner: normal function'
+assert first()()() == 'third: nested function'
+assert uno(5.0)('uno') == 'uno!'
+assert eins(4.0) == 'eins?'
+assert call_other_inner_func(10) == 11
+assert second() == 'second: normal function'
+assert third() == 'third: normal function'
 
 [case testControlFlowExprs]
 from typing import Tuple

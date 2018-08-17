@@ -1449,15 +1449,16 @@ def normal(a):
     r0 :: normal__env
     r1 :: bool
     r2 :: generator_normal_obj
-    r3 :: bool
-    generator :: object
+    r3, r4 :: bool
+    r5 :: object
 L0:
     r0 = normal__env()
     r0.a = a; r1 = is_error
     r2 = generator_normal_obj()
     r2.__mypyc_env__ = r0; r3 = is_error
-    generator = r2
-    return generator
+    r0.generator = r2; r4 = is_error
+    r5 = r0.generator
+    return r5
 def inner_triple_generator_obj.__call__(self):
     self :: inner_triple_generator_obj
     r0 :: generator_triple_env
@@ -1612,14 +1613,15 @@ L0:
 def triple():
     r0 :: triple__env
     r1 :: generator_triple_obj
-    r2 :: bool
-    generator :: object
+    r2, r3 :: bool
+    r4 :: object
 L0:
     r0 = triple__env()
     r1 = generator_triple_obj()
     r1.__mypyc_env__ = r0; r2 = is_error
-    generator = r1
-    return generator
+    r0.generator = r1; r3 = is_error
+    r4 = r0.generator
+    return r4
 
 [case testYieldTryFinally]
 from typing import Generator

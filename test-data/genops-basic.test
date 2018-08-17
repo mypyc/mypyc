@@ -2590,15 +2590,16 @@ def a(f):
     r0 :: a__env
     r1 :: bool
     r2 :: g_a_obj
-    r3 :: bool
-    g :: object
+    r3, r4 :: bool
+    r5 :: object
 L0:
     r0 = a__env()
     r0.f = f; r1 = is_error
     r2 = g_a_obj()
     r2.__mypyc_env__ = r0; r3 = is_error
-    g = r2
-    return g
+    r0.g = r2; r4 = is_error
+    r5 = r0.g
+    return r5
 def g_b_obj.__call__(self):
     self :: g_b_obj
     r0 :: b__env
@@ -2638,15 +2639,16 @@ def b(f):
     r0 :: b__env
     r1 :: bool
     r2 :: g_b_obj
-    r3 :: bool
-    g :: object
+    r3, r4 :: bool
+    r5 :: object
 L0:
     r0 = b__env()
     r0.f = f; r1 = is_error
     r2 = g_b_obj()
     r2.__mypyc_env__ = r0; r3 = is_error
-    g = r2
-    return g
+    r0.g = r2; r4 = is_error
+    r5 = r0.g
+    return r5
 def __mypyc_d_decorator_helper_____mypyc_c_decorator_helper___obj.__call__(self):
     self :: __mypyc_d_decorator_helper_____mypyc_c_decorator_helper___obj
     r0 :: __mypyc_c_decorator_helper____env
@@ -2673,14 +2675,15 @@ def __mypyc_c_decorator_helper__():
     r4 :: str
     r5, r6, r7 :: object
     r8 :: str
-    r9, r10, d :: object
-    r11 :: str
-    r12 :: object
-    r13 :: str
-    r14, r15 :: object
-    r16 :: None
-    r17 :: object
-    r18, r19 :: None
+    r9, r10 :: object
+    r11 :: bool
+    r12 :: str
+    r13 :: object
+    r14 :: str
+    r15, r16 :: object
+    r17 :: None
+    r18, r19 :: object
+    r20, r21 :: None
 L0:
     r0 = __mypyc_c_decorator_helper____env()
     r1 = __mypyc_d_decorator_helper_____mypyc_c_decorator_helper___obj()
@@ -2693,17 +2696,18 @@ L0:
     r8 = unicode_9 :: static  ('a')
     r9 = r7[r8] :: dict
     r10 = py_call(r9, r6)
-    d = r10
-    r11 = unicode_10 :: static  ('c')
-    r12 = builtins.module :: static
-    r13 = unicode_4 :: static  ('print')
-    r14 = getattr r12, r13
-    r15 = py_call(r14, r11)
-    r16 = cast(None, r15)
-    r17 = py_call(d)
-    r18 = cast(None, r17)
-    r19 = None
-    return r19
+    r0.d = r10; r11 = is_error
+    r12 = unicode_10 :: static  ('c')
+    r13 = builtins.module :: static
+    r14 = unicode_4 :: static  ('print')
+    r15 = getattr r13, r14
+    r16 = py_call(r15, r12)
+    r17 = cast(None, r16)
+    r18 = r0.d
+    r19 = py_call(r18)
+    r20 = cast(None, r19)
+    r21 = None
+    return r21
 def __top_level__():
     r0 :: object
     r1 :: None
@@ -2822,15 +2826,16 @@ def a(f):
     r0 :: a__env
     r1 :: bool
     r2 :: g_a_obj
-    r3 :: bool
-    g :: object
+    r3, r4 :: bool
+    r5 :: object
 L0:
     r0 = a__env()
     r0.f = f; r1 = is_error
     r2 = g_a_obj()
     r2.__mypyc_env__ = r0; r3 = is_error
-    g = r2
-    return g
+    r0.g = r2; r4 = is_error
+    r5 = r0.g
+    return r5
 def __top_level__():
     r0 :: object
     r1 :: None

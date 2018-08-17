@@ -3822,6 +3822,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.add_var_to_env_class(fdef, object_rprimitive, self.fn_info.generator_class,
                                              reassign=False)
 
+        # If the given FuncDef is nested (i.e. if the parent function contains nested functions),
+        # then add the FuncDef to the parent function's environment class.
+        if self.fn_info.contains_nested:
+            if self.fn_info.is_nested:
+                return self.add_var_to_env_class(fdef, object_rprimitive,
+                                                 self.fn_info.callable_class, reassign=False)
+            return self.add_var_to_env_class(fdef, object_rprimitive, self.fn_info, reassign=False)
+
         return self.environment.add_local_reg(fdef, object_rprimitive)
 
     # Lacks a good type because there wasn't a reasonable type in 3.5 :(
