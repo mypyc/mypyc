@@ -13,7 +13,9 @@ It would be translated to something that conceptually looks like this:
    r3 = r2 + r1 :: int
    return r3
 """
-from typing import Callable, Dict, List, Tuple, Optional, Union, Sequence, Set, Any, cast, overload
+from typing import (
+    Callable, Dict, List, Tuple, Optional, Union, Sequence, Set, Any, ClassVar, cast, overload,
+)
 from abc import abstractmethod
 import sys
 import traceback
@@ -915,7 +917,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         'os': ('os.path', 'posix'),
         'os.path': ('os',),
         'weakref': ('_weakref',),
-    }
+    }  # type: ClassVar[Dict[str, Sequence[str]]]
 
     def gen_import(self, id: str, line: int) -> None:
         if id in IRBuilder.import_maps:
