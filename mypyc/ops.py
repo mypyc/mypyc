@@ -1449,13 +1449,16 @@ class ClassIR:
         assert name in self.vtable, '%r has no attribute %r' % (self.name, name)
         return self.vtable[name]
 
-    def attr_type(self, name: str) -> RType:
+    def attr_details(self, name: str) -> Tuple[RType, 'ClassIR']:
         for ir in self.mro:
             if name in ir.attributes:
-                return ir.attributes[name]
+                return ir.attributes[name], ir
             if name in ir.property_types:
-                return ir.property_types[name]
+                return ir.property_types[name], ir
         raise KeyError('%r has no attribute %r' % (self.name, name))
+
+    def attr_type(self, name: str) -> RType:
+        return self.attr_details(name)[0]
 
     def method_decl(self, name: str) -> FuncDecl:
         for ir in self.mro:
