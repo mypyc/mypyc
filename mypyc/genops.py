@@ -909,12 +909,22 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                           [self.load_globals_dict(), self.load_static_unicode(cdef.name),
                            tp], cdef.line)
 
-    def gen_import(self, id: str, line: int) -> None:
-        # Unfortunate hack:
-        if id == 'os':
-            self.gen_import('os.path', line)
-            self.gen_import('posix', line)
+    # An unfortunate hack: for some stdlib modules, pull in modules
+    # that the stubs reexport things from.
+    import_maps = {
+        'os': ('os.path', 'posix'),
+        'os.path': ('os',),
+        'weakref': ('_weakref',),
+    }
 
+    def gen_import(self, id: str, line: int) -> None:
+        if id in IRBuilder.import_maps:
+            for dep in IRBuilder.import_maps[id]:
+                self._gen_import(dep, line)
+
+        self._gen_import(id, line)
+
+    def _gen_import(self, id: str, line: int) -> None:
         self.imports.append(id)
 
         needs_import, out = BasicBlock(), BasicBlock()
