@@ -259,7 +259,7 @@ py_getattr_op = func_op(
     arg_types=[object_rprimitive, object_rprimitive],
     result_type=object_rprimitive,
     error_kind=ERR_MAGIC,
-    emit=call_emit('PyObject_GetAttr')
+    emit=call_emit('CPyObject_GetAttr')
 )
 
 py_setattr_op = func_op(
@@ -309,7 +309,7 @@ py_method_call_op = custom_op(
     is_var_arg=True,
     error_kind=ERR_MAGIC,
     format_str='{dest} = py_method_call({comma_args})',
-    emit=simple_emit('{dest} = PyObject_CallMethodObjArgs({comma_args}, NULL);'))
+    emit=simple_emit('{dest} = CPyObject_CallMethodObjArgs({comma_args}, NULL);'))
 
 
 import_op = custom_op(
