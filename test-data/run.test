@@ -2916,7 +2916,7 @@ def outer() -> Generator:
         if n < 10:
             for i in range(n):
                 yield i
-            return        
+            return
         for i in recursive(5):
             yield i
     return recursive(10)
