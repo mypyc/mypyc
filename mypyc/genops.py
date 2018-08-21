@@ -2075,13 +2075,19 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def translate_refexpr_call(self, expr: CallExpr, callee: RefExpr) -> Value:
         """Translate a non-method call."""
-        # Gen the argument values
-        arg_values = [self.accept(arg) for arg in expr.args]
 
         # TODO: Allow special cases to have default args or named args. Currently they don't since
         # they check that everything in arg_kinds is ARG_POS.
 
         # TODO: Generalize special cases
+
+        def gen_any_all_inner_stmts(comparison: Value, op: OpDescription) -> None:
+            true_block, false_block = BasicBlock(), BasicBlock()
+            self.add_bool_branch(comparison, true_block, false_block)
+            self.activate_block(true_block)
+            self.assign(retval, self.primitive_op(op, [], -1), -1)
+            self.nonlocal_control[-1].gen_break(self)
+            self.activate_block(false_block)
 
         # Special case builtins.any
         if (callee.fullname == 'builtins.any'
@@ -2089,17 +2095,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 and expr.arg_kinds == [ARG_POS]
                 and isinstance(expr.args[0], GeneratorExpr)):
             gen = expr.args[0]
-            retval = self.primitive_op(false_op, [], -1)
+            retval = self.alloc_temp(bool_rprimitive)
+            self.assign(retval, self.primitive_op(false_op, [], -1), -1)
             loop_params = list(zip(gen.indices, gen.sequences, gen.condlists))
 
             def gen_inner_stmts() -> None:
-                true_block, false_block = BasicBlock(), BasicBlock()
                 comparison = self.accept(gen.left_expr)
-                self.add_bool_branch(comparison, true_block, false_block)
-                self.activate_block(true_block)
-                retval = self.primitive_op(true_op, [], -1)
-                self.add(Return(retval))
-                self.activate_block(false_block)
+                gen_any_all_inner_stmts(comparison, true_op)
 
             self.comprehension_helper(loop_params, gen_inner_stmts, expr.line)
             return retval
@@ -2110,22 +2112,20 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 and expr.arg_kinds == [ARG_POS]
                 and isinstance(expr.args[0], GeneratorExpr)):
             gen = expr.args[0]
-            retval = self.primitive_op(true_op, [], -1)
+            retval = self.alloc_temp(bool_rprimitive)
+            self.assign(retval, self.primitive_op(true_op, [], -1), -1)
             loop_params = list(zip(gen.indices, gen.sequences, gen.condlists))
 
             def gen_inner_stmts() -> None:
-                true_block, false_block = BasicBlock(), BasicBlock()
                 comparison = self.accept(gen.left_expr)
                 not_comparison = self.unary_op(comparison, 'not', expr.line)
-
-                self.add_bool_branch(not_comparison, true_block, false_block)
-                self.activate_block(true_block)
-                retval = self.primitive_op(false_op, [], -1)
-                self.add(Return(retval))
-                self.activate_block(false_block)
+                gen_any_all_inner_stmts(not_comparison, false_op)
 
             self.comprehension_helper(loop_params, gen_inner_stmts, expr.line)
             return retval
+
+        # Gen the argument values
+        arg_values = [self.accept(arg) for arg in expr.args]
 
         # Special case builtins.len
         if (callee.fullname == 'builtins.len'
