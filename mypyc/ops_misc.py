@@ -199,7 +199,7 @@ py_getattr_op = func_op(
     arg_types=[object_rprimitive, object_rprimitive],
     result_type=object_rprimitive,
     error_kind=ERR_MAGIC,
-    emit=simple_emit('{dest} = PyObject_GetAttr({args[0]}, {args[1]});')
+    emit=simple_emit('{dest} = CPyObject_GetAttr({args[0]}, {args[1]});')
 )
 
 py_setattr_op = func_op(
