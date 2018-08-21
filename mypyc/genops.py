@@ -2083,6 +2083,50 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         # TODO: Generalize special cases
 
+        # Special case builtins.any
+        if (callee.fullname == 'builtins.any'
+                and len(expr.args) == 1
+                and expr.arg_kinds == [ARG_POS]
+                and isinstance(expr.args[0], GeneratorExpr)):
+            gen = expr.args[0]
+            retval = self.primitive_op(false_op, [], -1)
+            loop_params = list(zip(gen.indices, gen.sequences, gen.condlists))
+
+            def gen_inner_stmts() -> None:
+                true_block, false_block = BasicBlock(), BasicBlock()
+                comparison = self.accept(gen.left_expr)
+                self.add_bool_branch(comparison, true_block, false_block)
+                self.activate_block(true_block)
+                retval = self.primitive_op(true_op, [], -1)
+                self.add(Return(retval))
+                self.activate_block(false_block)
+
+            self.comprehension_helper(loop_params, gen_inner_stmts, expr.line)
+            return retval
+
+        # Special case builtins.all
+        if (callee.fullname == 'builtins.all'
+                and len(expr.args) == 1
+                and expr.arg_kinds == [ARG_POS]
+                and isinstance(expr.args[0], GeneratorExpr)):
+            gen = expr.args[0]
+            retval = self.primitive_op(true_op, [], -1)
+            loop_params = list(zip(gen.indices, gen.sequences, gen.condlists))
+
+            def gen_inner_stmts() -> None:
+                true_block, false_block = BasicBlock(), BasicBlock()
+                comparison = self.accept(gen.left_expr)
+                not_comparison = self.unary_op(comparison, 'not', expr.line)
+
+                self.add_bool_branch(not_comparison, true_block, false_block)
+                self.activate_block(true_block)
+                retval = self.primitive_op(false_op, [], -1)
+                self.add(Return(retval))
+                self.activate_block(false_block)
+
+            self.comprehension_helper(loop_params, gen_inner_stmts, expr.line)
+            return retval
+
         # Special case builtins.len
         if (callee.fullname == 'builtins.len'
                 and len(expr.args) == 1
