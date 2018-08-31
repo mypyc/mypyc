@@ -487,7 +487,7 @@ class Emitter:
         if is_int_rprimitive(typ):
             if declare_dest:
                 self.emit_line('CPyTagged {};'.format(dest))
-            self.emit_arg_check(src, dest, typ, '(PyLong_Check({}))'.format(src), optional)
+            self.emit_arg_check(src, dest, typ, '(likely(PyLong_Check({})))'.format(src), optional)
             if borrow:
                 self.emit_line('    {} = CPyTagged_BorrowFromObject({});'.format(dest, src))
             else:
@@ -518,7 +518,7 @@ class Emitter:
 
             cast_temp = self.temp_name()
             self.emit_tuple_cast(src, cast_temp, typ, declare_dest=True, err='', src_type=None)
-            self.emit_line('if ({} == NULL) {{'.format(cast_temp))
+            self.emit_line('if (unlikely({} == NULL)) {{'.format(cast_temp))
 
             # self.emit_arg_check(src, dest, typ,
             #     '(!PyTuple_Check({}) || PyTuple_Size({}) != {}) {{'.format(
@@ -569,7 +569,7 @@ class Emitter:
         elif isinstance(typ, RTuple):
             self.declare_tuple_struct(typ)
             self.emit_line('{}{} = PyTuple_New({});'.format(declaration, dest, len(typ.types)))
-            self.emit_line('if ({} == NULL)'.format(dest))
+            self.emit_line('if (unlikely({} == NULL))'.format(dest))
             self.emit_line('    CPyError_OutOfMemory();')
             # TODO: Fail if dest is None
             for i in range(0, len(typ.types)):

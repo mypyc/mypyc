@@ -288,7 +288,7 @@ static inline bool CPyTagged_LongLongTooBig(long long value) {
 static CPyTagged CPyTagged_FromLongLong(long long value) {
     // We use a Python object if the value shifted left by 1 is too
     // large for long long.
-    if (CPyTagged_LongLongTooBig(value)) {
+    if (unlikely(CPyTagged_LongLongTooBig(value))) {
         PyObject *object = PyLong_FromLongLong(value);
         return ((CPyTagged)object) | CPY_INT_TAG;
     } else {
@@ -302,7 +302,7 @@ static CPyTagged CPyTagged_FromObject(PyObject *object) {
     PY_LONG_LONG value = PyLong_AsLongLongAndOverflow(object, &overflow);
     // We use a Python object if the value shifted left by 1 is too
     // large for long long.
-    if (overflow != 0 || CPyTagged_LongLongTooBig(value)) {
+    if (unlikely(overflow != 0 || CPyTagged_LongLongTooBig(value))) {
         Py_INCREF(object);
         return ((CPyTagged)object) | CPY_INT_TAG;
     } else {
@@ -316,7 +316,7 @@ static CPyTagged CPyTagged_StealFromObject(PyObject *object) {
     PY_LONG_LONG value = PyLong_AsLongLongAndOverflow(object, &overflow);
     // We use a Python object if the value shifted left by 1 is too
     // large for long long.
-    if (overflow != 0 || CPyTagged_LongLongTooBig(value)) {
+    if (unlikely(overflow != 0 || CPyTagged_LongLongTooBig(value))) {
         return ((CPyTagged)object) | CPY_INT_TAG;
     } else {
         Py_DECREF(object);
@@ -331,8 +331,8 @@ static CPyTagged CPyTagged_BorrowFromObject(PyObject *object) {
     // We use a Python object if the value shifted left by 1 is too
     // large for long long.  The latter check is micro-optimized where
     // the common case where long long is small enough.
-    if (overflow != 0 || (((unsigned long long)value >= (1LL << 62)) &&
-                          (value >= 0 || value < -(1LL << 62)))) {
+    if (unlikely(overflow != 0 || (((unsigned long long)value >= (1LL << 62)) &&
+                                   (value >= 0 || value < -(1LL << 62))))) {
         return ((CPyTagged)object) | CPY_INT_TAG;
     } else {
         return value << 1;
@@ -341,12 +341,12 @@ static CPyTagged CPyTagged_BorrowFromObject(PyObject *object) {
 
 static PyObject *CPyTagged_AsObject(CPyTagged x) {
     PyObject *value;
-    if (CPyTagged_CheckLong(x)) {
+    if (unlikely(CPyTagged_CheckLong(x))) {
         value = CPyTagged_LongAsObject(x);
         Py_INCREF(value);
     } else {
         value = PyLong_FromLongLong(CPyTagged_ShortAsLongLong(x));
-        if (value == NULL) {
+        if (unlikely(value == NULL)) {
             CPyError_OutOfMemory();
         }
     }
@@ -355,11 +355,11 @@ static PyObject *CPyTagged_AsObject(CPyTagged x) {
 
 static PyObject *CPyTagged_StealAsObject(CPyTagged x) {
     PyObject *value;
-    if (CPyTagged_CheckLong(x)) {
+    if (unlikely(CPyTagged_CheckLong(x))) {
         value = CPyTagged_LongAsObject(x);
     } else {
         value = PyLong_FromLongLong(CPyTagged_ShortAsLongLong(x));
-        if (value == NULL) {
+        if (unlikely(value == NULL)) {
             CPyError_OutOfMemory();
         }
     }
@@ -367,11 +367,11 @@ static PyObject *CPyTagged_StealAsObject(CPyTagged x) {
 }
 
 static long long CPyTagged_AsLongLong(CPyTagged x) {
-    if (CPyTagged_CheckShort(x)) {
+    if (likely(CPyTagged_CheckShort(x))) {
         return CPyTagged_ShortAsLongLong(x);
     } else {
         long long result = PyLong_AsLongLong(CPyTagged_LongAsObject(x));
-        if (PyErr_Occurred()) {
+        if (unlikely(PyErr_Occurred() != NULL)) {
             return -1;
         }
         return result;
@@ -379,13 +379,13 @@ static long long CPyTagged_AsLongLong(CPyTagged x) {
 }
 
 static inline void CPyTagged_IncRef(CPyTagged x) {
-    if (CPyTagged_CheckLong(x)) {
+    if (unlikely(CPyTagged_CheckLong(x))) {
         Py_INCREF(CPyTagged_LongAsObject(x));
     }
 }
 
 static inline void CPyTagged_DecRef(CPyTagged x) {
-    if (CPyTagged_CheckLong(x)) {
+    if (unlikely(CPyTagged_CheckLong(x))) {
         Py_DECREF(CPyTagged_LongAsObject(x));
     }
 }
@@ -412,9 +412,9 @@ static CPyTagged CPyTagged_Negate(CPyTagged num) {
 
 static CPyTagged CPyTagged_Add(CPyTagged left, CPyTagged right) {
     // TODO: Use clang/gcc extension __builtin_saddll_overflow instead.
-    if (CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right)) {
+    if (likely(CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right))) {
         CPyTagged sum = left + right;
-        if (!CPyTagged_IsAddOverflow(sum, left, right)) {
+        if (likely(!CPyTagged_IsAddOverflow(sum, left, right))) {
             return sum;
         }
     }
@@ -436,9 +436,9 @@ static inline bool CPyTagged_IsSubtractOverflow(CPyTagged diff, CPyTagged left, 
 
 static CPyTagged CPyTagged_Subtract(CPyTagged left, CPyTagged right) {
     // TODO: Use clang/gcc extension __builtin_saddll_overflow instead.
-    if (CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right)) {
+    if (likely(CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right))) {
         CPyTagged diff = left - right;
-        if (!CPyTagged_IsSubtractOverflow(diff, left, right)) {
+        if (likely(!CPyTagged_IsSubtractOverflow(diff, left, right))) {
             return diff;
         }
     }
@@ -460,8 +460,8 @@ static inline bool CPyTagged_IsMultiplyOverflow(CPyTagged left, CPyTagged right)
 
 static CPyTagged CPyTagged_Multiply(CPyTagged left, CPyTagged right) {
     // TODO: Consider using some clang/gcc extension
-    if (CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right)) {
-        if (!CPyTagged_IsMultiplyOverflow(left, right)) {
+    if (likely(CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right))) {
+        if (likely(!CPyTagged_IsMultiplyOverflow(left, right))) {
             return left * CPyTagged_ShortAsLongLong(right);
         }
     }
@@ -543,7 +543,7 @@ static bool CPyTagged_IsEq_(CPyTagged left, CPyTagged right) {
 }
 
 static inline bool CPyTagged_IsEq(CPyTagged left, CPyTagged right) {
-    if (CPyTagged_CheckShort(left)) {
+    if (likely(CPyTagged_CheckShort(left))) {
         return left == right;
     } else {
         return CPyTagged_IsEq_(left, right);
@@ -551,7 +551,7 @@ static inline bool CPyTagged_IsEq(CPyTagged left, CPyTagged right) {
 }
 
 static inline bool CPyTagged_IsNe(CPyTagged left, CPyTagged right) {
-    if (CPyTagged_CheckShort(left)) {
+    if (likely(CPyTagged_CheckShort(left))) {
         return left != right;
     } else {
         return !CPyTagged_IsEq_(left, right);
@@ -571,7 +571,7 @@ static bool CPyTagged_IsLt_(CPyTagged left, CPyTagged right) {
 }
 
 static inline bool CPyTagged_IsLt(CPyTagged left, CPyTagged right) {
-    if (CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right)) {
+    if (likely(CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right))) {
         return (CPySignedInt)left < (CPySignedInt)right;
     } else {
         return CPyTagged_IsLt_(left, right);
@@ -579,7 +579,7 @@ static inline bool CPyTagged_IsLt(CPyTagged left, CPyTagged right) {
 }
 
 static inline bool CPyTagged_IsGe(CPyTagged left, CPyTagged right) {
-    if (CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right)) {
+    if (likely(CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right))) {
         return (CPySignedInt)left >= (CPySignedInt)right;
     } else {
         return !CPyTagged_IsLt_(left, right);
@@ -587,7 +587,7 @@ static inline bool CPyTagged_IsGe(CPyTagged left, CPyTagged right) {
 }
 
 static inline bool CPyTagged_IsGt(CPyTagged left, CPyTagged right) {
-    if (CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right)) {
+    if (likely(CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right))) {
         return (CPySignedInt)left > (CPySignedInt)right;
     } else {
         return CPyTagged_IsLt_(right, left);
@@ -595,7 +595,7 @@ static inline bool CPyTagged_IsGt(CPyTagged left, CPyTagged right) {
 }
 
 static inline bool CPyTagged_IsLe(CPyTagged left, CPyTagged right) {
-    if (CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right)) {
+    if (likely(CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right))) {
         return (CPySignedInt)left <= (CPySignedInt)right;
     } else {
         return !CPyTagged_IsLt_(right, left);
@@ -603,17 +603,17 @@ static inline bool CPyTagged_IsLe(CPyTagged left, CPyTagged right) {
 }
 
 static PyObject *CPyList_GetItem(PyObject *list, CPyTagged index) {
-    if (CPyTagged_CheckShort(index)) {
+    if (likely(CPyTagged_CheckShort(index))) {
         long long n = CPyTagged_ShortAsLongLong(index);
         Py_ssize_t size = PyList_GET_SIZE(list);
-        if (n >= 0) {
-            if (n >= size) {
+        if (likely(n >= 0)) {
+            if (unlikely(n >= size)) {
                 PyErr_SetString(PyExc_IndexError, "list index out of range");
                 return NULL;
             }
         } else {
             n += size;
-            if (n < 0) {
+            if (unlikely(n < 0)) {
                 PyErr_SetString(PyExc_IndexError, "list index out of range");
                 return NULL;
             }
@@ -628,17 +628,17 @@ static PyObject *CPyList_GetItem(PyObject *list, CPyTagged index) {
 }
 
 static bool CPyList_SetItem(PyObject *list, CPyTagged index, PyObject *value) {
-    if (CPyTagged_CheckShort(index)) {
+    if (likely(CPyTagged_CheckShort(index))) {
         long long n = CPyTagged_ShortAsLongLong(index);
         Py_ssize_t size = PyList_GET_SIZE(list);
-        if (n >= 0) {
-            if (n >= size) {
+        if (likely(n >= 0)) {
+            if (unlikely(n >= size)) {
                 PyErr_SetString(PyExc_IndexError, "list assignment index out of range");
                 return false;
             }
         } else {
             n += size;
-            if (n < 0) {
+            if (unlikely(n < 0)) {
                 PyErr_SetString(PyExc_IndexError, "list assignment index out of range");
                 return false;
             }
@@ -690,7 +690,7 @@ static PyObject *CPySequenceTuple_GetItem(PyObject *tuple, CPyTagged index) {
 
 static CPyTagged CPyObject_Hash(PyObject *o) {
     Py_hash_t h = PyObject_Hash(o);
-    if (h == -1) {
+    if (unlikely(h == -1)) {
         return CPY_INT_TAG;
     } else {
         // This is tragically annoying. The range of hash values in
@@ -719,7 +719,7 @@ static inline int CPy_ObjectToStatus(PyObject *obj) {
 static PyObject *CPyDict_GetItem(PyObject *dict, PyObject *key) {
     if (PyDict_CheckExact(dict)) {
         PyObject *res = PyDict_GetItemWithError(dict, key);
-        if (!res) {
+        if (unlikely(!res)) {
             PyErr_SetObject(PyExc_KeyError, key);
         } else {
             Py_INCREF(res);

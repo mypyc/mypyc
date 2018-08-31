@@ -220,7 +220,7 @@ def generate_arg_check(name: str, typ: RType, emitter: Emitter, optional: bool =
         emitter.emit_cast('obj_{}'.format(name), 'arg_{}'.format(name), typ,
                           declare_dest=True, optional=optional)
         if optional:
-            emitter.emit_line('if (obj_{} != NULL && arg_{} == NULL) return NULL;'.format(
+            emitter.emit_line('if (unlikely(obj_{} != NULL && arg_{} == NULL)) return NULL;'.format(
                               name, name))
         else:
-            emitter.emit_line('if (arg_{} == NULL) return NULL;'.format(name, name))
+            emitter.emit_line('if (unlikely(arg_{} == NULL)) return NULL;'.format(name, name))

@@ -331,7 +331,7 @@ def generate_setup_for_class(cl: ClassIR,
     emitter.emit_line('self = ({struct} *){type_struct}->tp_alloc({type_struct}, 0);'.format(
         struct=cl.struct_name(emitter.names),
         type_struct=emitter.type_struct_name(cl)))
-    emitter.emit_line('if (self == NULL)')
+    emitter.emit_line('if (unlikely(self == NULL))')
     emitter.emit_line('    return NULL;')
     emitter.emit_line('self->vtable = {};'.format(vtable_name))
     for base in reversed(cl.base_mro):
@@ -361,7 +361,7 @@ def generate_constructor_for_class(cl: ClassIR,
     emitter.emit_line('{}'.format(native_function_header(fn, emitter)))
     emitter.emit_line('{')
     emitter.emit_line('PyObject *self = {}();'.format(setup_name))
-    emitter.emit_line('if (self == NULL)')
+    emitter.emit_line('if (unlikely(self == NULL))')
     emitter.emit_line('    return NULL;')
     if init_fn is not None:
         args = ', '.join(['self'] + [REG_PREFIX + arg.name for arg in fn.sig.args])
