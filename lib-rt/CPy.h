@@ -40,11 +40,18 @@ static void CPyDebug_Print(const char *msg) {
     fflush(stdout);
 }
 
-// INCREF and DECREF that assert the pointer is not NULL.
-// asserts are disabled in release builds so there shouldn't be a perf hit.
-// I'm honestly kind of surprised that this isn't done by default.
+#ifndef DEBUG
+
+#define CPy_INCREF(p) Py_INCREF(p)
+#define CPy_DECREF(p) Py_DECREF(p)
+
+#else
+
+// Only assert that the pointer is not NULL in debug mode.
 #define CPy_INCREF(p) do { assert(p); Py_INCREF(p); } while (0)
 #define CPy_DECREF(p) do { assert(p); Py_DECREF(p); } while (0)
+
+#endif
 
 // Search backwards through the trait part of a vtable (which sits *before*
 // the start of the vtable proper) looking for the subvtable describing a trait
