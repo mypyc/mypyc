@@ -785,6 +785,16 @@ static PyObject *CPyObject_GetAttr(PyObject *obj, PyObject *attr) {
     return PyObject_GetAttr(obj, attr);
 }
 
+static void CPy_LogMethodCall(PyObject *obj, PyObject *attr) {
+    PyObject *module = PyImport_ImportModule("getattr_hook");
+    if (module) {
+        PyObject *res = PyObject_CallMethod(module, "log_method", "OO", obj, attr);
+        Py_XDECREF(res);
+        Py_DECREF(module);
+    }
+    PyErr_Clear();
+}
+
 static PyCodeObject *CPy_CreateCodeObject(const char *filename, const char *funcname, int line) {
     PyObject *filename_obj = PyUnicode_FromString(filename);
     PyObject *funcname_obj = PyUnicode_FromString(funcname);

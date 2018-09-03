@@ -241,7 +241,7 @@ py_method_call_op = custom_op(
     is_var_arg=True,
     error_kind=ERR_MAGIC,
     format_str = '{dest} = py_method_call({comma_args})',
-    emit=simple_emit('{dest} = PyObject_CallMethodObjArgs({comma_args}, NULL);'))
+    emit=simple_emit('CPy_LogMethodCall({args[0]}, {args[1]}); {dest} = PyObject_CallMethodObjArgs({comma_args}, NULL);'))
 
 
 import_op = custom_op(
