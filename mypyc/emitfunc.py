@@ -9,7 +9,7 @@ from mypyc.ops import (
     LoadStatic, InitStatic, TupleGet, TupleSet, Call, IncRef, DecRef, Box, Cast, Unbox,
     BasicBlock, Value, Register, RType, RTuple, MethodCall, PrimitiveOp,
     EmitterInterface, Unreachable, is_int_rprimitive, NAMESPACE_STATIC, NAMESPACE_TYPE,
-    RaiseStandardError, FuncDecl, ClassIR,
+    RaiseStandardError, FuncDecl, ClassIR, Op,
     FUNC_STATICMETHOD, FUNC_CLASSMETHOD,
 )
 from mypyc.namegen import NameGenerator
@@ -154,6 +154,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         self.emit_line('return %s;' % regstr)
 
     def visit_primitive_op(self, op: PrimitiveOp) -> None:
+        self.log_op(op)
         args = [self.reg(arg) for arg in op.args]
         if not op.is_void:
             dest = self.reg(op)
@@ -198,6 +199,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
                                          self.c_error_value(op.type)))
 
     def visit_get_attr(self, op: GetAttr) -> None:
+        self.log_op(op)
         dest = self.reg(op)
         obj = self.reg(op.obj)
         rtype = op.class_type
@@ -223,6 +225,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
                 op.attr))
 
     def visit_set_attr(self, op: SetAttr) -> None:
+        self.log_op(op)
         dest = self.reg(op)
         obj = self.reg(op.obj)
         src = self.reg(op.src)
@@ -293,12 +296,14 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
             return ''
 
     def visit_call(self, op: Call) -> None:
+        self.log_op(op)
         dest = self.get_dest_assign(op)
         args = ', '.join(self.reg(arg) for arg in op.args)
         cname = op.fn.cname(self.names)
         self.emit_line('%s%s%s(%s);' % (dest, NATIVE_PREFIX, cname, args))
 
     def visit_method_call(self, op: MethodCall) -> None:
+        self.log_op(op)
         dest = self.get_dest_assign(op)
         obj = self.reg(op.obj)
 
@@ -321,21 +326,26 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
             method_idx, rtype.struct_name(self.names), mtype, args, op.method))
 
     def visit_inc_ref(self, op: IncRef) -> None:
+        self.log_op(op)
         src = self.reg(op.src)
         self.emit_inc_ref(src, op.src.type)
 
     def visit_dec_ref(self, op: DecRef) -> None:
+        self.log_op(op)
         src = self.reg(op.src)
         self.emit_dec_ref(src, op.src.type)
 
     def visit_box(self, op: Box) -> None:
+        self.log_op(op)
         self.emitter.emit_box(self.reg(op.src), self.reg(op), op.src.type)
 
     def visit_cast(self, op: Cast) -> None:
+        self.log_op(op)
         self.emitter.emit_cast(self.reg(op.src), self.reg(op), op.type,
                                src_type=op.src.type)
 
     def visit_unbox(self, op: Unbox) -> None:
+        self.log_op(op)
         self.emitter.emit_unbox(self.reg(op.src), self.reg(op), op.type)
 
     def visit_unreachable(self, op: Unreachable) -> None:
@@ -389,3 +399,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
 
     def emit_declaration(self, line: str) -> None:
         self.declarations.emit_line(line)
+
+    def log_op(self, op: Op) -> None:
+        name = type(op).__name__
+        self.emit_line('LogOp(&NumOps_%s);' % name)

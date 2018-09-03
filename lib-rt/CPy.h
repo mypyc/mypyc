@@ -964,6 +964,43 @@ static void CPy_GetExcInfo(PyObject **p_type, PyObject **p_value, PyObject **p_t
     _CPy_ToNone(p_traceback);
 }
 
+static long NumOps_SetAttr;
+static long NumOps_GetAttr;
+static long NumOps_MethodCall;
+static long NumOps_Call;
+static long NumOps_IncRef;
+static long NumOps_DecRef;
+static long NumOps_PrimitiveOp;
+static long NumOps_Cast;
+static long NumOps_Box;
+static long NumOps_Unbox;
+
+static int OpLogReady;
+
+#define DUMP_OP(name) printf("%15s: %ld\n", #name, NumOps_##name)
+
+void DumpOpLog(void) {
+    DUMP_OP(SetAttr);
+    DUMP_OP(GetAttr);
+    DUMP_OP(MethodCall);
+    DUMP_OP(Call);
+    DUMP_OP(IncRef);
+    DUMP_OP(DecRef);
+    DUMP_OP(PrimitiveOp);
+    DUMP_OP(Cast);
+    DUMP_OP(Box);
+    DUMP_OP(Unbox);
+}
+
+void LogOp(long *counter) {
+    if (!OpLogReady) {
+        atexit(DumpOpLog);
+        OpLogReady = 1;
+    }
+    (*counter)++;
+}
+
+
 #ifdef __cplusplus
 }
 #endif
