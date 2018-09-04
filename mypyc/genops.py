@@ -67,7 +67,7 @@ from mypyc.ops import (
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_int import unsafe_short_add
 from mypyc.ops_list import (
-    list_append_op, list_extend_op, list_len_op, list_get_item_op, list_set_item_op, new_list_op,
+    list_append_op, list_extend_op, list_len_op, new_list_op,
 )
 from mypyc.ops_tuple import list_tuple_op
 from mypyc.ops_dict import new_dict_op, dict_get_item_op, dict_set_item_op, dict_update_op
@@ -1690,9 +1690,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             assert isinstance(target_list_type, Instance)
             target_type = self.type_to_rtype(target_list_type.args[0])
 
-            value_box = self.add(PrimitiveOp([self.read(expr_target, line),
-                                              self.read(index_target, line)],
-                                             list_get_item_op, line))
+            value_box = self.translate_special_method_call(
+                self.read(expr_target, line), '__getitem__',
+                [self.read(index_target, line)], None, line)
+            assert value_box
 
             self.assign(self.get_assignment_target(index),
                         self.unbox_or_cast(value_box, target_type, line), line)

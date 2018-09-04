@@ -45,6 +45,16 @@ list_get_item_op = method_op(
     emit=simple_emit('{dest} = CPyList_GetItem({args[0]}, {args[1]});'))
 
 
+# Version with no int bounds check for when it is known to be short
+method_op(
+    name='__getitem__',
+    arg_types=[list_rprimitive, short_int_rprimitive],
+    result_type=object_rprimitive,
+    error_kind=ERR_MAGIC,
+    emit=simple_emit('{dest} = CPyList_GetItemShort({args[0]}, {args[1]});'),
+    priority=2)
+
+
 list_set_item_op = method_op(
     name='__setitem__',
     arg_types=[list_rprimitive, int_rprimitive, object_rprimitive],
