@@ -112,7 +112,7 @@ object_rprimitive = RPrimitive('builtins.object', is_unboxed=False, is_refcounte
 int_rprimitive = RPrimitive('builtins.int', is_unboxed=True, is_refcounted=True, ctype='CPyTagged')
 
 short_int_rprimitive = RPrimitive('builtins.int', is_unboxed=True, is_refcounted=False,
-                                   ctype='CPyTagged')
+                                  ctype='CPyTagged')
 
 float_rprimitive = RPrimitive('builtins.float', is_unboxed=False, is_refcounted=True)
 
@@ -1117,7 +1117,12 @@ class TupleSet(RegisterOp):
     def __init__(self, items: List[Value], line: int) -> None:
         super().__init__(line)
         self.items = items
-        self.tuple_type = RTuple([arg.type for arg in items])
+        # Don't keep track of the fact that an int is short after it
+        # is put into a tuple, since we don't properly implement
+        # runtime subtyping for tuples.
+        self.tuple_type = RTuple(
+            [arg.type if not is_short_int_rprimitive(arg.type) else int_rprimitive
+             for arg in items])
         self.type = self.tuple_type
 
     def sources(self) -> List[Value]:

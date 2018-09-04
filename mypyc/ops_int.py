@@ -73,7 +73,7 @@ int_compare_op('>', 'CPyTagged_IsGt')
 int_compare_op('>=', 'CPyTagged_IsGe')
 
 unsafe_short_add = custom_op(
-    arg_types=[short_int_rprimitive, short_int_rprimitive],
+    arg_types=[int_rprimitive, int_rprimitive],
     result_type=short_int_rprimitive,
     error_kind=ERR_NEVER,
     format_str='{dest} = {args[0]} + {args[1]} :: int',
