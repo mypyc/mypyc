@@ -964,6 +964,40 @@ static void CPy_GetExcInfo(PyObject **p_type, PyObject **p_value, PyObject **p_t
     _CPy_ToNone(p_traceback);
 }
 
+struct node {
+    const char *key;
+    long value;
+};
+
+#define N 16384
+
+struct node table[N];
+
+int hash(const char *s) {
+    int n = 1234;
+    while (*s) {
+        n = n * 31 + *s;
+        s++;
+    }
+    return n;
+}
+
+void LogStr(const char *name) {
+    int h = hash(name);
+    int i = h & (N - 1);
+    for (;;) {
+        if (!table[i].key) {
+            table[i].key = name;
+            table[i].value = 1;
+            return;
+        } else if (strcmp(table[i].key, name) == 0) {
+            table[i].value++;
+            return;
+        } else
+            i = (i + 1) & (N - 1);
+    }
+}
+
 static long NumOps_SetAttr;
 static long NumOps_GetAttr;
 static long NumOps_MethodCall;
@@ -990,6 +1024,12 @@ void DumpOpLog(void) {
     DUMP_OP(Cast);
     DUMP_OP(Box);
     DUMP_OP(Unbox);
+    int i;
+    for (i = 0; i < N; i++) {
+        if (table[i].key) {
+            printf("%30s: %10ld\n", table[i].key, table[i].value);
+        }
+    }
 }
 
 void LogOp(long *counter) {

@@ -154,6 +154,8 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         self.emit_line('return %s;' % regstr)
 
     def visit_primitive_op(self, op: PrimitiveOp) -> None:
+        opname = primitive_op_name(op)
+        self.emit_line('LogStr("%s");' % opname)
         self.log_op(op)
         args = [self.reg(arg) for arg in op.args]
         if not op.is_void:
@@ -403,3 +405,68 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
     def log_op(self, op: Op) -> None:
         name = type(op).__name__
         self.emit_line('LogOp(&NumOps_%s);' % name)
+
+
+name_map = {
+    '*': 'mul',
+    '+': 'add',
+    '-': 'sub',
+    '/': 'truediv',
+    '//': 'idiv',
+    '%': 'mod',
+    '==': 'eq',
+    '<<': 'lshift',
+    '>>': 'rshift',
+    '+=': 'iadd',
+    '-=': 'isub',
+    '|=': 'ior',
+    '|': 'or',
+    '&=': 'iand',
+    '&': 'and',
+    '^': 'xor',
+    '**': 'pow',
+    '!=': 'ne',
+    '<': 'lt',
+    '<=': 'le',
+    '>': 'gt',
+    '>=': 'ge',
+    'is not': 'is',
+    '__getitem__': 'get_item',
+    '__setitem__': 'set_item',
+    'builtins.len': 'len',
+    'not': 'not',
+    'in': 'in',
+}
+
+
+all_ops = set()
+
+from mypyc.ops import RPrimitive
+
+
+def primitive_op_name(op: Op) -> str:
+    name = op.desc.name
+    if name in name_map:
+        name = name_map[name]
+        arg_types = op.desc.arg_types
+        aa = []
+        for t in arg_types:
+            if isinstance(t, RPrimitive):
+                aa.append(t.name.split('.')[-1])
+            else:
+                aa.append('object')
+        if set(aa) != {'object'}:
+            name += '_' + '_'.join(aa)
+    name = name.replace('.', '_')
+    if name == '<custom>':
+        print(op.desc)
+    all_ops.add(name)
+    return name
+
+
+#def dump():
+#    for o in sorted(all_ops):
+#        print(o)
+
+#import atexit
+#atexit.register(dump)
