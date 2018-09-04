@@ -421,8 +421,8 @@ def prepare_class_def(module_name: str, cdef: ClassDef, mapper: Mapper) -> None:
     ir.mro = mro
     ir.base_mro = base_mro
 
-    for base in ir.mro[1:]:
-        base.has_children = True
+    for base in bases:
+        base.children.append(ir)
 
     # We need to know whether any children of a class have a __bool__
     # method in order to know whether we can assume it is always true.
@@ -2153,7 +2153,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 and self.is_native_module_ref_expr(expr.args[1])):
             # Special case native isinstance() checks as this makes them much faster.
             ir = self.mapper.type_to_ir.get(expr.args[1].node)
-            op = type_is_op if ir and not ir.has_children else fast_isinstance_op
+            op = type_is_op if ir and not ir.children else fast_isinstance_op
             return self.primitive_op(op, arg_values, expr.line)
 
         # Special case builtins.globals
