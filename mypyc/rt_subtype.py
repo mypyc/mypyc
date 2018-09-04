@@ -30,8 +30,7 @@ class RTSubtypeVisitor(RTypeVisitor[bool]):
         return isinstance(self.right, RInstance) and is_subtype(left, self.right)
 
     def visit_runion(self, left: RUnion) -> bool:
-        # XXX
-        return isinstance(self.right, RUnion) and is_subtype(left, self.right)
+        return is_subtype(left, self.right)
 
     def visit_rprimitive(self, left: RPrimitive) -> bool:
         if is_unsafe_int_rprimitive(left) and is_int_rprimitive(self.right):

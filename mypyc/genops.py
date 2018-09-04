@@ -62,9 +62,10 @@ from mypyc.ops import (
     is_object_rprimitive, LiteralsMap, FuncSignature, VTableAttr, VTableMethod, VTableEntries,
     NAMESPACE_TYPE, RaiseStandardError, LoadErrorValue, NO_TRACEBACK_LINE_NO, FuncDecl,
     FUNC_NORMAL, FUNC_STATICMETHOD, FUNC_CLASSMETHOD,
-    RUnion, is_optional_type, optional_value_type
+    RUnion, is_optional_type, optional_value_type, is_unsafe_int_rprimitive,
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
+from mypyc.ops_int import unsafe_add
 from mypyc.ops_list import (
     list_append_op, list_extend_op, list_len_op, list_get_item_op, list_set_item_op, new_list_op,
 )
@@ -1650,9 +1651,15 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
             self.goto_and_activate(increment_block)
 
-            # Increment index register.
-            self.assign(index_target, self.binary_op(self.read(index_target, line),
-                                                     self.add(LoadInt(1)), '+', line), line)
+            # Increment index register. If the range is known to fit in short ints, use
+            # short ints.
+            if is_unsafe_int_rprimitive(start_reg.type) and is_unsafe_int_rprimitive(end_reg.type):
+                new_val = self.primitive_op(
+                    unsafe_add, [self.read(index_target, line), self.add(LoadInt(1))], line)
+            else:
+                new_val = self.binary_op(
+                    self.read(index_target, line), self.add(LoadInt(1)), '+', line)
+            self.assign(index_target, new_val, line)
 
             # Go back to loop condition check.
             self.goto(condition_block)
@@ -1693,8 +1700,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             body_insts()
 
             self.goto_and_activate(increment_block)
-            self.assign(index_target, self.binary_op(self.read(index_target, line),
-                                                     self.add(LoadInt(1)), '+', line), line)
+            self.assign(index_target, self.primitive_op(
+                unsafe_add,
+                [self.read(index_target, line), self.add(LoadInt(1))], line), line)
             self.goto(condition_block)
 
             self.pop_loop_stack()

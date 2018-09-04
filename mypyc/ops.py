@@ -943,7 +943,7 @@ class LoadInt(RegisterOp):
     def __init__(self, value: int, line: int = -1) -> None:
         super().__init__(line)
         self.value = value
-        self.type = int_rprimitive
+        self.type = unsafe_int_rprimitive
 
     def sources(self) -> List[Value]:
         return []
