@@ -35,7 +35,7 @@ class RTSubtypeVisitor(RTypeVisitor[bool]):
     def visit_rprimitive(self, left: RPrimitive) -> bool:
         if is_short_int_rprimitive(left) and is_int_rprimitive(self.right):
             return True
-        return isinstance(self.right, RPrimitive) and left.name == self.right.name
+        return left is self.right
 
     def visit_rtuple(self, left: RTuple) -> bool:
         return is_same_type(left, self.right)
