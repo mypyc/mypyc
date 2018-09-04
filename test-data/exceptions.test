@@ -15,7 +15,6 @@ def f(x):
 L0:
     r0 = 0
     r1 = x[r0] :: list
-    dec_ref r0 :: int
     if is_error(r1) goto L3 (error at f:3) else goto L1
 L1:
     r2 = unbox(int, r1)
@@ -149,7 +148,6 @@ L4:
     r6 = 1
     r7 = i + r6 :: int
     dec_ref i :: int
-    dec_ref r6 :: int
     i = r7
     goto L1
 L5:
@@ -414,7 +412,6 @@ L6:
 L7:
     r10 = 1
     r11 = -r10 :: int
-    dec_ref r10 :: int
     restore_exc_info r5
     dec_ref r5
     return r11
@@ -438,7 +435,6 @@ L13:
     r14 = 1
     r15 = st + r14 :: int
     dec_ref st :: int
-    dec_ref r14 :: int
     return r15
 L14:
     r16 = <error> :: int
