@@ -3,7 +3,7 @@
 from typing import List
 
 from mypyc.ops import (
-    int_rprimitive, unsafe_int_rprimitive, list_rprimitive, object_rprimitive, bool_rprimitive,
+    int_rprimitive, short_int_rprimitive, list_rprimitive, object_rprimitive, bool_rprimitive,
     ERR_MAGIC, ERR_NEVER,
     ERR_FALSE, EmitterInterface, PrimitiveOp, Value
 )
@@ -111,6 +111,6 @@ def emit_len(emitter: EmitterInterface, args: List[str], dest: str) -> None:
 
 list_len_op = func_op(name='builtins.len',
                       arg_types=[list_rprimitive],
-                      result_type=unsafe_int_rprimitive,
+                      result_type=short_int_rprimitive,
                       error_kind=ERR_NEVER,
                       emit=emit_len)

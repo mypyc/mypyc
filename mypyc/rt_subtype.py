@@ -3,7 +3,7 @@
 from mypyc.ops import (
     RType, RUnion, RInstance, RPrimitive, RTuple, RVoid, RTypeVisitor,
     is_bool_rprimitive, is_int_rprimitive, is_tuple_rprimitive, none_rprimitive,
-    is_unsafe_int_rprimitive,
+    is_short_int_rprimitive,
     is_object_rprimitive
 )
 from mypyc.sametype import is_same_type
@@ -33,7 +33,7 @@ class RTSubtypeVisitor(RTypeVisitor[bool]):
         return is_subtype(left, self.right)
 
     def visit_rprimitive(self, left: RPrimitive) -> bool:
-        if is_unsafe_int_rprimitive(left) and is_int_rprimitive(self.right):
+        if is_short_int_rprimitive(left) and is_int_rprimitive(self.right):
             return True
         return isinstance(self.right, RPrimitive) and left.name == self.right.name
 

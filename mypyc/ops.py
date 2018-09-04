@@ -111,7 +111,7 @@ object_rprimitive = RPrimitive('builtins.object', is_unboxed=False, is_refcounte
 
 int_rprimitive = RPrimitive('builtins.int', is_unboxed=True, is_refcounted=True, ctype='CPyTagged')
 
-unsafe_int_rprimitive = RPrimitive('builtins._int', is_unboxed=True, is_refcounted=False,
+short_int_rprimitive = RPrimitive('short_int', is_unboxed=True, is_refcounted=False,
                                    ctype='CPyTagged')
 
 float_rprimitive = RPrimitive('builtins.float', is_unboxed=False, is_refcounted=True)
@@ -137,8 +137,8 @@ def is_int_rprimitive(rtype: RType) -> bool:
     return rtype is int_rprimitive
 
 
-def is_unsafe_int_rprimitive(rtype: RType) -> bool:
-    return rtype is unsafe_int_rprimitive
+def is_short_int_rprimitive(rtype: RType) -> bool:
+    return rtype is short_int_rprimitive
 
 
 def is_float_rprimitive(rtype: RType) -> bool:
@@ -943,7 +943,7 @@ class LoadInt(RegisterOp):
     def __init__(self, value: int, line: int = -1) -> None:
         super().__init__(line)
         self.value = value
-        self.type = unsafe_int_rprimitive
+        self.type = short_int_rprimitive
 
     def sources(self) -> List[Value]:
         return []

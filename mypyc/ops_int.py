@@ -2,7 +2,7 @@ from typing import List
 
 from mypyc.ops import (
     PrimitiveOp,
-    int_rprimitive, bool_rprimitive, float_rprimitive, object_rprimitive, unsafe_int_rprimitive,
+    int_rprimitive, bool_rprimitive, float_rprimitive, object_rprimitive, short_int_rprimitive,
     RType, EmitterInterface, OpDescription,
     ERR_NEVER, ERR_MAGIC,
 )
@@ -41,10 +41,10 @@ def int_compare_op(op: str, c_func_name: str) -> None:
     int_binary_op(op, c_func_name, bool_rprimitive)
     # Generate a straight compare if we know both sides are short
     binary_op(op=op,
-              arg_types=[unsafe_int_rprimitive, unsafe_int_rprimitive],
+              arg_types=[short_int_rprimitive, short_int_rprimitive],
               result_type=bool_rprimitive,
               error_kind=ERR_NEVER,
-              format_str='{dest} = {args[0]} %s {args[1]} :: unsafe_int' % op,
+              format_str='{dest} = {args[0]} %s {args[1]} :: short_int' % op,
               emit=simple_emit(
                   '{dest} = (CPySignedInt){args[0]} %s (CPySignedInt){args[1]};' % op),
               priority=2)
@@ -72,11 +72,11 @@ int_compare_op('<=', 'CPyTagged_IsLe')
 int_compare_op('>', 'CPyTagged_IsGt')
 int_compare_op('>=', 'CPyTagged_IsGe')
 
-unsafe_add = custom_op(
-    arg_types=[unsafe_int_rprimitive, unsafe_int_rprimitive],
-    result_type=unsafe_int_rprimitive,
+unsafe_short_add = custom_op(
+    arg_types=[short_int_rprimitive, short_int_rprimitive],
+    result_type=short_int_rprimitive,
     error_kind=ERR_NEVER,
-    format_str='{dest} = {args[0]} + {args[1]} :: unsafe_int',
+    format_str='{dest} = {args[0]} + {args[1]} :: short_int',
     emit=simple_emit('{dest} = CPyTagged_AddUnsafe({args[0]}, {args[1]});'))
 
 
