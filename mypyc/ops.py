@@ -111,7 +111,7 @@ object_rprimitive = RPrimitive('builtins.object', is_unboxed=False, is_refcounte
 
 int_rprimitive = RPrimitive('builtins.int', is_unboxed=True, is_refcounted=True, ctype='CPyTagged')
 
-short_int_rprimitive = RPrimitive('short_int', is_unboxed=True, is_refcounted=False,
+short_int_rprimitive = RPrimitive('builtins.int', is_unboxed=True, is_refcounted=False,
                                    ctype='CPyTagged')
 
 float_rprimitive = RPrimitive('builtins.float', is_unboxed=False, is_refcounted=True)
