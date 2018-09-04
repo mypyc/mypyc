@@ -14,7 +14,7 @@ from abc import abstractmethod, abstractproperty
 import re
 from typing import (
     List, Sequence, Dict, Generic, TypeVar, Optional, Any, NamedTuple, Tuple, Callable,
-    Union, Iterable, Type,
+    Union, Iterable, Type
 )
 from collections import OrderedDict
 
@@ -1470,7 +1470,7 @@ class ClassIR:
         # base_mro is the chain of concrete (non-trait) ancestors
         self.base_mro = [self]  # type: List[ClassIR]
 
-        # Children of this class
+        # Subclasses of this class
         self.children = []  # type: List[ClassIR]
         # Does this class or any subclass have a __bool__method
         self.has_bool = False
