@@ -44,7 +44,7 @@ def int_compare_op(op: str, c_func_name: str) -> None:
               arg_types=[short_int_rprimitive, short_int_rprimitive],
               result_type=bool_rprimitive,
               error_kind=ERR_NEVER,
-              format_str='{dest} = {args[0]} %s {args[1]} :: int' % op,
+              format_str='{dest} = {args[0]} %s {args[1]} :: short_int' % op,
               emit=simple_emit(
                   '{dest} = (CPySignedInt){args[0]} %s (CPySignedInt){args[1]};' % op),
               priority=2)
@@ -76,7 +76,7 @@ unsafe_short_add = custom_op(
     arg_types=[int_rprimitive, int_rprimitive],
     result_type=short_int_rprimitive,
     error_kind=ERR_NEVER,
-    format_str='{dest} = {args[0]} + {args[1]} :: int',
+    format_str='{dest} = {args[0]} + {args[1]} :: short_int',
     emit=simple_emit('{dest} = CPyTagged_AddUnsafe({args[0]}, {args[1]});'))
 
 
