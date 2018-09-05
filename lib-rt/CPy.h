@@ -617,7 +617,23 @@ static PyObject *CPyList_GetItemShort(PyObject *list, CPyTagged index) {
 
 static PyObject *CPyList_GetItem(PyObject *list, CPyTagged index) {
     if (CPyTagged_CheckShort(index)) {
-        return CPyList_GetItemShort(list, index);
+        long long n = CPyTagged_ShortAsLongLong(index);
+        Py_ssize_t size = PyList_GET_SIZE(list);
+        if (n >= 0) {
+            if (n >= size) {
+                PyErr_SetString(PyExc_IndexError, "list index out of range");
+                return NULL;
+            }
+        } else {
+            n += size;
+            if (n < 0) {
+                PyErr_SetString(PyExc_IndexError, "list index out of range");
+                return NULL;
+            }
+        }
+        PyObject *result = PyList_GET_ITEM(list, n);
+        Py_INCREF(result);
+        return result;
     } else {
         PyErr_SetString(PyExc_IndexError, "list index out of range");
         return NULL;
