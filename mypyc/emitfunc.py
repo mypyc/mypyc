@@ -314,7 +314,7 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         # Can we call the method directly, bypassing vtable?
         is_direct = False
         if not class_ir.is_trait:
-            if not any(name in subc.methods for subc in class_ir.children):
+            if not any(name in subc.methods for subc in class_ir.subclasses()):
                 is_direct = True
 
         # The first argument gets omitted for static methods and
