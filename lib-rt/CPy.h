@@ -403,10 +403,6 @@ static CPyTagged CPyTagged_Negate(CPyTagged num) {
     return CPyTagged_StealFromObject(result);
 }
 
-static inline CPyTagged CPyTagged_AddUnsafe(CPyTagged left, CPyTagged right) {
-    return left + right;
-}
-
 static CPyTagged CPyTagged_Add(CPyTagged left, CPyTagged right) {
     // TODO: Use clang/gcc extension __builtin_saddll_overflow instead.
     if (CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right)) {

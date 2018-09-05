@@ -77,7 +77,7 @@ unsafe_short_add = custom_op(
     result_type=short_int_rprimitive,
     error_kind=ERR_NEVER,
     format_str='{dest} = {args[0]} + {args[1]} :: short_int',
-    emit=simple_emit('{dest} = CPyTagged_AddUnsafe({args[0]}, {args[1]});'))
+    emit=simple_emit('{dest} = {args[0]} + {args[1]};'))
 
 
 def int_unary_op(op: str, c_func_name: str) -> OpDescription:

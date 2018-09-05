@@ -1,4 +1,17 @@
-"""*Runtime* Subtype check for RTypes."""
+"""'Runtime subtype' check for RTypes.
+
+A type S is a runtime subtype of T if a value of type S can be used at runtime
+when a value of type T is expected without requiring any runtime conversions.
+
+For boxed types, runtime subtyping is the same as regular subtyping.
+Unboxed subtypes, on the other hand, are not runtime subtypes of object
+(since they require boxing to be used as an object), but short ints
+are runtime subtypes of int.
+
+Subtyping is used to determine whether an object can be in a
+particular place and runtime subtyping is used to determine whether a
+coercion is necessary first.
+"""
 
 from mypyc.ops import (
     RType, RUnion, RInstance, RPrimitive, RTuple, RVoid, RTypeVisitor,
@@ -11,8 +24,6 @@ from mypyc.subtype import is_subtype
 
 
 def is_runtime_subtype(left: RType, right: RType) -> bool:
-    if not left.is_unboxed and is_object_rprimitive(right):
-        return True
     return left.accept(RTSubtypeVisitor(right))
 
 
@@ -27,7 +38,7 @@ class RTSubtypeVisitor(RTypeVisitor[bool]):
         self.right = right
 
     def visit_rinstance(self, left: RInstance) -> bool:
-        return isinstance(self.right, RInstance) and is_subtype(left, self.right)
+        return is_subtype(left, self.right)
 
     def visit_runion(self, left: RUnion) -> bool:
         return is_subtype(left, self.right)
