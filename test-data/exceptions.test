@@ -433,3 +433,77 @@ L13:
 L14:
     dec_ref r5
     goto L9
+
+[case testMaybeUninitVarExc]
+def f() -> None:
+    u = 'a'
+    while True:
+        v = 'b'
+        if v is not u:
+            break
+    print(v)
+[out]
+def f():
+    r0, u :: str
+    r1 :: bool
+    r2, v :: str
+    r3, r4 :: bool
+    r5 :: object
+    r6 :: str
+    r7, r8 :: object
+    r9, r10 :: None
+    r11 :: bool
+    r12 :: None
+L0:
+    r0 = unicode_1 :: static  ('a')
+    inc_ref r0
+    u = r0
+L1:
+    r1 = True
+    if r1 goto L11 else goto L12 :: bool
+L2:
+    r2 = unicode_2 :: static  ('b')
+    inc_ref r2
+    v = r2
+    r3 = v is u
+    r4 = !r3
+    if r4 goto L12 else goto L1 :: bool
+L3:
+    r5 = builtins.module :: static
+    r6 = unicode_3 :: static  ('print')
+    r7 = getattr r5, r6
+    if is_error(r7) goto L13 (error at f:7) else goto L4
+L4:
+    if is_error(v) goto L14 else goto L7
+L5:
+    raise UnboundLocalError("local variable 'v' referenced before assignment")
+    if not r11 goto L10 (error at f:7) else goto L6 :: bool
+L6:
+    unreachable
+L7:
+    r8 = py_call(r7, v)
+    dec_ref r7
+    xdec_ref v
+    if is_error(r8) goto L10 (error at f:7) else goto L8
+L8:
+    r9 = unbox(None, r8)
+    dec_ref r8
+    if is_error(r9) goto L10 (error at f:7) else goto L9
+L9:
+    r10 = None
+    return r10
+L10:
+    r12 = <error> :: None
+    return r12
+L11:
+    xdec_ref v
+    goto L2
+L12:
+    dec_ref u
+    goto L3
+L13:
+    xdec_ref v
+    goto L10
+L14:
+    dec_ref r7
+    goto L5

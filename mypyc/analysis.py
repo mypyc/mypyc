@@ -61,6 +61,9 @@ def get_cfg(blocks: List[BasicBlock]) -> CFG:
         else:
             succ = []
             exits.add(block)
+        if block.error_handler:
+            succ.append(block.error_handler)
+
         succ_map[block] = succ
         pred_map[block] = []
     for prev, nxt in succ_map.items():
@@ -181,7 +184,7 @@ class BaseAnalysisVisitor(OpVisitor[GenAndKill]):
         return self.visit_register_op(op)
 
 
-class MaybeDefinedVisitor(BaseAnalysisVisitor):
+class DefinedVisitor(BaseAnalysisVisitor):
     def visit_branch(self, op: Branch) -> GenAndKill:
         return set(), set()
 
@@ -192,10 +195,7 @@ class MaybeDefinedVisitor(BaseAnalysisVisitor):
         return set(), set()
 
     def visit_register_op(self, op: RegisterOp) -> GenAndKill:
-        if not op.is_void:
-            return {op}, set()
-        else:
-            return set(), set()
+        return set(), set()
 
     def visit_assign(self, op: Assign) -> GenAndKill:
         return {op.dest}, set()
@@ -210,32 +210,10 @@ def analyze_maybe_defined_regs(blocks: List[BasicBlock],
     """
     return run_analysis(blocks=blocks,
                         cfg=cfg,
-                        gen_and_kill=MaybeDefinedVisitor(),
+                        gen_and_kill=DefinedVisitor(),
                         initial=initial_defined,
                         backward=False,
                         kind=MAYBE_ANALYSIS)
-
-
-class MustDefinedVisitor(BaseAnalysisVisitor):
-    # TODO: Merge with MaybeDefinedVisitor?
-
-    def visit_branch(self, op: Branch) -> GenAndKill:
-        return set(), set()
-
-    def visit_return(self, op: Return) -> GenAndKill:
-        return set(), set()
-
-    def visit_unreachable(self, op: Unreachable) -> GenAndKill:
-        return set(), set()
-
-    def visit_register_op(self, op: RegisterOp) -> GenAndKill:
-        if not op.is_void:
-            return {op}, set()
-        else:
-            return set(), set()
-
-    def visit_assign(self, op: Assign) -> GenAndKill:
-        return {op.dest}, set()
 
 
 def analyze_must_defined_regs(
@@ -249,7 +227,7 @@ def analyze_must_defined_regs(
     """
     return run_analysis(blocks=blocks,
                         cfg=cfg,
-                        gen_and_kill=MustDefinedVisitor(),
+                        gen_and_kill=DefinedVisitor(),
                         initial=initial_defined,
                         backward=False,
                         kind=MUST_ANALYSIS,

@@ -433,6 +433,42 @@ print(f((1,2,3,4)))
 [out]
 2
 
+[case testMaybeUninitVar]
+class C:
+    def __init__(self, x: int) -> None:
+        self.x = x
+
+def f() -> None:
+    u = C(1)
+    while True:
+        v = C(2)
+        if v is not u:
+            break
+    print(v.x)
+[file driver.py]
+from native import f
+f()
+[out]
+2
+
+[case testUninitBoom]
+def f(a: bool, b: bool) -> None:
+    if a:
+        x = 'lol'
+    if b:
+        print(x[0])
+[file driver.py]
+from native import f
+f(True, True)
+f(False, False)
+try:
+    f(False, True)
+except Exception as e:
+    print(e)
+[out]
+l
+local variable 'x' referenced before assignment
+
 [case testFunctionCallWithDefaultArgs]
 from typing import Tuple, List, Optional
 def f(x: int, y: int = 3, s: str = "test", z: object = 5) -> Tuple[int, str]:
