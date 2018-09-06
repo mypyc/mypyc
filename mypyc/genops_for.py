@@ -224,7 +224,7 @@ class ForEnumerate(ForGenerator):
             expr,
             self.body_block,
             self.loop_exit,
-            self.line)
+            self.line, nested=True)
 
     def check(self) -> None:
         # No need for a check for the index generator, since it's unconditional.
@@ -262,7 +262,7 @@ class ForZip(ForGenerator):
                 expr,
                 next_block,
                 self.loop_exit,
-                self.line, reuse_cleanup=True)
+                self.line, nested=True)
             self.gens.append(gen)
 
     def check(self) -> None:

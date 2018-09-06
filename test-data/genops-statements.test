@@ -779,11 +779,14 @@ L0:
     return r7
 
 [case testForEnumerate]
-from typing import List
+from typing import List, Iterable
 
 def f(a: List[int]) -> None:
     for i, x in enumerate(a):
         i + x
+def g(x: Iterable[int]) -> None:
+    for i, n in enumerate(x):
+        pass
 [out]
 def f(a):
     a :: list
@@ -820,6 +823,35 @@ L4:
 L5:
     r12 = None
     return r12
+def g(x):
+    x :: object
+    i :: int
+    r0 :: short_int
+    r1, r2 :: object
+    n, r3 :: int
+    r4, r5 :: short_int
+    r6 :: bool
+    r7 :: None
+L0:
+    r0 = 0
+    i = r0
+    r1 = iter x :: object
+L1:
+    r2 = next r1 :: object
+    if is_error(r2) goto L4 else goto L2
+L2:
+    r3 = unbox(int, r2)
+    n = r3
+L3:
+    r4 = 1
+    r5 = i + r4 :: short_int
+    i = r5
+    goto L1
+L4:
+    r6 = no_err_occurred
+L5:
+    r7 = None
+    return r7
 
 [case testForZip]
 from typing import List, Iterable
