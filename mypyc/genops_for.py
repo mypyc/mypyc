@@ -98,6 +98,9 @@ class ForList(ForGenerator):
 
     def init(self, expr_reg: Value, target_type: RType) -> None:
         builder = self.builder
+        # Define target to contain the expression, along with the index that will be used
+        # for the for-loop. If we are inside of a generator function, spill these into the
+        # environment class.
         index_reg = builder.add(LoadInt(0))
         self.expr_target = builder.maybe_spill(expr_reg)
         self.index_target = builder.maybe_spill_assignable(index_reg)

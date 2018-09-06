@@ -1618,16 +1618,56 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Determine where we want to exit, if our condition check fails.
         normal_loop_exit = else_block if else_insts is not None else exit_block
 
-        # Only support 1 and 2 arg forms for now
+        for_gen = self.make_for_loop_generator(index, expr, body_block, normal_loop_exit, line)
+
+        self.push_loop_stack(increment_block, exit_block)
+        if not for_gen.has_combined_next_and_check():
+            condition_block = self.goto_new_block()
+        else:
+            self.goto_and_activate(increment_block)
+
+        # Add loop condition check.
+        for_gen.check()
+
+        self.activate_block(body_block)
+        for_gen.begin_body()
+        body_insts()
+
+        if not for_gen.has_combined_next_and_check():
+            self.goto_and_activate(increment_block)
+            for_gen.next()
+            # Go back to loop condition check.
+            self.goto(condition_block)
+        else:
+            self.goto(increment_block)
+
+        if for_gen.need_cleanup():
+            self.activate_block(for_gen.loop_exit)
+            for_gen.cleanup()
+            self.goto(normal_loop_exit)
+
+        self.pop_loop_stack()
+
+        if else_insts is not None:
+            self.activate_block(else_block)
+            else_insts()
+            self.goto(exit_block)
+
+        self.activate_block(exit_block)
+
+    def make_for_loop_generator(self,
+                                index: Lvalue,
+                                expr: Expression,
+                                body_block: BasicBlock,
+                                normal_loop_exit: BasicBlock,
+                                line: int) -> ForGenerator:
+        """Return helper object for generating a for loop over an iterable."""
         if (isinstance(expr, CallExpr)
                 and isinstance(expr.callee, RefExpr)
                 and expr.callee.fullname == 'builtins.range'
                 and len(expr.args) <= 2):
-
-            condition_block = BasicBlock()
-            self.push_loop_stack(increment_block, exit_block)
-
-            # Special case for x in range(...)
+            # Special case "for x in range(...)".
+            # Only support 1 and 2 arg forms for now.
             # TODO: Check argument counts and kinds; check the lvalue
             if len(expr.args) == 1:
                 start_reg = self.add(LoadInt(0))
@@ -1638,31 +1678,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
             for_range = ForRange(self, index, body_block, normal_loop_exit, line)
             for_range.init(start_reg, end_reg)
-
-            self.goto(condition_block)
-
-            # Add loop condition check.
-            self.activate_block(condition_block)
-            for_range.check()
-
-            self.activate_block(body_block)
-            body_insts()
-
-            self.goto_and_activate(increment_block)
-
-            for_range.next()
-
-            # Go back to loop condition check.
-            self.goto(condition_block)
-
-            self.pop_loop_stack()
+            return for_range
 
         elif is_list_rprimitive(self.node_type(expr)):
-            self.push_loop_stack(increment_block, exit_block)
-
-            # Define targets to contain the expression, along with the index that will be used
-            # for the for-loop. If we are inside of a generator function, spill these into the
-            # environment class.
+            # Special case "for x in <list>".
             expr_reg = self.accept(expr)
             target_list_type = self.types[expr]
             assert isinstance(target_list_type, Instance)
@@ -1670,55 +1689,15 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
             for_list = ForList(self, index, body_block, normal_loop_exit, line)
             for_list.init(expr_reg, target_type)
-
-            condition_block = self.goto_new_block()
-
-            for_list.check()
-
-            self.activate_block(body_block)
-
-            for_list.begin_body()
-
-            body_insts()
-
-            self.goto_and_activate(increment_block)
-
-            for_list.next()
-            self.goto(condition_block)
-
-            self.pop_loop_stack()
+            return for_list
 
         else:
+            # Generic for loop.
             error_check_block = BasicBlock()
-
-            self.push_loop_stack(increment_block, exit_block)
-
             expr_reg = self.accept(expr)
             for_obj = ForIterable(self, index, body_block, error_check_block, line)
             for_obj.init(expr_reg)
-
-            self.goto_and_activate(increment_block)
-            for_obj.check()
-
-            # Create a new block for the body of the loop. Set the previous branch to go here if
-            # the conditional evaluates to false.
-            self.activate_block(body_block)
-            for_obj.begin_body()
-            body_insts()
-            self.goto(increment_block)
-
-            self.activate_block(error_check_block)
-            for_obj.cleanup()
-            self.goto(normal_loop_exit)
-
-            self.pop_loop_stack()
-
-        if else_insts is not None:
-            self.activate_block(else_block)
-            else_insts()
-            self.goto(exit_block)
-
-        self.activate_block(exit_block)
+            return for_obj
 
     def visit_break_stmt(self, node: BreakStmt) -> None:
         self.nonlocal_control[-1].gen_break(self)
