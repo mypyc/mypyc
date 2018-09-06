@@ -1,8 +1,11 @@
 """Helpers for generating for loops."""
 
+from typing import Union
+
 from mypy.nodes import Lvalue
 from mypyc.ops import (
-    Value, BasicBlock, is_short_int_rprimitive, LoadInt, RType, PrimitiveOp, Branch
+    Value, BasicBlock, is_short_int_rprimitive, LoadInt, RType, PrimitiveOp, Branch, Register,
+    AssignmentTarget
 )
 from mypyc.ops_int import unsafe_short_add
 from mypyc.ops_list import list_len_op
@@ -16,13 +19,11 @@ class ForGenerator:
                  builder: 'mypyc.genops.IRBuilder',
                  index: Lvalue,
                  body_block: BasicBlock,
-                 increment_block: BasicBlock,
                  loop_exit: BasicBlock,
                  line: int) -> None:
         self.builder = builder
         self.index = index
         self.body_block = body_block
-        self.increment_block = increment_block
         self.loop_exit = loop_exit
         self.line = line
 
@@ -60,7 +61,7 @@ class ForIterable(ForGenerator):
         # environment class.
         builder = self.builder
         iter_reg = builder.primitive_op(iter_op, [expr_reg], self.line)
-        expr_target = builder.maybe_spill(expr_reg)
+        builder.maybe_spill(expr_reg)
         self.iter_target = builder.maybe_spill(iter_reg)
 
     def check(self) -> None:
@@ -166,7 +167,7 @@ class ForRange(ForGenerator):
                                    builder.add(LoadInt(1))], line)
         else:
             new_val = builder.binary_op(
-                builder.read(index_target, line), builder.add(LoadInt(1)), '+', line)
+                builder.read(self.index_target, line), builder.add(LoadInt(1)), '+', line)
         builder.assign(self.index_target, new_val, line)
 
 

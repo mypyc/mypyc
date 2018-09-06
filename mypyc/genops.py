@@ -84,7 +84,7 @@ from mypyc.ops_exc import (
     error_catch_op, restore_exc_info_op, exc_matches_op, get_exc_value_op,
     get_exc_info_op, keep_propagating_op,
 )
-from mypyc.genops_for import ForRange, ForList, ForIterable
+from mypyc.genops_for import ForGenerator, ForRange, ForList, ForIterable
 from mypyc.rt_subtype import is_runtime_subtype
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
@@ -1636,21 +1636,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 start_reg = self.accept(expr.args[0])
                 end_reg = self.accept(expr.args[1])
 
-            for_obj = ForRange(self, index, body_block, increment_block, normal_loop_exit, line)
-            for_obj.init(start_reg, end_reg)
+            for_range = ForRange(self, index, body_block, normal_loop_exit, line)
+            for_range.init(start_reg, end_reg)
 
             self.goto(condition_block)
 
             # Add loop condition check.
             self.activate_block(condition_block)
-            for_obj.check()
+            for_range.check()
 
             self.activate_block(body_block)
             body_insts()
 
             self.goto_and_activate(increment_block)
 
-            for_obj.next()
+            for_range.next()
 
             # Go back to loop condition check.
             self.goto(condition_block)
@@ -1668,22 +1668,22 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             assert isinstance(target_list_type, Instance)
             target_type = self.type_to_rtype(target_list_type.args[0])
 
-            for_obj = ForList(self, index, body_block, increment_block, normal_loop_exit, line)
-            for_obj.init(expr_reg, target_type)
+            for_list = ForList(self, index, body_block, normal_loop_exit, line)
+            for_list.init(expr_reg, target_type)
 
             condition_block = self.goto_new_block()
 
-            for_obj.check()
+            for_list.check()
 
             self.activate_block(body_block)
 
-            for_obj.begin_body()
+            for_list.begin_body()
 
             body_insts()
 
             self.goto_and_activate(increment_block)
 
-            for_obj.next()
+            for_list.next()
             self.goto(condition_block)
 
             self.pop_loop_stack()
@@ -1694,7 +1694,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.push_loop_stack(increment_block, exit_block)
 
             expr_reg = self.accept(expr)
-            for_obj = ForIterable(self, index, body_block, increment_block, error_check_block, line)
+            for_obj = ForIterable(self, index, body_block, error_check_block, line)
             for_obj.init(expr_reg)
 
             self.goto_and_activate(increment_block)
