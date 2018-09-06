@@ -84,7 +84,7 @@ from mypyc.ops_exc import (
     error_catch_op, restore_exc_info_op, exc_matches_op, get_exc_value_op,
     get_exc_info_op, keep_propagating_op,
 )
-from mypyc.genops_for import ForRange, ForList
+from mypyc.genops_for import ForRange, ForList, ForIterable
 from mypyc.rt_subtype import is_runtime_subtype
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
@@ -1693,37 +1693,22 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
             self.push_loop_stack(increment_block, exit_block)
 
-            # Define targets to contain the expression, along with the iterator that will be used
-            # for the for-loop. If we are inside of a generator function, spill these into the
-            # environment class.
             expr_reg = self.accept(expr)
-            iter_reg = self.primitive_op(iter_op, [expr_reg], line)
-            expr_target = self.maybe_spill(expr_reg)
-            iter_target = self.maybe_spill(iter_reg)
+            for_obj = ForIterable(self, index, body_block, increment_block, error_check_block, line)
+            for_obj.init(expr_reg)
 
-            # Create a block for where the __next__ function will be called on the iterator and
-            # checked to see if the value returned is NULL, which would signal either the end of
-            # the Iterable being traversed or an exception being raised. Note that Branch.IS_ERROR
-            # checks only for NULL (an exception does not necessarily have to be raised).
             self.goto_and_activate(increment_block)
-            next_reg = self.primitive_op(next_op, [self.read(iter_target, line)], line)
-            self.add(Branch(next_reg, error_check_block, body_block, Branch.IS_ERROR))
+            for_obj.check()
 
             # Create a new block for the body of the loop. Set the previous branch to go here if
-            # the conditional evaluates to false. Assign the value obtained from __next__ to the
-            # lvalue so that it can be referenced by code in the body of the loop. At the end of
-            # the body, goto the label that calls the iterator's __next__ function again.
+            # the conditional evaluates to false.
             self.activate_block(body_block)
-            self.assign(self.get_assignment_target(index), next_reg, line)
+            for_obj.begin_body()
             body_insts()
             self.goto(increment_block)
 
-            # Create a new block for when the loop is finished. Set the branch to go here if the
-            # conditional evaluates to true. If an exception was raised during the loop, then
-            # err_reg wil be set to True. If no_err_occurred_op returns False, then the exception
-            # will be propagated using the ERR_FALSE flag.
             self.activate_block(error_check_block)
-            self.primitive_op(no_err_occurred_op, [], line)
+            for_obj.cleanup()
             self.goto(normal_loop_exit)
 
             self.pop_loop_stack()
