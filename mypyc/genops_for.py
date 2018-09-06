@@ -27,6 +27,12 @@ class ForGenerator:
         self.loop_exit = loop_exit
         self.line = line
 
+    def add_cleanup(self, exit_block: BasicBlock) -> None:
+        if self.need_cleanup():
+            self.builder.activate_block(self.loop_exit)
+            self.cleanup()
+            self.builder.goto(exit_block)
+
     def has_combined_next_and_check(self) -> bool:
         return False
 

@@ -1641,10 +1641,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         else:
             self.goto(increment_block)
 
-        if for_gen.need_cleanup():
-            self.activate_block(for_gen.loop_exit)
-            for_gen.cleanup()
-            self.goto(normal_loop_exit)
+        for_gen.add_cleanup(normal_loop_exit)
 
         self.pop_loop_stack()
 
