@@ -84,6 +84,7 @@ from mypyc.ops_exc import (
     error_catch_op, restore_exc_info_op, exc_matches_op, get_exc_value_op,
     get_exc_info_op, keep_propagating_op,
 )
+from mypyc.genops_for import ForRange
 from mypyc.rt_subtype import is_runtime_subtype
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
@@ -1603,9 +1604,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                         line: int) -> None:
         """Generate IR for a loop.
 
-        "index" is the loop index Lvalue
-        "expr" is the expression to iterate over
-        "body_insts" is a function to generate the body of the loop.
+        Args:
+            index: the loop index Lvalue
+            expr: the expression to iterate over
+            body_insts: a function that generates the body of the loop
+            else_insts: a function that generates the else block instructions
         """
         body_block, increment_block = BasicBlock(), BasicBlock()
         # Block for the else clause, if we need it.
@@ -1633,34 +1636,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 start_reg = self.accept(expr.args[0])
                 end_reg = self.accept(expr.args[1])
 
-            end_target = self.maybe_spill(end_reg)
+            for_obj = ForRange(self, index, body_block, increment_block, normal_loop_exit, line)
+            for_obj.init(start_reg, end_reg)
 
-            # Initialize loop index to 0. Assert that the index target is assignable.
-            index_target = self.get_assignment_target(
-                index)  # type: Union[Register, AssignmentTarget]
-            self.assign(index_target, start_reg, line)
             self.goto(condition_block)
 
             # Add loop condition check.
             self.activate_block(condition_block)
-            comparison = self.binary_op(self.read(index_target, line),
-                                        self.read(end_target, line), '<', line)
-            self.add_bool_branch(comparison, body_block, normal_loop_exit)
+            for_obj.check()
 
             self.activate_block(body_block)
             body_insts()
 
             self.goto_and_activate(increment_block)
 
-            # Increment index register. If the range is known to fit in short ints, use
-            # short ints.
-            if is_short_int_rprimitive(start_reg.type) and is_short_int_rprimitive(end_reg.type):
-                new_val = self.primitive_op(
-                    unsafe_short_add, [self.read(index_target, line), self.add(LoadInt(1))], line)
-            else:
-                new_val = self.binary_op(
-                    self.read(index_target, line), self.add(LoadInt(1)), '+', line)
-            self.assign(index_target, new_val, line)
+            for_obj.next()
 
             # Go back to loop condition check.
             self.goto(condition_block)
