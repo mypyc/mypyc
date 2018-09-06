@@ -84,7 +84,7 @@ from mypyc.ops_exc import (
     error_catch_op, restore_exc_info_op, exc_matches_op, get_exc_value_op,
     get_exc_info_op, keep_propagating_op,
 )
-from mypyc.genops_for import ForRange
+from mypyc.genops_for import ForRange, ForList
 from mypyc.rt_subtype import is_runtime_subtype
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
@@ -1664,37 +1664,26 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # for the for-loop. If we are inside of a generator function, spill these into the
             # environment class.
             expr_reg = self.accept(expr)
-            index_reg = self.add(LoadInt(0))
-            expr_target = self.maybe_spill(expr_reg)
-            index_target = self.maybe_spill_assignable(index_reg)
-
-            condition_block = self.goto_new_block()
-
-            # For compatibility with python semantics we recalculate the length
-            # at every iteration.
-            len_reg = self.add(PrimitiveOp([self.read(expr_target, line)], list_len_op, line))
-            comparison = self.binary_op(self.read(index_target, line), len_reg, '<', line)
-            self.add_bool_branch(comparison, body_block, normal_loop_exit)
-
-            self.activate_block(body_block)
             target_list_type = self.types[expr]
             assert isinstance(target_list_type, Instance)
             target_type = self.type_to_rtype(target_list_type.args[0])
 
-            value_box = self.translate_special_method_call(
-                self.read(expr_target, line), '__getitem__',
-                [self.read(index_target, line)], None, line)
-            assert value_box
+            for_obj = ForList(self, index, body_block, increment_block, normal_loop_exit, line)
+            for_obj.init(expr_reg, target_type)
 
-            self.assign(self.get_assignment_target(index),
-                        self.unbox_or_cast(value_box, target_type, line), line)
+            condition_block = self.goto_new_block()
+
+            for_obj.check()
+
+            self.activate_block(body_block)
+
+            for_obj.begin_body()
 
             body_insts()
 
             self.goto_and_activate(increment_block)
-            self.assign(index_target, self.primitive_op(
-                unsafe_short_add,
-                [self.read(index_target, line), self.add(LoadInt(1))], line), line)
+
+            for_obj.next()
             self.goto(condition_block)
 
             self.pop_loop_stack()
