@@ -62,11 +62,12 @@ from mypyc.ops import (
     is_object_rprimitive, LiteralsMap, FuncSignature, VTableAttr, VTableMethod, VTableEntries,
     NAMESPACE_TYPE, RaiseStandardError, LoadErrorValue, NO_TRACEBACK_LINE_NO, FuncDecl,
     FUNC_NORMAL, FUNC_STATICMETHOD, FUNC_CLASSMETHOD,
-    RUnion, is_optional_type, optional_value_type
+    RUnion, is_optional_type, optional_value_type, is_short_int_rprimitive,
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
+from mypyc.ops_int import unsafe_short_add
 from mypyc.ops_list import (
-    list_append_op, list_extend_op, list_len_op, list_get_item_op, list_set_item_op, new_list_op,
+    list_append_op, list_extend_op, list_len_op, new_list_op,
 )
 from mypyc.ops_tuple import list_tuple_op
 from mypyc.ops_dict import new_dict_op, dict_get_item_op, dict_set_item_op, dict_update_op
@@ -83,6 +84,7 @@ from mypyc.ops_exc import (
     error_catch_op, restore_exc_info_op, exc_matches_op, get_exc_value_op,
     get_exc_info_op, keep_propagating_op,
 )
+from mypyc.rt_subtype import is_runtime_subtype
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
 from mypyc.crash import catch_errors
@@ -1650,9 +1652,15 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
             self.goto_and_activate(increment_block)
 
-            # Increment index register.
-            self.assign(index_target, self.binary_op(self.read(index_target, line),
-                                                     self.add(LoadInt(1)), '+', line), line)
+            # Increment index register. If the range is known to fit in short ints, use
+            # short ints.
+            if is_short_int_rprimitive(start_reg.type) and is_short_int_rprimitive(end_reg.type):
+                new_val = self.primitive_op(
+                    unsafe_short_add, [self.read(index_target, line), self.add(LoadInt(1))], line)
+            else:
+                new_val = self.binary_op(
+                    self.read(index_target, line), self.add(LoadInt(1)), '+', line)
+            self.assign(index_target, new_val, line)
 
             # Go back to loop condition check.
             self.goto(condition_block)
@@ -1683,9 +1691,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             assert isinstance(target_list_type, Instance)
             target_type = self.type_to_rtype(target_list_type.args[0])
 
-            value_box = self.add(PrimitiveOp([self.read(expr_target, line),
-                                              self.read(index_target, line)],
-                                             list_get_item_op, line))
+            value_box = self.translate_special_method_call(
+                self.read(expr_target, line), '__getitem__',
+                [self.read(index_target, line)], None, line)
+            assert value_box
 
             self.assign(self.get_assignment_target(index),
                         self.unbox_or_cast(value_box, target_type, line), line)
@@ -1693,8 +1702,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             body_insts()
 
             self.goto_and_activate(increment_block)
-            self.assign(index_target, self.binary_op(self.read(index_target, line),
-                                                     self.add(LoadInt(1)), '+', line), line)
+            self.assign(index_target, self.primitive_op(
+                unsafe_short_add,
+                [self.read(index_target, line), self.add(LoadInt(1))], line), line)
             self.goto(condition_block)
 
             self.pop_loop_stack()
@@ -1781,7 +1791,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     matching = desc
         if matching:
             target = self.primitive_op(matching, args, line)
-            if result_type and not is_same_type(target.type, result_type):
+            if result_type and not is_runtime_subtype(target.type, result_type):
                 if is_none_rprimitive(result_type):
                     # Special case None return. The actual result may actually be a bool
                     # and so we can't just coerce it.
@@ -2510,7 +2520,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return go(0, self.accept(e.operands[0]))
 
     def add_bool_branch(self, value: Value, true: BasicBlock, false: BasicBlock) -> None:
-        if is_same_type(value.type, int_rprimitive):
+        if is_runtime_subtype(value.type, int_rprimitive):
             zero = self.add(LoadInt(0))
             value = self.binary_op(value, zero, '!=', value.line)
         elif is_same_type(value.type, list_rprimitive):
@@ -3014,7 +3024,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.primitive_op(list_append_op, [list_ops, e], o.line)
 
         self.comprehension_helper(loop_params, gen_inner_stmts, o.line)
-        return list_ops
+        return self.primitive_op(iter_op, [list_ops], o.line)
 
     def comprehension_helper(self,
                              loop_params: List[Tuple[Lvalue, Expression, List[Expression]]],
@@ -3941,7 +3951,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         if src.type.is_unboxed and not target_type.is_unboxed:
             return self.box(src)
         if ((src.type.is_unboxed and target_type.is_unboxed)
-                and not is_same_type(src.type, target_type)):
+                and not is_runtime_subtype(src.type, target_type)):
             # To go from one unboxed type to another, we go through a boxed
             # in-between value, for simplicity.
             tmp = self.box(src)
