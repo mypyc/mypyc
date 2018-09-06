@@ -84,7 +84,7 @@ from mypyc.ops_exc import (
     error_catch_op, restore_exc_info_op, exc_matches_op, get_exc_value_op,
     get_exc_info_op, keep_propagating_op,
 )
-from mypyc.genops_for import ForGenerator, ForRange, ForList, ForIterable
+from mypyc.genops_for import ForGenerator, ForRange, ForList, ForIterable, ForEnumerate
 from mypyc.rt_subtype import is_runtime_subtype
 from mypyc.subtype import is_subtype
 from mypyc.sametype import is_same_type, is_same_method_signature
@@ -1687,6 +1687,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             for_list = ForList(self, index, body_block, normal_loop_exit, line)
             for_list.init(expr_reg, target_type)
             return for_list
+
+        elif (isinstance(expr, CallExpr)
+                  and isinstance(expr.callee, RefExpr)
+                  and expr.callee.fullname == 'builtins.enumerate'
+                  and len(expr.args) == 1
+                  and isinstance(index, TupleExpr)
+                  and len(index.items) ==2 ):
+            # Special case "for i, x in enumerate(y)".
+            expr = expr.args[0]
+            lvalue1 = index.items[0]
+            lvalue2 = index.items[1]
+            cleanup_block = BasicBlock()
+            for_enumerate = ForEnumerate(self, index, body_block, cleanup_block, line)
+            for_enumerate.init(lvalue1, lvalue2, expr)
+            return for_enumerate
 
         else:
             # Generic for loop.

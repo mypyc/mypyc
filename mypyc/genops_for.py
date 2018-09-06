@@ -2,7 +2,7 @@
 
 from typing import Union
 
-from mypy.nodes import Lvalue
+from mypy.nodes import Lvalue, Expression
 from mypyc.ops import (
     Value, BasicBlock, is_short_int_rprimitive, LoadInt, RType, PrimitiveOp, Branch, Register,
     AssignmentTarget
@@ -39,12 +39,14 @@ class ForGenerator:
     def need_cleanup(self) -> bool:
         return False
 
-    def check(self) -> None: ...
+    def check(self) -> None:
+        pass
 
     def begin_body(self) -> None:
         pass
 
-    def next(self) -> None: ...
+    def next(self) -> None:
+        pass
 
     def cleanup(self) -> None:
         pass
@@ -180,12 +182,62 @@ class ForRange(ForGenerator):
         builder.assign(self.index_target, new_val, line)
 
 
-class ForCounterInfinite(ForGenerator):
-    def init(self) -> None:
-        ...
+class ForInfiniteCounter(ForGenerator):
+    """Generate IR for a for loop counting from 0 to infinity."""
 
-    def check(self) -> None:
-        ...
+    def init(self) -> None:
+        builder = self.builder
+        # Initialize loop index to 0. Assert that the index target is assignable.
+        self.index_target = builder.get_assignment_target(
+            self.index)  # type: Union[Register, AssignmentTarget]
+        builder.assign(self.index_target, builder.add(LoadInt(0)), self.line)
 
     def next(self) -> None:
-        ...
+        builder = self.builder
+        line = self.line
+        new_val = builder.primitive_op(
+            unsafe_short_add, [builder.read(self.index_target, line),
+                               builder.add(LoadInt(1))], line)
+        builder.assign(self.index_target, new_val, line)
+
+
+class ForEnumerate(ForGenerator):
+    """Generate IR for a for loop of form `for i, x in enumerate(...)`."""
+
+    def need_cleanup(self) -> bool:
+        # The wrapped for loop might need cleanup. We might generate a
+        # redundant cleanup block, but that's okay.
+        return True
+
+    def init(self, index1: Lvalue, index2: Lvalue, expr: Expression) -> None:
+        # Count from 0 to infinity.
+        self.index_gen = ForInfiniteCounter(
+            self.builder,
+            index1,
+            self.body_block,
+            self.loop_exit,
+            self.line)
+        self.index_gen.init()
+        # Iterate over the actual iterable.
+        self.main_gen = self.builder.make_for_loop_generator(
+            index2,
+            expr,
+            self.body_block,
+            self.loop_exit,
+            self.line)
+
+    def check(self) -> None:
+        # No need for a check for the index generator, since it's unconditional.
+        self.main_gen.check()
+
+    def begin_body(self) -> None:
+        self.index_gen.begin_body()
+        self.main_gen.begin_body()
+
+    def next(self) -> None:
+        self.index_gen.next()
+        self.main_gen.next()
+
+    def cleanup(self) -> None:
+        self.index_gen.cleanup()
+        self.main_gen.cleanup()
