@@ -1,6 +1,6 @@
 """Helpers for generating for loops."""
 
-from typing import Union
+from typing import Union, List
 
 from mypy.nodes import Lvalue, Expression
 from mypyc.ops import (
@@ -241,3 +241,45 @@ class ForEnumerate(ForGenerator):
     def cleanup(self) -> None:
         self.index_gen.cleanup()
         self.main_gen.cleanup()
+
+
+class ForZip(ForGenerator):
+    """Generate IR for a for loop of form `for x, y in zip(a, b)`."""
+
+    def need_cleanup(self) -> bool:
+        # The wrapped for loop might need cleanup. We might generate a
+        # redundant cleanup block, but that's okay.
+        return True
+
+    def init(self, indexes: List[Lvalue], exprs: List[Expression]) -> None:
+        assert len(indexes) == len(exprs)
+        self.cond_blocks = [BasicBlock() for _ in range(len(indexes) - 1)]
+        self.cond_blocks.append(self.body_block)
+        self.gens = []  # type: List[ForGenerator]
+        for index, expr, next_block in zip(indexes, exprs, self.cond_blocks):
+            gen = self.builder.make_for_loop_generator(
+                index,
+                expr,
+                next_block,
+                self.loop_exit,
+                self.line, reuse_cleanup=True)
+            self.gens.append(gen)
+
+    def check(self) -> None:
+        # No need for a check for the index generator, since it's unconditional.
+        for i, gen in enumerate(self.gens):
+            gen.check()
+            if i < len(self.gens) - 1:
+                self.builder.activate_block(self.cond_blocks[i])
+
+    def begin_body(self) -> None:
+        for gen in self.gens:
+            gen.begin_body()
+
+    def next(self) -> None:
+        for gen in self.gens:
+            gen.next()
+
+    def cleanup(self) -> None:
+        for gen in self.gens:
+            gen.cleanup()
