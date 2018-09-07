@@ -1682,10 +1682,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         if (isinstance(expr, CallExpr)
                 and isinstance(expr.callee, RefExpr)):
             if (expr.callee.fullname == 'builtins.range'
-                    and len(expr.args) <= 2):
+                    and len(expr.args) <= 2
+                    and set(expr.arg_kinds) == {ARG_POS}):
                 # Special case "for x in range(...)".
                 # Only support 1 and 2 arg forms for now.
-                # TODO: Check argument counts and kinds; check the lvalue
                 if len(expr.args) == 1:
                     start_reg = self.add(LoadInt(0))
                     end_reg = self.accept(expr.args[0])
@@ -1699,10 +1699,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
             elif (expr.callee.fullname == 'builtins.enumerate'
                     and len(expr.args) == 1
+                    and expr.arg_kinds == [ARG_POS]
                     and isinstance(index, TupleExpr)
                     and len(index.items) == 2):
                 # Special case "for i, x in enumerate(y)".
-                # TODO: Argument kinds
                 lvalue1 = index.items[0]
                 lvalue2 = index.items[1]
                 if nested:
@@ -1715,10 +1715,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
             elif (expr.callee.fullname == 'builtins.zip'
                     and len(expr.args) >= 2
+                    and set(expr.arg_kinds) == {ARG_POS}
                     and isinstance(index, TupleExpr)
                     and len(index.items) == len(expr.args)):
                 # Special case "for x, y in zip(a, b)".
-                # TODO: Argument kinds
                 if nested:
                     cleanup_block = normal_loop_exit
                 else:
