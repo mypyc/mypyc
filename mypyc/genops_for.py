@@ -1,4 +1,9 @@
-"""Helpers for generating for loops."""
+"""Helpers for generating for loops.
+
+We special case certain kinds for loops such as "for x in range(...)"
+for better efficiency.  Each for loop generator class below deals one
+such special case.
+"""
 
 from typing import Union, List
 
@@ -15,6 +20,8 @@ import mypyc.genops
 
 
 class ForGenerator:
+    """Abstract base class for generating for loops."""
+
     def __init__(self,
                  builder: 'mypyc.genops.IRBuilder',
                  index: Lvalue,
@@ -27,36 +34,46 @@ class ForGenerator:
         self.loop_exit = loop_exit
         self.line = line
 
-    def add_cleanup(self, exit_block: BasicBlock) -> None:
-        if self.need_cleanup():
-            self.builder.activate_block(self.loop_exit)
-            self.cleanup()
-            self.builder.goto(exit_block)
+    def has_combined_step_and_condition(self) -> bool:
+        """If this returns true, gen_condition() also steps to the next item.
 
-    def has_combined_next_and_check(self) -> bool:
+        In this case gen_step() won't be called.
+        """
         return False
 
     def need_cleanup(self) -> bool:
+        """If this returns true, we need post-loop cleanup."""
         return False
 
-    def check(self) -> None:
+    def add_cleanup(self, exit_block: BasicBlock) -> None:
+        """Add post-loop cleanup, if needed."""
+        if self.need_cleanup():
+            self.builder.activate_block(self.loop_exit)
+            self.gen_cleanup()
+            self.builder.goto(exit_block)
+
+    def gen_condition(self) -> None:
+        """Generate check for loop exit (e.g. exhaustion of iteration)."""
         pass
 
     def begin_body(self) -> None:
+        """Generate ops at the beginning of the body (if needed)."""
         pass
 
-    def next(self) -> None:
+    def gen_step(self) -> None:
+        """Generate stepping to the next item (if needed)."""
         pass
 
-    def cleanup(self) -> None:
+    def gen_cleanup(self) -> None:
+        """Generate post-loop cleanup (if needed)."""
         pass
 
 
 class ForIterable(ForGenerator):
-    """Generate IR for a for loop over an arbitrary iterable."""
+    """Generate IR for a for loop over an arbitrary iterable (the normal case)."""
 
-    def has_combined_next_and_check(self) -> bool:
-        # We always need to get the next item before doing a check.
+    def has_combined_step_and_condition(self) -> bool:
+        # We always need to get the next item before the loop exit condition check.
         return True
 
     def need_cleanup(self) -> bool:
@@ -72,11 +89,11 @@ class ForIterable(ForGenerator):
         builder.maybe_spill(expr_reg)
         self.iter_target = builder.maybe_spill(iter_reg)
 
-    def check(self) -> None:
-        # We create a block for where the __next__ function will be called on the iterator and
-        # checked to see if the value returned is NULL, which would signal either the end of
-        # the Iterable being traversed or an exception being raised. Note that Branch.IS_ERROR
-        # checks only for NULL (an exception does not necessarily have to be raised).
+    def gen_condition(self) -> None:
+        # We call __next__ on the iterator and check to see if the return value
+        # is NULL, which signals either the end of the Iterable being traversed
+        # or an exception being raised. Note that Branch.IS_ERROR checks only
+        # for NULL (an exception does not necessarily have to be raised).
         builder = self.builder
         line = self.line
         self.next_reg = builder.primitive_op(next_op, [builder.read(self.iter_target, line)], line)
@@ -84,16 +101,15 @@ class ForIterable(ForGenerator):
 
     def begin_body(self) -> None:
         # Assign the value obtained from __next__ to the
-        # lvalue so that it can be referenced by code in the body of the loop. At the end of
-        # the body, we goto the label that calls the iterator's __next__ function again.
+        # lvalue so that it can be referenced by code in the body of the loop.
         builder = self.builder
         builder.assign(builder.get_assignment_target(self.index), self.next_reg, self.line)
 
-    def next(self) -> None:
-        # Nothing to do here, since we get the next item as part of check().
+    def gen_step(self) -> None:
+        # Nothing to do here, since we get the next item as part of gen_condition().
         pass
 
-    def cleanup(self) -> None:
+    def gen_cleanup(self) -> None:
         # We set the branch to go here if the conditional evaluates to true. If
         # an exception was raised during the loop, then err_reg wil be set to
         # True. If no_err_occurred_op returns False, then the exception will be
@@ -102,7 +118,7 @@ class ForIterable(ForGenerator):
 
 
 class ForList(ForGenerator):
-    """Generate IR for a for loop over a list."""
+    """Generate optimized IR for a for loop over a list."""
 
     def init(self, expr_reg: Value, target_type: RType) -> None:
         builder = self.builder
@@ -114,7 +130,7 @@ class ForList(ForGenerator):
         self.index_target = builder.maybe_spill_assignable(index_reg)
         self.target_type = target_type
 
-    def check(self) -> None:
+    def gen_condition(self) -> None:
         builder = self.builder
         line = self.line
         # For compatibility with python semantics we recalculate the length
@@ -127,15 +143,16 @@ class ForList(ForGenerator):
     def begin_body(self) -> None:
         builder = self.builder
         line = self.line
+        # Read the next list item.
         value_box = builder.translate_special_method_call(
             builder.read(self.expr_target, line), '__getitem__',
             [builder.read(self.index_target, line)], None, line)
         assert value_box
-
         builder.assign(builder.get_assignment_target(self.index),
                        builder.unbox_or_cast(value_box, self.target_type, line), line)
 
-    def next(self) -> None:
+    def gen_step(self) -> None:
+        # Step to the next item.
         builder = self.builder
         line = self.line
         builder.assign(self.index_target, builder.primitive_op(
@@ -145,7 +162,9 @@ class ForList(ForGenerator):
 
 
 class ForRange(ForGenerator):
-    """Generate IR for a for loop over an integer range."""
+    """Generate optimized IR for a for loop over an integer range."""
+
+    # TODO: Use a separate register for the index to allow safe index mutation.
 
     def init(self, start_reg: Value, end_reg: Value) -> None:
         builder = self.builder
@@ -157,7 +176,7 @@ class ForRange(ForGenerator):
             self.index)  # type: Union[Register, AssignmentTarget]
         builder.assign(self.index_target, start_reg, self.line)
 
-    def check(self) -> None:
+    def gen_condition(self) -> None:
         builder = self.builder
         line = self.line
         # Add loop condition check.
@@ -165,7 +184,7 @@ class ForRange(ForGenerator):
                                        builder.read(self.end_target, line), '<', line)
         builder.add_bool_branch(comparison, self.body_block, self.loop_exit)
 
-    def next(self) -> None:
+    def gen_step(self) -> None:
         builder = self.builder
         line = self.line
 
@@ -183,18 +202,21 @@ class ForRange(ForGenerator):
 
 
 class ForInfiniteCounter(ForGenerator):
-    """Generate IR for a for loop counting from 0 to infinity."""
+    """Generate optimized IR for a for loop counting from 0 to infinity."""
 
     def init(self) -> None:
         builder = self.builder
-        # Initialize loop index to 0. Assert that the index target is assignable.
+        # Initialize loop index to 0.
         self.index_target = builder.get_assignment_target(
             self.index)  # type: Union[Register, AssignmentTarget]
         builder.assign(self.index_target, builder.add(LoadInt(0)), self.line)
 
-    def next(self) -> None:
+    def gen_step(self) -> None:
         builder = self.builder
         line = self.line
+        # We can safely assume that the integer is short, since we are not going to wrap
+        # around a 63-bit integer.
+        # NOTE: This would be questionable if short ints could be 32 bits.
         new_val = builder.primitive_op(
             unsafe_short_add, [builder.read(self.index_target, line),
                                builder.add(LoadInt(1))], line)
@@ -202,15 +224,15 @@ class ForInfiniteCounter(ForGenerator):
 
 
 class ForEnumerate(ForGenerator):
-    """Generate IR for a for loop of form `for i, x in enumerate(...)`."""
+    """Generate optimized IR for a for loop of form "for i, x in enumerate(it)"."""
 
     def need_cleanup(self) -> bool:
-        # The wrapped for loop might need cleanup. We might generate a
+        # The wrapped for loop might need cleanup. This might generate a
         # redundant cleanup block, but that's okay.
         return True
 
     def init(self, index1: Lvalue, index2: Lvalue, expr: Expression) -> None:
-        # Count from 0 to infinity.
+        # Count from 0 to infinity (for the index lvalue).
         self.index_gen = ForInfiniteCounter(
             self.builder,
             index1,
@@ -226,35 +248,36 @@ class ForEnumerate(ForGenerator):
             self.loop_exit,
             self.line, nested=True)
 
-    def check(self) -> None:
+    def gen_condition(self) -> None:
         # No need for a check for the index generator, since it's unconditional.
-        self.main_gen.check()
+        self.main_gen.gen_condition()
 
     def begin_body(self) -> None:
         self.index_gen.begin_body()
         self.main_gen.begin_body()
 
-    def next(self) -> None:
-        self.index_gen.next()
-        self.main_gen.next()
+    def gen_step(self) -> None:
+        self.index_gen.gen_step()
+        self.main_gen.gen_step()
 
-    def cleanup(self) -> None:
-        self.index_gen.cleanup()
-        self.main_gen.cleanup()
+    def gen_cleanup(self) -> None:
+        self.index_gen.gen_cleanup()
+        self.main_gen.gen_cleanup()
 
 
 class ForZip(ForGenerator):
-    """Generate IR for a for loop of form `for x, y in zip(a, b)`."""
+    """Generate IR for a for loop of form `for x, ... in zip(a, ...)`."""
 
     def need_cleanup(self) -> bool:
-        # The wrapped for loop might need cleanup. We might generate a
+        # The wrapped for loops might need cleanup. We might generate a
         # redundant cleanup block, but that's okay.
         return True
 
     def init(self, indexes: List[Lvalue], exprs: List[Expression]) -> None:
         assert len(indexes) == len(exprs)
-        self.cond_blocks = [BasicBlock() for _ in range(len(indexes) - 1)]
-        self.cond_blocks.append(self.body_block)
+        # Condition check will require multiple basic blocks, since there will be
+        # multiple conditions to check.
+        self.cond_blocks = [BasicBlock() for _ in range(len(indexes) - 1)] + [self.body_block]
         self.gens = []  # type: List[ForGenerator]
         for index, expr, next_block in zip(indexes, exprs, self.cond_blocks):
             gen = self.builder.make_for_loop_generator(
@@ -265,10 +288,9 @@ class ForZip(ForGenerator):
                 self.line, nested=True)
             self.gens.append(gen)
 
-    def check(self) -> None:
-        # No need for a check for the index generator, since it's unconditional.
+    def gen_condition(self) -> None:
         for i, gen in enumerate(self.gens):
-            gen.check()
+            gen.gen_condition()
             if i < len(self.gens) - 1:
                 self.builder.activate_block(self.cond_blocks[i])
 
@@ -276,10 +298,10 @@ class ForZip(ForGenerator):
         for gen in self.gens:
             gen.begin_body()
 
-    def next(self) -> None:
+    def gen_step(self) -> None:
         for gen in self.gens:
-            gen.next()
+            gen.gen_step()
 
-    def cleanup(self) -> None:
+    def gen_cleanup(self) -> None:
         for gen in self.gens:
-            gen.cleanup()
+            gen.gen_cleanup()

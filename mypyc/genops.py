@@ -1610,9 +1610,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             body_insts: a function that generates the body of the loop
             else_insts: a function that generates the else block instructions
         """
-        body_block, increment_block = BasicBlock(), BasicBlock()
-        # Block for the else clause, if we need it.
+        # Body of the loop
+        body_block = BasicBlock()
+        # Block that steps to the next item
+        step_block = BasicBlock()
+        # Block for the else clause, if we need it
         else_block = BasicBlock()
+        # Block executed after the loop
         exit_block = BasicBlock()
 
         # Determine where we want to exit, if our condition check fails.
@@ -1620,29 +1624,32 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         for_gen = self.make_for_loop_generator(index, expr, body_block, normal_loop_exit, line)
 
-        self.push_loop_stack(increment_block, exit_block)
-        if not for_gen.has_combined_next_and_check():
-            condition_block = self.goto_new_block()
+        self.push_loop_stack(step_block, exit_block)
+        if for_gen.has_combined_step_and_condition():
+            self.goto_and_activate(step_block)
         else:
-            self.goto_and_activate(increment_block)
+            # We need a separate condition block.
+            condition_block = self.goto_new_block()
 
         # Add loop condition check.
-        for_gen.check()
+        for_gen.gen_condition()
 
+        # Generate loop body.
         self.activate_block(body_block)
         for_gen.begin_body()
         body_insts()
 
-        if not for_gen.has_combined_next_and_check():
-            self.goto_and_activate(increment_block)
-            for_gen.next()
-            # Go back to loop condition check.
-            self.goto(condition_block)
+        if for_gen.has_combined_step_and_condition():
+            # We already generated the step block.
+            self.goto(step_block)
         else:
-            self.goto(increment_block)
+            # We need a separate step block.
+            self.goto_and_activate(step_block)
+            for_gen.gen_step()
+            # Go back to loop condition.
+            self.goto(condition_block)
 
         for_gen.add_cleanup(normal_loop_exit)
-
         self.pop_loop_stack()
 
         if else_insts is not None:
