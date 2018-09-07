@@ -457,17 +457,31 @@ def f(a: bool, b: bool) -> None:
         x = 'lol'
     if b:
         print(x[0])
+
+def g() -> None:
+    try:
+        ""[0]
+        y = 1
+    except Exception:
+        pass
+    print(y)
+
 [file driver.py]
-from native import f
+from native import f, g
 f(True, True)
 f(False, False)
 try:
     f(False, True)
 except Exception as e:
     print(e)
+try:
+    g()
+except Exception as e:
+    print(e)
 [out]
 l
 local variable 'x' referenced before assignment
+local variable 'y' referenced before assignment
 
 [case testFunctionCallWithDefaultArgs]
 from typing import Tuple, List, Optional

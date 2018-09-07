@@ -54,15 +54,24 @@ def get_cfg(blocks: List[BasicBlock]) -> CFG:
 
         last = block.ops[-1]
         if isinstance(last, Branch):
-            # TODO: assume 1:1 correspondence between block index and label
             succ = [last.true, last.false]
         elif isinstance(last, Goto):
             succ = [last.label]
         else:
             succ = []
             exits.add(block)
-        if block.error_handler:
-            succ.append(block.error_handler)
+
+        # Errors can occur anywhere inside a block, including before
+        # any ops have succesfully executed. In our CFG construction,
+        # we model this as saying that a block can jump to its error
+        # handler or the error handlers of any of its normal
+        # successors (to represent an error before that block
+        # completes). This is not a precise representation of reality,
+        # and any analyses that require more fidelity must wait until
+        # after exception insertion.
+        for error_point in [block] + succ:
+            if error_point.error_handler:
+                succ.append(error_point.error_handler)
 
         succ_map[block] = succ
         pred_map[block] = []
