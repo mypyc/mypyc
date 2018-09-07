@@ -1667,25 +1667,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                 line: int,
                                 nested: bool = False) -> ForGenerator:
         """Return helper object for generating a for loop over an iterable."""
-        if (isinstance(expr, CallExpr)
-                and isinstance(expr.callee, RefExpr)
-                and expr.callee.fullname == 'builtins.range'
-                and len(expr.args) <= 2):
-            # Special case "for x in range(...)".
-            # Only support 1 and 2 arg forms for now.
-            # TODO: Check argument counts and kinds; check the lvalue
-            if len(expr.args) == 1:
-                start_reg = self.add(LoadInt(0))
-                end_reg = self.accept(expr.args[0])
-            else:
-                start_reg = self.accept(expr.args[0])
-                end_reg = self.accept(expr.args[1])
 
-            for_range = ForRange(self, index, body_block, normal_loop_exit, line)
-            for_range.init(start_reg, end_reg)
-            return for_range
-
-        elif is_list_rprimitive(self.node_type(expr)):
+        if is_list_rprimitive(self.node_type(expr)):
             # Special case "for x in <list>".
             expr_reg = self.accept(expr)
             target_list_type = self.types[expr]
@@ -1696,51 +1679,63 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             for_list.init(expr_reg, target_type)
             return for_list
 
-        elif (isinstance(expr, CallExpr)
-                and isinstance(expr.callee, RefExpr)
-                and expr.callee.fullname == 'builtins.enumerate'
-                and len(expr.args) == 1
-                and isinstance(index, TupleExpr)
-                and len(index.items) == 2):
-            # Special case "for i, x in enumerate(y)".
-            # TODO: Argument kinds
-            expr = expr.args[0]
-            lvalue1 = index.items[0]
-            lvalue2 = index.items[1]
-            if nested:
-                cleanup_block = normal_loop_exit
-            else:
-                cleanup_block = BasicBlock()
-            for_enumerate = ForEnumerate(self, index, body_block, cleanup_block, line)
-            for_enumerate.init(lvalue1, lvalue2, expr)
-            return for_enumerate
+        if (isinstance(expr, CallExpr)
+                and isinstance(expr.callee, RefExpr)):
+            if (expr.callee.fullname == 'builtins.range'
+                    and len(expr.args) <= 2):
+                # Special case "for x in range(...)".
+                # Only support 1 and 2 arg forms for now.
+                # TODO: Check argument counts and kinds; check the lvalue
+                if len(expr.args) == 1:
+                    start_reg = self.add(LoadInt(0))
+                    end_reg = self.accept(expr.args[0])
+                else:
+                    start_reg = self.accept(expr.args[0])
+                    end_reg = self.accept(expr.args[1])
 
-        elif (isinstance(expr, CallExpr)
-                and isinstance(expr.callee, RefExpr)
-                and expr.callee.fullname == 'builtins.zip'
-                and len(expr.args) >= 2
-                and isinstance(index, TupleExpr)
-                and len(index.items) == len(expr.args)):
-            # Special case "for x, y in zip(a, b)".
-            # TODO: Argument kinds
-            if nested:
-                cleanup_block = normal_loop_exit
-            else:
-                cleanup_block = BasicBlock()
-            for_zip = ForZip(self, index, body_block, cleanup_block, line)
-            for_zip.init(index.items, expr.args)
-            return for_zip
+                for_range = ForRange(self, index, body_block, normal_loop_exit, line)
+                for_range.init(start_reg, end_reg)
+                return for_range
 
+            elif (expr.callee.fullname == 'builtins.enumerate'
+                    and len(expr.args) == 1
+                    and isinstance(index, TupleExpr)
+                    and len(index.items) == 2):
+                # Special case "for i, x in enumerate(y)".
+                # TODO: Argument kinds
+                lvalue1 = index.items[0]
+                lvalue2 = index.items[1]
+                if nested:
+                    cleanup_block = normal_loop_exit
+                else:
+                    cleanup_block = BasicBlock()
+                for_enumerate = ForEnumerate(self, index, body_block, cleanup_block, line)
+                for_enumerate.init(lvalue1, lvalue2, expr.args[0])
+                return for_enumerate
+
+            elif (expr.callee.fullname == 'builtins.zip'
+                    and len(expr.args) >= 2
+                    and isinstance(index, TupleExpr)
+                    and len(index.items) == len(expr.args)):
+                # Special case "for x, y in zip(a, b)".
+                # TODO: Argument kinds
+                if nested:
+                    cleanup_block = normal_loop_exit
+                else:
+                    cleanup_block = BasicBlock()
+                for_zip = ForZip(self, index, body_block, cleanup_block, line)
+                for_zip.init(index.items, expr.args)
+                return for_zip
+
+        # Default to a generic for loop.
+        if nested:
+            error_check_block = normal_loop_exit
         else:
-            # Generic for loop.
-            if nested:
-                error_check_block = normal_loop_exit
-            else:
-                error_check_block = BasicBlock()
-            expr_reg = self.accept(expr)
-            for_obj = ForIterable(self, index, body_block, error_check_block, line)
-            for_obj.init(expr_reg)
-            return for_obj
+            error_check_block = BasicBlock()
+        expr_reg = self.accept(expr)
+        for_obj = ForIterable(self, index, body_block, error_check_block, line)
+        for_obj.init(expr_reg)
+        return for_obj
 
     def visit_break_stmt(self, node: BreakStmt) -> None:
         self.nonlocal_control[-1].gen_break(self)
