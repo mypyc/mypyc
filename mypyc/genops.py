@@ -1625,11 +1625,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         for_gen = self.make_for_loop_generator(index, expr, body_block, normal_loop_exit, line)
 
         self.push_loop_stack(step_block, exit_block)
-        if for_gen.has_combined_step_and_condition():
-            self.goto_and_activate(step_block)
-        else:
-            # We need a separate condition block.
-            condition_block = self.goto_new_block()
+        condition_block = self.goto_new_block()
 
         # Add loop condition check.
         for_gen.gen_condition()
@@ -1639,15 +1635,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         for_gen.begin_body()
         body_insts()
 
-        if for_gen.has_combined_step_and_condition():
-            # We already generated the step block.
-            self.goto(step_block)
-        else:
-            # We need a separate step block.
-            self.goto_and_activate(step_block)
-            for_gen.gen_step()
-            # Go back to loop condition.
-            self.goto(condition_block)
+        # We generate a separate step block (which might be empty).
+        self.goto_and_activate(step_block)
+        for_gen.gen_step()
+        # Go back to loop condition.
+        self.goto(condition_block)
 
         for_gen.add_cleanup(normal_loop_exit)
         self.pop_loop_stack()

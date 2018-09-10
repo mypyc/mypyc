@@ -34,13 +34,6 @@ class ForGenerator:
         self.loop_exit = loop_exit
         self.line = line
 
-    def has_combined_step_and_condition(self) -> bool:
-        """If this returns true, gen_condition() also steps to the next item.
-
-        In this case gen_step() won't be called.
-        """
-        return False
-
     def need_cleanup(self) -> bool:
         """If this returns true, we need post-loop cleanup."""
         return False
@@ -71,10 +64,6 @@ class ForGenerator:
 
 class ForIterable(ForGenerator):
     """Generate IR for a for loop over an arbitrary iterable (the normal case)."""
-
-    def has_combined_step_and_condition(self) -> bool:
-        # We always need to get the next item before the loop exit condition check.
-        return True
 
     def need_cleanup(self) -> bool:
         # Create a new cleanup block for when the loop is finished.

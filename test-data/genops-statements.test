@@ -270,17 +270,18 @@ L0:
     r0 = iter d :: object
 L1:
     r1 = next r0 :: object
-    if is_error(r1) goto L3 else goto L2
+    if is_error(r1) goto L4 else goto L2
 L2:
     r2 = unbox(int, r1)
     key = r2
     r3 = box(int, key)
     r4 = d[r3] :: dict
     r5 = unbox(int, r4)
-    goto L1
 L3:
-    r6 = no_err_occurred
+    goto L1
 L4:
+    r6 = no_err_occurred
+L5:
     r7 = None
     return r7
 
@@ -316,7 +317,7 @@ L0:
     r1 = iter d :: object
 L1:
     r2 = next r1 :: object
-    if is_error(r2) goto L5 else goto L2
+    if is_error(r2) goto L6 else goto L2
 L2:
     r3 = unbox(int, r2)
     key = r3
@@ -329,17 +330,18 @@ L2:
     r10 = r8 != r9 :: int
     if r10 goto L3 else goto L4 :: bool
 L3:
-    goto L1
+    goto L5
 L4:
     r11 = box(int, key)
     r12 = d[r11] :: dict
     r13 = unbox(int, r12)
     r14 = s + r13 :: int
     s = r14
-    goto L1
 L5:
-    r15 = no_err_occurred
+    goto L1
 L6:
+    r15 = no_err_occurred
+L7:
     return s
 
 [case testMultipleAssignment]
