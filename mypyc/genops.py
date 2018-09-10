@@ -78,6 +78,7 @@ from mypyc.ops_misc import (
     py_call_op, py_call_with_kwargs_op, py_method_call_op,
     fast_isinstance_op, bool_op, new_slice_op,
     type_op, pytype_from_template_op, import_op, ellipsis_op, method_new_op, type_is_op,
+    fast_or_op
 )
 from mypyc.ops_exc import (
     no_err_occurred_op, raise_exception_op, raise_exception_with_tb_op, reraise_exception_op,
@@ -90,6 +91,8 @@ from mypyc.sametype import is_same_type, is_same_method_signature
 from mypyc.crash import catch_errors
 
 GenFunc = Callable[[], None]
+
+MAX_CHILDREN = 3
 
 
 def build_ir(modules: List[MypyFile],
@@ -1953,7 +1956,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             more_types = i < len(fast_items) - 1 or rest_items
             if more_types:
                 # We are not at the final item so we need one more branch
-                op = self.isinstance(obj, item, line)
+                op = self.isinstance_single(obj, item.class_ir, line)
                 true_block, false_block = BasicBlock(), BasicBlock()
                 self.add_bool_branch(op, true_block, false_block)
                 self.activate_block(true_block)
@@ -1975,11 +1978,39 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.activate_block(exit_block)
         return result
 
-    def isinstance(self, obj: Value, rtype: RInstance, line: int) -> Value:
-        class_ir = rtype.class_ir
-        fullname = '%s.%s' % (class_ir.module_name, class_ir.name)
-        type_obj = self.load_native_type_object(fullname)
-        return self.primitive_op(fast_isinstance_op, [obj, type_obj], line)
+    def isinstance_helper(self, obj: Value, class_irs: List[ClassIR], line: int) -> Value:
+        if not class_irs:
+            return self.primitive_op(false_op, [], line)
+        ret = self.isinstance_single(obj, class_irs[0], line)
+        for class_ir in class_irs[1:]:
+            ret = self.primitive_op(fast_or_op,
+                                    [ret, self.isinstance_single(obj, class_ir, line)],
+                                    line)
+        return ret
+
+    def isinstance_single(self, obj: Value, class_ir: ClassIR, line: int) -> Value:
+        all_types = {class_ir}.union(class_ir.subclasses())
+        concrete = {c for c in all_types if not c.is_trait}
+        if len(concrete) > MAX_CHILDREN:
+            return self.primitive_op(fast_isinstance_op,
+                                     [obj, self.get_native_type(class_ir)],
+                                     line)
+        concrete_list = sorted(concrete, key=lambda c: len(c.subclasses()))  # start from leafs
+        if not concrete_list:
+            assert False, "No concrete classes, something is wrong"
+        type_obj = concrete_list[0]
+        ret = self.primitive_op(type_is_op, [obj, type_obj], line)
+        for c in concrete_list[1:]:
+            ret = self.primitive_op(fast_or_op,
+                                    [ret, self.primitive_op(type_is_op,
+                                                            [obj, self.get_native_type(c)],
+                                                            line)],
+                                    line)
+            return ret
+
+    def get_native_type(self, cls: ClassIR) -> Value:
+        fullname = '%s.%s' % (cls.module_name, cls.name)
+        return self.load_native_type_object(fullname)
 
     def py_get_attr(self, obj: Value, attr: str, line: int) -> Value:
         key = self.load_static_unicode(attr)
@@ -2159,16 +2190,16 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 return self.add(LoadInt(len(expr_rtype.types)))
 
         # Special case builtins.isinstance
-        if (callee.fullname == 'builtins.isinstance'
-                and len(expr.args) == 2
-                and expr.arg_kinds == [ARG_POS, ARG_POS]
-                and isinstance(expr.args[1], RefExpr)
-                and isinstance(expr.args[1].node, TypeInfo)
-                and self.is_native_module_ref_expr(expr.args[1])):
-            # Special case native isinstance() checks as this makes them much faster.
-            ir = self.mapper.type_to_ir.get(expr.args[1].node)
-            op = type_is_op if ir and not ir.children else fast_isinstance_op
-            return self.primitive_op(op, arg_values, expr.line)
+        if (callee.fullname == 'builtins.isinstance' and
+                len(expr.args) == 2 and
+                expr.arg_kinds == [ARG_POS, ARG_POS]):
+            if (isinstance(expr.args[1], RefExpr)
+                    and isinstance(expr.args[1].node, TypeInfo)
+                    and self.is_native_module_ref_expr(expr.args[1])):
+                # Special case native isinstance() checks as this makes them much faster.
+                ir = self.mapper.type_to_ir.get(expr.args[1].node)
+                if ir is not None:
+                    return self.isinstance_single(arg_values[0], ir, expr.line)
 
         # Special case builtins.globals
         if (callee.fullname == 'builtins.globals'
