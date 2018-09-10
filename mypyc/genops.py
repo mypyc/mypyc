@@ -47,7 +47,7 @@ from mypy.checkexpr import map_actuals_to_formals
 
 from mypyc.common import (
     ENV_ATTR_NAME, NEXT_LABEL_ATTR_NAME, TEMP_ATTR_NAME, LAMBDA_NAME,
-    MAX_SHORT_INT, TOP_LEVEL_NAME, SELF_NAME, decorator_helper_name
+    MAX_SHORT_INT, TOP_LEVEL_NAME, SELF_NAME, decorator_helper_name, MAX_CHILDREN
 )
 from mypyc.prebuildvisitor import PreBuildVisitor
 from mypyc.ops import (
@@ -91,8 +91,6 @@ from mypyc.sametype import is_same_type, is_same_method_signature
 from mypyc.crash import catch_errors
 
 GenFunc = Callable[[], None]
-
-MAX_CHILDREN = 2
 
 
 def build_ir(modules: List[MypyFile],
@@ -2001,12 +1999,12 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.primitive_op(fast_isinstance_op,
                                      [obj, self.get_native_type(class_ir)],
                                      line)
-        concrete_list = sorted(concrete, key=lambda c: len(c.children))  # start from leafs
-        if not concrete_list:
+        concrete_lst = sorted(concrete, key=lambda c: len(c.children))  # start from leafs
+        if not concrete_lst:
             assert False, "No concrete classes, something is wrong"
-        type_obj = self.get_native_type(concrete_list[0])
+        type_obj = self.get_native_type(concrete_lst[0])
         ret = self.primitive_op(type_is_op, [obj, type_obj], line)
-        for c in concrete_list[1:]:
+        for c in concrete_lst[1:]:
             ret = self.primitive_op(fast_or_op,
                                     [ret, self.primitive_op(type_is_op,
                                                             [obj, self.get_native_type(c)],
