@@ -3,14 +3,16 @@
 from collections import OrderedDict
 from typing import List, Set, Dict, Optional, List, Callable, Union
 
-from mypyc.common import REG_PREFIX, STATIC_PREFIX, TYPE_PREFIX, NATIVE_PREFIX, MAX_CHILDREN
+from mypyc.common import (
+    REG_PREFIX, STATIC_PREFIX, TYPE_PREFIX, NATIVE_PREFIX, FAST_ISINSTANCE_MAX_SUBCLASSES
+)
 from mypyc.ops import (
     Any, AssignmentTarget, Environment, BasicBlock, Value, Register, RType, RTuple, RInstance,
     RUnion, RPrimitive, is_int_rprimitive, is_short_int_rprimitive,
     is_float_rprimitive, is_bool_rprimitive,
     short_name, is_list_rprimitive, is_dict_rprimitive, is_set_rprimitive, is_tuple_rprimitive,
     is_none_rprimitive, is_object_rprimitive, object_rprimitive, is_str_rprimitive, ClassIR,
-    FuncIR, FuncDecl, int_rprimitive, is_optional_type, optional_value_type
+    FuncIR, FuncDecl, int_rprimitive, is_optional_type, optional_value_type, all_concrete_classes
 )
 from mypyc.namegen import NameGenerator
 from mypyc.sametype import is_same_type
@@ -360,9 +362,9 @@ class Emitter:
         elif isinstance(typ, RInstance):
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
-            concrete = typ.class_ir.concrete_subclasses()
+            concrete = all_concrete_classes(typ.class_ir)
             n_types = len(concrete)
-            if n_types > MAX_CHILDREN + 1:
+            if n_types > FAST_ISINSTANCE_MAX_SUBCLASSES + 1:
                 check = '(PyObject_TypeCheck({}, {}))'.format(
                     src, self.type_struct_name(typ.class_ir))
             else:

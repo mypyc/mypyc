@@ -47,7 +47,8 @@ from mypy.checkexpr import map_actuals_to_formals
 
 from mypyc.common import (
     ENV_ATTR_NAME, NEXT_LABEL_ATTR_NAME, TEMP_ATTR_NAME, LAMBDA_NAME,
-    MAX_SHORT_INT, TOP_LEVEL_NAME, SELF_NAME, decorator_helper_name, MAX_CHILDREN
+    MAX_SHORT_INT, TOP_LEVEL_NAME, SELF_NAME, decorator_helper_name,
+    FAST_ISINSTANCE_MAX_SUBCLASSES
 )
 from mypyc.prebuildvisitor import PreBuildVisitor
 from mypyc.ops import (
@@ -62,7 +63,7 @@ from mypyc.ops import (
     is_object_rprimitive, LiteralsMap, FuncSignature, VTableAttr, VTableMethod, VTableEntries,
     NAMESPACE_TYPE, RaiseStandardError, LoadErrorValue, NO_TRACEBACK_LINE_NO, FuncDecl,
     FUNC_NORMAL, FUNC_STATICMETHOD, FUNC_CLASSMETHOD,
-    RUnion, is_optional_type, optional_value_type, is_short_int_rprimitive,
+    RUnion, is_optional_type, optional_value_type, is_short_int_rprimitive, all_concrete_classes
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
 from mypyc.ops_int import unsafe_short_add
@@ -1955,7 +1956,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             more_types = i < len(fast_items) - 1 or rest_items
             if more_types:
                 # We are not at the final item so we need one more branch
-                op = self.isinstance_single(obj, item.class_ir, line)
+                op = self.isinstance_native(obj, item.class_ir, line)
                 true_block, false_block = BasicBlock(), BasicBlock()
                 self.add_bool_branch(op, true_block, false_block)
                 self.activate_block(true_block)
@@ -1978,24 +1979,24 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return result
 
     def isinstance_helper(self, obj: Value, class_irs: List[ClassIR], line: int) -> Value:
-        """Fast path for isinstance() with native classes."""
+        """Fast path for isinstance() that checks against a list of native classes."""
         if not class_irs:
             return self.primitive_op(false_op, [], line)
-        ret = self.isinstance_single(obj, class_irs[0], line)
+        ret = self.isinstance_native(obj, class_irs[0], line)
         for class_ir in class_irs[1:]:
             ret = self.primitive_op(fast_or_op,
-                                    [ret, self.isinstance_single(obj, class_ir, line)],
+                                    [ret, self.isinstance_native(obj, class_ir, line)],
                                     line)
         return ret
 
-    def isinstance_single(self, obj: Value, class_ir: ClassIR, line: int) -> Value:
+    def isinstance_native(self, obj: Value, class_ir: ClassIR, line: int) -> Value:
         """Fast isinstance() check for a native class.
 
         If there three or less concrete (non-trait) classes among the class and all
         its children, use even faster type comparison checks `type(obj) is typ`.
         """
-        concrete = class_ir.concrete_subclasses()
-        if len(concrete) > MAX_CHILDREN + 1:
+        concrete = all_concrete_classes(class_ir)
+        if len(concrete) > FAST_ISINSTANCE_MAX_SUBCLASSES + 1:
             return self.primitive_op(fast_isinstance_op,
                                      [obj, self.get_native_type(class_ir)],
                                      line)

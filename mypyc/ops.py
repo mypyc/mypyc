@@ -1570,14 +1570,13 @@ class ClassIR:
     def concrete_subclasses(self) -> List['ClassIR']:
         """Return all concrete (i.e. non-trait and non-abstract) subclasses.
 
-        Include the class itself (if concrete), and both direct and indirect
-        subclasses. Place classes with no children first.
+        Include both direct and indirect subclasses. Place classes with no children first.
         """
-        all_types = {self}.union(self.subclasses())
-        concrete = {c for c in all_types if not (c.is_trait or c.is_abstract)}
+        concrete = {c for c in self.subclasses() if not (c.is_trait or c.is_abstract)}
         # We place classes with no children first because they are more likely
-        # to appear in various isinstance() checks.
-        return sorted(concrete, key=lambda c: len(c.children))
+        # to appear in various isinstance() checks. We then sort leafs by name
+        # to get stable order.
+        return sorted(concrete, key=lambda c: (len(c.children), c.name))
 
 
 LiteralsMap = Dict[Tuple[Type[object], Union[int, float, str, bytes]], str]
@@ -1728,6 +1727,14 @@ def format_func(fn: FuncIR) -> List[str]:
     code = format_blocks(fn.blocks, fn.env)
     lines.extend(code)
     return lines
+
+
+def all_concrete_classes(class_ir: ClassIR) -> List[ClassIR]:
+    """Return all concrete classes among the class itself and its subclasses."""
+    concrete = class_ir.concrete_subclasses()
+    if not (class_ir.is_abstract or class_ir.is_trait):
+        concrete.append(class_ir)
+    return concrete
 
 
 class RTypeVisitor(Generic[T]):
