@@ -281,14 +281,6 @@ type_is_op = custom_op(
     error_kind=ERR_NEVER,
     emit=simple_emit('{dest} = Py_TYPE({args[0]}) == (PyTypeObject *){args[1]};'))
 
-# C-level "or" operator
-fast_or_op = custom_op(
-    name='fast_or',
-    arg_types=[bool_rprimitive, bool_rprimitive],
-    result_type=bool_rprimitive,
-    error_kind=ERR_NEVER,
-    emit=simple_emit('{dest} = {args[0]} || {args[1]};'))
-
 bool_op = func_op(
     'builtins.bool',
     arg_types=[object_rprimitive],
