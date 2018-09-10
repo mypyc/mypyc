@@ -15,6 +15,8 @@ MAX_SHORT_INT = (1 << 62) - 1
 
 TOP_LEVEL_NAME = '__top_level__'  # Special function representing module top level
 
+MAX_CHILDREN = 2  # Number of children for a class to trigger fast path in isinstance() checks.
+
 
 def decorator_helper_name(func_name: str) -> str:
     return '__mypyc_{}_decorator_helper__'.format(func_name)

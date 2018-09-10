@@ -92,7 +92,7 @@ from mypyc.crash import catch_errors
 
 GenFunc = Callable[[], None]
 
-MAX_CHILDREN = 3
+MAX_CHILDREN = 2
 
 
 def build_ir(modules: List[MypyFile],
@@ -1979,6 +1979,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return result
 
     def isinstance_helper(self, obj: Value, class_irs: List[ClassIR], line: int) -> Value:
+        """Fast path for isinstance() with native classes."""
         if not class_irs:
             return self.primitive_op(false_op, [], line)
         ret = self.isinstance_single(obj, class_irs[0], line)
@@ -1989,16 +1990,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return ret
 
     def isinstance_single(self, obj: Value, class_ir: ClassIR, line: int) -> Value:
+        """Fast isinstance() check for a native class.
+
+        If there three or less concrete (non-trait) classes among the class and all
+        its children, use even faster type comparison checks `type(obj) is typ`.
+        """
         all_types = {class_ir}.union(class_ir.subclasses())
         concrete = {c for c in all_types if not c.is_trait}
-        if len(concrete) > MAX_CHILDREN:
+        if len(concrete) > MAX_CHILDREN + 1:
             return self.primitive_op(fast_isinstance_op,
                                      [obj, self.get_native_type(class_ir)],
                                      line)
-        concrete_list = sorted(concrete, key=lambda c: len(c.subclasses()))  # start from leafs
+        concrete_list = sorted(concrete, key=lambda c: len(c.children))  # start from leafs
         if not concrete_list:
             assert False, "No concrete classes, something is wrong"
-        type_obj = concrete_list[0]
+        type_obj = self.get_native_type(concrete_list[0])
         ret = self.primitive_op(type_is_op, [obj, type_obj], line)
         for c in concrete_list[1:]:
             ret = self.primitive_op(fast_or_op,
@@ -2006,7 +2012,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                                             [obj, self.get_native_type(c)],
                                                             line)],
                                     line)
-            return ret
+        return ret
 
     def get_native_type(self, cls: ClassIR) -> Value:
         fullname = '%s.%s' % (cls.module_name, cls.name)
@@ -2177,6 +2183,15 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                        lambda x: self.unary_op(x, 'not', expr.line),
                                        false_op)
 
+        # Special case builtins.isinstance
+        if (callee.fullname == 'builtins.isinstance' and
+                len(expr.args) == 2 and
+                expr.arg_kinds == [ARG_POS, ARG_POS] and
+                isinstance(expr.args[1], (RefExpr, TupleExpr))):
+            irs = self.flatten_classes(expr.args[1])
+            if irs is not None:
+                return self.isinstance_helper(self.accept(expr.args[0]), irs, expr.line)
+
         # Gen the argument values
         arg_values = [self.accept(arg) for arg in expr.args]
 
@@ -2188,18 +2203,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             if isinstance(expr_rtype, RTuple):
                 # len() of fixed-length tuple can be trivially determined statically.
                 return self.add(LoadInt(len(expr_rtype.types)))
-
-        # Special case builtins.isinstance
-        if (callee.fullname == 'builtins.isinstance' and
-                len(expr.args) == 2 and
-                expr.arg_kinds == [ARG_POS, ARG_POS]):
-            if (isinstance(expr.args[1], RefExpr)
-                    and isinstance(expr.args[1].node, TypeInfo)
-                    and self.is_native_module_ref_expr(expr.args[1])):
-                # Special case native isinstance() checks as this makes them much faster.
-                ir = self.mapper.type_to_ir.get(expr.args[1].node)
-                if ir is not None:
-                    return self.isinstance_single(arg_values[0], ir, expr.line)
 
         # Special case builtins.globals
         if (callee.fullname == 'builtins.globals'
@@ -2227,6 +2230,29 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         function = self.accept(callee)
         return self.py_call(function, arg_values, expr.line,
                             arg_kinds=expr.arg_kinds, arg_names=expr.arg_names)
+
+    def flatten_classes(self, arg: Union[RefExpr, TupleExpr]) -> Optional[List[ClassIR]]:
+        """Flatten classes in isinstance(obj, (A, (B, C))).
+
+        If at least one item is not a reference to a native class, return None.
+        """
+        if isinstance(arg, RefExpr):
+            if isinstance(arg.node, TypeInfo) and self.is_native_module_ref_expr(arg):
+                ir = self.mapper.type_to_ir.get(arg.node)
+                if ir:
+                    return [ir]
+            return None
+        else:
+            res = []  # type: List[ClassIR]
+            for item in arg.items:
+                if isinstance(item, (RefExpr, TupleExpr)):
+                    item_part = self.flatten_classes(item)
+                    if item_part is None:
+                        return None
+                    res.extend(item_part)
+                else:
+                    return None
+            return res
 
     def missing_args_to_error_values(self,
                                      args: List[Optional[Value]],

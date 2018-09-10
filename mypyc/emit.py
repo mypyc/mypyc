@@ -444,7 +444,8 @@ class Emitter:
             'goto {};'.format(out_label),
             '}')
         for i, item in enumerate(typ.types):
-            self.emit_cast('PyTuple_GetItem({}, {})'.format(src, i),
+            # Since we did the checks above this should never fail
+            self.emit_cast('PyTuple_GET_ITEM({}, {})'.format(src, i),
                            dest,
                            item,
                            declare_dest=False,
