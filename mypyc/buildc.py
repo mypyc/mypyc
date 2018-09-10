@@ -38,6 +38,17 @@ PyInit_{modname}(void)
 """
 
 
+def generate_c_extension_shim(full_module_name: str, module_name: str, dirname: str) -> str:
+    cname = '%s.c' % full_module_name.replace('.', '___')  # XXX
+    cpath = os.path.abspath(os.path.join(dirname, cname))
+
+    with open(cpath, 'w') as f:
+        f.write(shim_template.format(modname=module_name,
+                                     full_modname=exported_name(full_module_name)))
+
+    return cpath
+
+
 def build_c_extension_shim(full_module_name: str, shared_lib_path: str, dirname: str,
                            is_package: bool=False) -> str:
     module_parts = full_module_name.split('.')
@@ -47,8 +58,7 @@ def build_c_extension_shim(full_module_name: str, shared_lib_path: str, dirname:
     shared_lib = os.path.basename(shared_lib_path)
     assert shared_lib.startswith('lib') and shared_lib.endswith('.so')
     libname = shared_lib[3:-3]
-    cname = '%s.c' % full_module_name.replace('.', '___')  # XXX
-    cpath = os.path.join(dirname, cname)
+    cpath = generate_c_extension_shim(full_module_name, module_name, dirname)
     if '.' in full_module_name:
         packages = 'packages=[{}],'.format(repr('.'.join(full_module_name.split('.')[:-1])))
     else:
@@ -57,12 +67,9 @@ def build_c_extension_shim(full_module_name: str, shared_lib_path: str, dirname:
         relative_lib_path = os.path.join(*(['..'] * (len(module_parts) - 1)))
     else:
         relative_lib_path = '.'
-    with open(cpath, 'w') as f:
-        f.write(shim_template.format(modname=module_name,
-                                     full_modname=exported_name(full_module_name)))
     setup_path = make_setup_py(full_module_name,
                                packages,
-                               cname,
+                               cpath,
                                dirname,
                                libraries=[libname],
                                library_dirs=[os.path.abspath(os.path.dirname(shared_lib_path))],
@@ -73,12 +80,16 @@ def build_c_extension_shim(full_module_name: str, shared_lib_path: str, dirname:
 def shared_lib_name(modules: List[str]) -> str:
     h = hashlib.sha1()
     h.update(','.join(modules).encode())
-    return 'libmypyc_%s.so' % h.hexdigest()[:20]
+    return 'mypyc_%s' % h.hexdigest()[:20]
+
+
+def shared_lib_filename(modules: List[str]) -> str:
+    return 'lib%s.so' % shared_lib_name(modules)
 
 
 def build_shared_lib_for_modules(cpath: str, modules: List[str],
                                  dirname: str) -> str:
-    out_file = shared_lib_name(modules)
+    out_file = shared_lib_filename(modules)
     name = os.path.splitext(os.path.basename(cpath))[0]
     lib_path = build_c_extension(cpath, name, dirname)
     out_path = os.path.join(dirname, out_file)
