@@ -233,6 +233,7 @@ class ForEnumerate(ForGenerator):
 
     def init(self, index1: Lvalue, index2: Lvalue, expr: Expression) -> None:
         # Count from 0 to infinity (for the index lvalue).
+        # TODO: If enumerating a list, we could perhaps share the index counter.
         self.index_gen = ForInfiniteCounter(
             self.builder,
             index1,
