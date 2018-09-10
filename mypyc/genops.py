@@ -1655,10 +1655,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                 index: Lvalue,
                                 expr: Expression,
                                 body_block: BasicBlock,
-                                normal_loop_exit: BasicBlock,
+                                loop_exit: BasicBlock,
                                 line: int,
                                 nested: bool = False) -> ForGenerator:
-        """Return helper object for generating a for loop over an iterable."""
+        """Return helper object for generating a for loop over an iterable.
+
+        If "nested" is True, this is a nested iterator such as "e" in "enumerate(e)".
+        """
 
         if is_list_rprimitive(self.node_type(expr)):
             # Special case "for x in <list>".
@@ -1667,7 +1670,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             assert isinstance(target_list_type, Instance)
             target_type = self.type_to_rtype(target_list_type.args[0])
 
-            for_list = ForList(self, index, body_block, normal_loop_exit, line)
+            for_list = ForList(self, index, body_block, loop_exit, line, nested)
             for_list.init(expr_reg, target_type)
             return for_list
 
@@ -1685,7 +1688,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     start_reg = self.accept(expr.args[0])
                     end_reg = self.accept(expr.args[1])
 
-                for_range = ForRange(self, index, body_block, normal_loop_exit, line)
+                for_range = ForRange(self, index, body_block, loop_exit, line, nested)
                 for_range.init(start_reg, end_reg)
                 return for_range
 
@@ -1697,11 +1700,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 # Special case "for i, x in enumerate(y)".
                 lvalue1 = index.items[0]
                 lvalue2 = index.items[1]
-                if nested:
-                    cleanup_block = normal_loop_exit
-                else:
-                    cleanup_block = BasicBlock()
-                for_enumerate = ForEnumerate(self, index, body_block, cleanup_block, line)
+                for_enumerate = ForEnumerate(self, index, body_block, loop_exit, line,
+                                             nested)
                 for_enumerate.init(lvalue1, lvalue2, expr.args[0])
                 return for_enumerate
 
@@ -1711,21 +1711,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     and isinstance(index, TupleExpr)
                     and len(index.items) == len(expr.args)):
                 # Special case "for x, y in zip(a, b)".
-                if nested:
-                    cleanup_block = normal_loop_exit
-                else:
-                    cleanup_block = BasicBlock()
-                for_zip = ForZip(self, index, body_block, cleanup_block, line)
+                for_zip = ForZip(self, index, body_block, loop_exit, line, nested)
                 for_zip.init(index.items, expr.args)
                 return for_zip
 
         # Default to a generic for loop.
-        if nested:
-            error_check_block = normal_loop_exit
-        else:
-            error_check_block = BasicBlock()
         expr_reg = self.accept(expr)
-        for_obj = ForIterable(self, index, body_block, error_check_block, line)
+        for_obj = ForIterable(self, index, body_block, loop_exit, line, nested)
         for_obj.init(expr_reg)
         return for_obj
 

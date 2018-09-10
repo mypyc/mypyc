@@ -27,12 +27,23 @@ class ForGenerator:
                  index: Lvalue,
                  body_block: BasicBlock,
                  loop_exit: BasicBlock,
-                 line: int) -> None:
+                 line: int,
+                 nested: bool) -> None:
         self.builder = builder
         self.index = index
         self.body_block = body_block
-        self.loop_exit = loop_exit
         self.line = line
+        # Some for loops need a cleanup block that we execute at exit. We
+        # create a cleanup block if needed. However, if we are generating a for
+        # loop for a nested iterator, such as "e" in "enumerate(e)", the
+        # outermost generator should generate the cleanup block -- we don't
+        # need to do it here.
+        if self.need_cleanup() and not nested:
+            # Create a new block to handle cleanup after loop exit.
+            self.loop_exit = BasicBlock()
+        else:
+            # Just use the existing loop exit block.
+            self.loop_exit = loop_exit
 
     def need_cleanup(self) -> bool:
         """If this returns true, we need post-loop cleanup."""
@@ -227,7 +238,7 @@ class ForEnumerate(ForGenerator):
             index1,
             self.body_block,
             self.loop_exit,
-            self.line)
+            self.line, nested=True)
         self.index_gen.init()
         # Iterate over the actual iterable.
         self.main_gen = self.builder.make_for_loop_generator(
