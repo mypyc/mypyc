@@ -438,16 +438,16 @@ class C:
     def __init__(self, x: int) -> None:
         self.x = x
 
-def f() -> None:
+def f(b: bool) -> None:
     u = C(1)
-    while True:
+    while b:
         v = C(2)
         if v is not u:
             break
     print(v.x)
 [file driver.py]
 from native import f
-f()
+f(True)
 [out]
 2
 
