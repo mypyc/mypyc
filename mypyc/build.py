@@ -2,6 +2,7 @@ import glob
 import sys
 import os.path
 import subprocess
+import hashlib
 import time
 
 from typing import List, Tuple, Any, Optional, Union, Dict, NoReturn
@@ -13,8 +14,8 @@ from mypy.main import process_options
 from mypy.errors import CompileError
 from mypy.options import Options
 from mypy.build import BuildSource
+from mypyc.namegen import exported_name
 
-from mypyc.buildc import shared_lib_name, generate_c_extension_shim, include_dir
 from mypyc import emitmodule
 
 
@@ -84,6 +85,40 @@ def get_sources(paths: List[str],
     options.incremental = False
 
     return sources, options
+
+
+shim_template = """\
+#include <Python.h>
+
+PyObject *CPyInit_{full_modname}(void);
+
+PyMODINIT_FUNC
+PyInit_{modname}(void)
+{{
+    return CPyInit_{full_modname}();
+}}
+"""
+
+
+def generate_c_extension_shim(full_module_name: str, module_name: str, dirname: str) -> str:
+    cname = '%s.c' % full_module_name.replace('.', '___')  # XXX
+    cpath = os.path.abspath(os.path.join(dirname, cname))
+
+    with open(cpath, 'w') as f:
+        f.write(shim_template.format(modname=module_name,
+                                     full_modname=exported_name(full_module_name)))
+
+    return cpath
+
+
+def shared_lib_name(modules: List[str]) -> str:
+    h = hashlib.sha1()
+    h.update(','.join(modules).encode())
+    return 'mypyc_%s' % h.hexdigest()[:20]
+
+
+def include_dir() -> str:
+    return os.path.join(os.path.abspath(os.path.dirname(__file__)), '..', 'lib-rt')
 
 
 def generate_c(sources: List[BuildSource], options: Options,

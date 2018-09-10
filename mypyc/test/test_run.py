@@ -15,7 +15,6 @@ from mypy.options import Options
 
 from mypyc import genops
 from mypyc import emitmodule
-from mypyc import buildc
 from mypyc.test.testutil import (
     ICODE_GEN_BUILTINS, use_custom_builtins, MypycDataSuite, assert_test_output,
     show_c_error, heading,
