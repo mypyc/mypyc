@@ -40,7 +40,7 @@ class int:
     def __le__(self, n: int) -> bool: pass
     def __ge__(self, n: int) -> bool: pass
 
-class str(Sized):
+class str:
     def __init__(self, x: object) -> None: pass
     def __add__(self, x: str) -> str: pass
     def __eq__(self, x: object) -> bool: pass
@@ -49,11 +49,6 @@ class str(Sized):
     def __le__(self, x: str) -> bool: ...
     def __gt__(self, x: str) -> bool: ...
     def __ge__(self, x: str) -> bool: ...
-    def __len__(self) -> int: pass
-    @overload
-    def __getitem__(self, i: int) -> str: ...
-    @overload
-    def __getitem__(self, s: slice) -> str: ...
     def join(self, x: Iterable[str]) -> str: pass
 
 class float:

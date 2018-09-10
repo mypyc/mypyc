@@ -456,11 +456,11 @@ def f(a: bool, b: bool) -> None:
     if a:
         x = 'lol'
     if b:
-        print(x[0])
+        print(x)
 
 def g() -> None:
     try:
-        ""[0]
+        [0][1]
         y = 1
     except Exception:
         pass
@@ -479,7 +479,7 @@ try:
 except Exception as e:
     print(e)
 [out]
-l
+lol
 local variable 'x' referenced before assignment
 local variable 'y' referenced before assignment
 
