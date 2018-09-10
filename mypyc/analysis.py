@@ -61,14 +61,18 @@ def get_cfg(blocks: List[BasicBlock]) -> CFG:
             succ = []
             exits.add(block)
 
-        # Errors can occur anywhere inside a block, including before
-        # any ops have succesfully executed. In our CFG construction,
-        # we model this as saying that a block can jump to its error
+        # Errors can occur anywhere inside a block, which means that
+        # we can't assume that the entire block has executed before
+        # jumping to the error handler. In our CFG construction, we
+        # model this as saying that a block can jump to its error
         # handler or the error handlers of any of its normal
-        # successors (to represent an error before that block
-        # completes). This is not a precise representation of reality,
-        # and any analyses that require more fidelity must wait until
-        # after exception insertion.
+        # successors (to represent an error before that next block
+        # completes). This works well for analyses like "must
+        # defined", where it implies that registers assigned in a
+        # block may be undefined in its error handler, but is in
+        # general not a precise representation of reality; any
+        # analyses that require more fidelity must wait until after
+        # exception insertion.
         for error_point in [block] + succ:
             if error_point.error_handler:
                 succ.append(error_point.error_handler)
@@ -194,6 +198,13 @@ class BaseAnalysisVisitor(OpVisitor[GenAndKill]):
 
 
 class DefinedVisitor(BaseAnalysisVisitor):
+    """Visitor for finding defined registers.
+
+    Note that this only deals with registers and not temporaries, on
+    the assumption that we never access temporaries when they might be
+    undefined.
+    """
+
     def visit_branch(self, op: Branch) -> GenAndKill:
         return set(), set()
 
@@ -232,7 +243,12 @@ def analyze_must_defined_regs(
         regs: Iterable[Value]) -> AnalysisResult[Value]:
     """Calculate always defined registers at each CFG location.
 
-    A register is defined if it has a value along all paths from the initial location.
+    This analysis can work before exception insertion, since it is a
+    sound assumption that registers defined in a block might not be
+    initialized in its error handler.
+
+    A register is defined if it has a value along all paths from the
+    initial location.
     """
     return run_analysis(blocks=blocks,
                         cfg=cfg,
