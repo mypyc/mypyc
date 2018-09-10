@@ -1448,10 +1448,11 @@ class ClassIR:
     This also describes the runtime structure of native instances.
     """
     def __init__(self, name: str, module_name: str, is_trait: bool = False,
-                 is_generated: bool = True) -> None:
+                 is_generated: bool = True, is_abstract: bool = False) -> None:
         self.name = name
         self.module_name = module_name
         self.is_trait = is_trait
+        self.is_abstract = is_abstract
         self.is_generated = is_generated
         self.inherits_python = False
         # Default empty ctor
@@ -1565,6 +1566,18 @@ class ClassIR:
             if child.children:
                 result.update(child.subclasses())
         return result
+
+    def concrete_subclasses(self) -> List['ClassIR']:
+        """Return all concrete (i.e. non-trait and non-abstract) subclasses.
+
+        Include the class itself (if concrete), and both direct and indirect
+        subclasses. Place classes with no children first.
+        """
+        all_types = {self}.union(self.subclasses())
+        concrete = {c for c in all_types if not (c.is_trait or c.is_abstract)}
+        # We place classes with no children first because they are more likely
+        # to appear in various isinstance() checks.
+        return sorted(concrete, key=lambda c: len(c.children))
 
 
 LiteralsMap = Dict[Tuple[Type[object], Union[int, float, str, bytes]], str]

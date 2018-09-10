@@ -108,7 +108,8 @@ def build_ir(modules: List[MypyFile],
     # Collect all class mappings so that we can bind arbitrary class name
     # references even if there are import cycles.
     for module, cdef in classes:
-        class_ir = ClassIR(cdef.name, module.fullname(), is_trait(cdef))
+        class_ir = ClassIR(cdef.name, module.fullname(), is_trait(cdef),
+                           is_abstract=cdef.info.is_abstract)
         mapper.type_to_ir[cdef.info] = class_ir
 
     # Populate structural information in class IR.
@@ -1993,18 +1994,17 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         If there three or less concrete (non-trait) classes among the class and all
         its children, use even faster type comparison checks `type(obj) is typ`.
         """
-        all_types = {class_ir}.union(class_ir.subclasses())
-        concrete = {c for c in all_types if not c.is_trait}
+        concrete = class_ir.concrete_subclasses()
         if len(concrete) > MAX_CHILDREN + 1:
             return self.primitive_op(fast_isinstance_op,
                                      [obj, self.get_native_type(class_ir)],
                                      line)
-        concrete_lst = sorted(concrete, key=lambda c: len(c.children))  # start from leafs
-        if not concrete_lst:
-            assert False, "No concrete classes, something is wrong"
-        type_obj = self.get_native_type(concrete_lst[0])
+        if not concrete:
+            # There can't be any concrete instance that matches this.
+            return self.primitive_op(false_op, [], line)
+        type_obj = self.get_native_type(concrete[0])
         ret = self.primitive_op(type_is_op, [obj, type_obj], line)
-        for c in concrete_lst[1:]:
+        for c in concrete[1:]:
             ret = self.primitive_op(fast_or_op,
                                     [ret, self.primitive_op(type_is_op,
                                                             [obj, self.get_native_type(c)],

@@ -360,21 +360,20 @@ class Emitter:
         elif isinstance(typ, RInstance):
             if declare_dest:
                 self.emit_line('PyObject *{};'.format(dest))
-            all_types = {typ.class_ir}.union(typ.class_ir.subclasses())
-            concrete = {c for c in all_types if not c.is_trait}
+            concrete = typ.class_ir.concrete_subclasses()
             n_types = len(concrete)
             if n_types > MAX_CHILDREN + 1:
                 check = '(PyObject_TypeCheck({}, {}))'.format(
                     src, self.type_struct_name(typ.class_ir))
             else:
-                concrete_lst = sorted(concrete, key=lambda c: len(c.children))  # start from leafs
+                assert concrete, "Can only cast to a concrete class"
                 full_str = '(Py_TYPE({src}) == {targets[0]})'
                 for i in range(1, n_types):
                     full_str += ' || (Py_TYPE({src}) == {targets[%d]})' % i
                 if n_types > 1:
                     full_str = '(%s)' % full_str
                 check = full_str.format(
-                    src=src, targets=[self.type_struct_name(ir) for ir in concrete_lst])
+                    src=src, targets=[self.type_struct_name(ir) for ir in concrete])
             self.emit_arg_check(src, dest, typ, check, optional)
             self.emit_lines(
                 '    {} = {};'.format(dest, src),

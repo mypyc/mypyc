@@ -510,6 +510,75 @@ L2:
     r3 = B()
     return r3
 
+[case testIsInstanceTuple]
+from typing import Union
+class R: pass
+class A(R): pass
+class B(R): pass
+class C(R): pass
+
+def f(x: R) -> Union[A, B]:
+    if isinstance(x, (A, B)):
+        return x
+    return A()
+[out]
+def f(x):
+    x :: R
+    r0 :: object
+    r1 :: bool
+    r2 :: object
+    r3, r4 :: bool
+    r5 :: union[A, B]
+    r6 :: A
+L0:
+    r0 = __main__.A :: type
+    r1 = type_is x, r0
+    r2 = __main__.B :: type
+    r3 = type_is x, r2
+    r4 = fast_or r1, r3
+    if r4 goto L1 else goto L2 :: bool
+L1:
+    r5 = cast(union[A, B], x)
+    return r5
+L2:
+    r6 = A()
+    return r6
+
+[case testIsInstanceFewChildren]
+from typing import Union
+from mypy_extensions import trait
+
+class R: pass
+@trait
+class A(R): pass
+class B(R): pass
+
+def f(x: object) -> R:
+    if isinstance(x, R):
+        return x
+    return B()
+[out]
+def f(x):
+    x, r0 :: object
+    r1 :: bool
+    r2 :: object
+    r3, r4 :: bool
+    r5 :: R
+    r6 :: B
+L0:
+    r0 = __main__.B :: type
+    r1 = type_is x, r0
+    r2 = __main__.R :: type
+    r3 = type_is x, r2
+    r4 = fast_or r1, r3
+    if r4 goto L1 else goto L2 :: bool
+L1:
+    r5 = cast(R, x)
+    return r5
+L2:
+    r6 = B()
+    return r6
+
 [case testFakeSuper]
 class A:
     def __init__(self, x: int) -> None:
