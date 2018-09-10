@@ -6,6 +6,9 @@ import time
 
 from typing import List, Tuple, Any, Optional, Union, Dict, NoReturn
 
+base_path = os.path.join(os.path.dirname(__file__), '..')
+sys.path.append(os.path.join(base_path, 'external/mypy'))
+
 from mypy.main import process_options
 from mypy.errors import CompileError
 from mypy.options import Options
@@ -29,10 +32,6 @@ else:
     from distutils.command.build_ext import build_ext  # type: ignore
 
 from distutils import sysconfig
-
-
-# Hack: what to append to the -0 flag
-OPT_LEVEL = ''
 
 
 def setup_mypycify_vars() -> None:
@@ -197,7 +196,7 @@ def mypycify(paths_arg: Union[str, List[str]],
             f.write(ctext)
 
     cflags = [
-        '-O{}'.format(OPT_LEVEL),
+        '-O{}'.format(opt_level),
         '-Werror', '-Wno-unused-function', '-Wno-unused-label',
         '-Wno-unreachable-code', '-Wno-unused-variable', '-Wno-trigraphs',
         '-Wno-unused-command-line-argument'
