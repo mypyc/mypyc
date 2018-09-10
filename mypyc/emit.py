@@ -368,10 +368,11 @@ class Emitter:
                     src, self.type_struct_name(typ.class_ir))
             else:
                 concrete_lst = sorted(concrete, key=lambda c: len(c.children))  # start from leafs
-                full_str = '((Py_TYPE({src}) == {targets[0]})'
+                full_str = '(Py_TYPE({src}) == {targets[0]})'
                 for i in range(1, n_types):
                     full_str += ' || (Py_TYPE({src}) == {targets[%d]})' % i
-                full_str += ')'
+                if n_types > 1:
+                    full_str = '(%s)' % full_str
                 check = full_str.format(
                     src=src, targets=[self.type_struct_name(ir) for ir in concrete_lst])
             self.emit_arg_check(src, dest, typ, check, optional)
