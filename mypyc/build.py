@@ -8,7 +8,7 @@ import time
 from typing import List, Tuple, Any, Optional, Union, Dict, NoReturn, cast
 
 base_path = os.path.join(os.path.dirname(__file__), '..')
-sys.path.append(os.path.join(base_path, 'external/mypy'))
+sys.path.insert(0, os.path.join(base_path, 'external/mypy'))
 
 from mypy.main import process_options
 from mypy.errors import CompileError
