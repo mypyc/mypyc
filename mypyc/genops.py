@@ -78,7 +78,7 @@ from mypyc.ops_misc import (
     py_getattr_op, py_setattr_op, py_delattr_op,
     py_call_op, py_call_with_kwargs_op, py_method_call_op,
     fast_isinstance_op, bool_op, new_slice_op,
-    type_op, pytype_from_template_op, import_op, ellipsis_op, method_new_op, type_is_op
+    type_op, pytype_from_template_op, import_op, ellipsis_op, method_new_op, type_is_op,
 )
 from mypyc.ops_exc import (
     no_err_occurred_op, raise_exception_op, raise_exception_with_tb_op, reraise_exception_op,
@@ -1983,7 +1983,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.primitive_op(false_op, [], line)
         ret = self.isinstance_native(obj, class_irs[0], line)
         for class_ir in class_irs[1:]:
-            other = lambda: self.isinstance_native(obj, class_ir, line)
+            def other() -> Value:
+                return self.isinstance_native(obj, class_ir, line)
             ret = self.shortcircuit_helper('or', bool_rprimitive, lambda: ret, other, line)
         return ret
 
@@ -2004,7 +2005,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         type_obj = self.get_native_type(concrete[0])
         ret = self.primitive_op(type_is_op, [obj, type_obj], line)
         for c in concrete[1:]:
-            other = lambda: self.primitive_op(type_is_op, [obj,self.get_native_type(c)], line)
+            def other() -> Value:
+                return self.primitive_op(type_is_op, [obj, self.get_native_type(c)], line)
             ret = self.shortcircuit_helper('or', bool_rprimitive, lambda: ret, other, line)
         return ret
 
