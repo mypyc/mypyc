@@ -237,7 +237,7 @@ def mypycify(paths_arg: Union[str, List[str]],
         '-Wno-unreachable-code', '-Wno-unused-variable', '-Wno-trigraphs',
         '-Wno-unused-command-line-argument'
     ]
-    if sys.platform == 'linux' and os.getenv('CC', None) != 'clang':
+    if sys.platform == 'linux' and 'clang' not in os.getenv('CC', ''):
         # This flag is needed for gcc but does not exist on clang.
         cflags += ['-Wno-unused-but-set-variable']
 
