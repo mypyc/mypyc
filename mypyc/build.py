@@ -102,7 +102,7 @@ PyInit_{modname}(void)
 
 def generate_c_extension_shim(full_module_name: str, module_name: str, dirname: str) -> str:
     cname = '%s.c' % full_module_name.replace('.', '___')  # XXX
-    cpath = os.path.abspath(os.path.join(dirname, cname))
+    cpath = os.path.join(dirname, cname)
 
     with open(cpath, 'w') as f:
         f.write(shim_template.format(modname=module_name,
