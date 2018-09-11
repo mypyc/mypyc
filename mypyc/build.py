@@ -200,7 +200,7 @@ def build_single_module(sources: List[BuildSource],
 def mypycify(paths_arg: Union[str, List[str]],
              mypy_options: Optional[List[str]] = None,
              opt_level: str = '',
-             skip_cgen: bool = False) -> Dict[str, Any]:
+             skip_cgen: bool = False) -> List[MypycifyExtension]:
     setup_mypycify_vars()
 
     if not isinstance(paths_arg, list):
@@ -247,10 +247,7 @@ def mypycify(paths_arg: Union[str, List[str]],
     else:
         extensions = build_single_module(sources, cfile, cflags)
 
-    return {
-        'ext_modules': extensions,
-        'cmdclass': {'build_ext': MypycifyBuildExt},
-    }
+    return extensions
 
 
 class MypycifyBuildExt(build_ext):

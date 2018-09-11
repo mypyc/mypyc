@@ -36,10 +36,12 @@ files = [
 
 setup_format = """\
 from distutils.core import setup
-from mypyc.build import mypycify
+from mypyc.build import mypycify, MypycifyBuildExt
 
 setup(name='test_run_output',
-      **mypycify({}, skip_cgen=True))
+      ext_modules=mypycify({}, skip_cgen=True),
+      cmdclass={{'build_ext': MypycifyBuildExt}},
+)
 """
 
 
