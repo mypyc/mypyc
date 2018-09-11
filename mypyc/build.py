@@ -5,7 +5,7 @@ import subprocess
 import hashlib
 import time
 
-from typing import List, Tuple, Any, Optional, Union, Dict, NoReturn
+from typing import List, Tuple, Any, Optional, Union, Dict, NoReturn, cast
 
 base_path = os.path.join(os.path.dirname(__file__), '..')
 sys.path.append(os.path.join(base_path, 'external/mypy'))
@@ -39,7 +39,8 @@ def setup_mypycify_vars() -> None:
     # Rewrite a bunch of state variables in pretty dubious ways.
     # There has to be a better approach to this.
 
-    vars = sysconfig.get_config_vars()
+    # The vars can contain ints but we only work with str ones
+    vars = cast(Dict[str, str], sysconfig.get_config_vars())
     if sys.platform == 'darwin':
         # On OS X, force the creation of dynamic libraries instead of bundles so that
         # we can link against multi-module shared libraries.
