@@ -6,11 +6,9 @@ Usage:
     $ mypyc foo.py [...]
     $ python3 -c 'import foo'  # Uses compiled 'foo'
 
-Limitations:
 
-* Can only compile top-level modules
-* There's no easy way to look at the generated code as the C file gets
-  deleted at the end
+This is just a thin wrapper that generates a setup.py file that uses
+mypycify, suitable for prototyping and testing.
 """
 
 import os
