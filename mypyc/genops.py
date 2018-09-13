@@ -1840,6 +1840,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             assert desc.result_type is not None
             return self.add(PrimitiveOp([], desc, expr.line))
 
+        if isinstance(expr.node, Var) and expr.node.is_final:
+            fvar = expr.node
+            if fvar.final_value is not None:
+                return self.load_final_literal_value(fvar.final_value, expr.line)
+
         if isinstance(expr.node, MypyFile):
             return self.load_module(expr.node.fullname())
 
@@ -1856,6 +1861,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return isinstance(expr.expr, RefExpr) and expr.expr.kind == MODULE_REF
 
     def visit_member_expr(self, expr: MemberExpr) -> Value:
+        if isinstance(expr.expr, RefExpr) and isinstance(expr.expr.node, TypeInfo):
+            sym = expr.expr.node.get(expr.name)
+            if sym and isinstance(sym.node, Var) and sym.node.is_final:
+                fvar = sym.node
+                if fvar.final_value is not None:
+                    return self.load_final_literal_value(fvar.final_value, expr.line)
+
         if self.is_module_member_expr(expr):
             return self.load_module_attr(expr)
         else:
@@ -3920,6 +3932,27 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def load_globals_dict(self) -> Value:
         return self.add(LoadStatic(object_rprimitive, 'globals', self.module_name))
+
+    def load_final_literal_value(self, val: Union[int, str, bytes, float, bool],
+                                 line: int) -> Value:
+        """Load value of a final name or class-level attribute."""
+        if isinstance(val, bool):
+            if val:
+                return self.primitive_op(true_op, [], line)
+            else:
+                return self.primitive_op(false_op, [], line)
+        elif isinstance(val, int):
+            if val > MAX_SHORT_INT:
+                return self.load_static_int(val)
+            return self.add(LoadInt(val))
+        elif isinstance(val, float):
+            return self.load_static_float(val)
+        elif isinstance(val, str):
+            return self.load_static_unicode(val)
+        elif isinstance(val, bytes):
+            return self.load_static_bytes(val)
+        else:
+            assert False, "Unsupported final literal value"
 
     def load_static_int(self, value: int) -> Value:
         """Loads a static integer Python 'int' object into a register."""

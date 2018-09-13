@@ -3058,3 +3058,120 @@ L0:
     r4 = None
     r5 = box(None, r4)
     return r5
+
+[case FinalModuleInt]
+from typing import Final
+
+x: Final = 1
+y: Final = 2
+
+def f(a: bool) -> int:
+    if a:
+        return x
+    else:
+        return y
+[out]
+def f(a):
+    a :: bool
+    r0, r1 :: short_int
+L0:
+    if a goto L1 else goto L2 :: bool
+L1:
+    r0 = 1
+    return r0
+L2:
+    r1 = 2
+    return r1
+L3:
+    unreachable
+
+[case FinalModuleStr]
+from typing import Final
+
+x: Final = 'x'
+y: Final = 'y'
+
+def f(a: bool) -> str:
+    if a:
+        return x
+    else:
+        return y
+[out]
+def f(a):
+    a :: bool
+    r0, r1 :: str
+L0:
+    if a goto L1 else goto L2 :: bool
+L1:
+    r0 = unicode_3 :: static  ('x')
+    return r0
+L2:
+    r1 = unicode_4 :: static  ('y')
+    return r1
+L3:
+    unreachable
+
+[case FinalModuleBool]
+from typing import Final
+
+x: Final = True
+y: Final = False
+
+def f(a: bool) -> bool:
+    if a:
+        return x
+    else:
+        return y
+[out]
+def f(a):
+    a, r0, r1 :: bool
+L0:
+    if a goto L1 else goto L2 :: bool
+L1:
+    r0 = True
+    return r0
+L2:
+    r1 = False
+    return r1
+L3:
+    unreachable
+
+[case FinalClass]
+from typing import Final
+
+class C:
+    x: Final = 1
+    y: Final = 2
+
+def f(a: bool) -> int:
+    if a:
+        return C.x
+    else:
+        return C.y
+[out]
+def C.__mypyc_defaults_setup(__mypyc_self__):
+    __mypyc_self__ :: C
+    r0 :: short_int
+    r1 :: bool
+    r2 :: short_int
+    r3, r4 :: bool
+L0:
+    r0 = 1
+    __mypyc_self__.x = r0; r1 = is_error
+    r2 = 2
+    __mypyc_self__.y = r2; r3 = is_error
+    r4 = True
+    return r4
+def f(a):
+    a :: bool
+    r0, r1 :: short_int
+L0:
+    if a goto L1 else goto L2 :: bool
+L1:
+    r0 = 1
+    return r0
+L2:
+    r1 = 2
+    return r1
+L3:
+    unreachable
