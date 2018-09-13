@@ -140,7 +140,8 @@ def build_ir(modules: List[MypyFile],
         module_ir = ModuleIR(
             builder.imports,
             builder.functions,
-            builder.classes
+            builder.classes,
+            builder.final_names
         )
         result.append((module.fullname(), module_ir))
         class_irs.extend(builder.classes)
@@ -674,6 +675,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.blocks = []  # type: List[List[BasicBlock]]
         self.functions = []  # type: List[FuncIR]
         self.classes = []  # type: List[ClassIR]
+        self.final_names = []  # type: List[str]
         self.modules = set(modules)
         self.callable_class_names = set()  # type: Set[str]
 
@@ -880,7 +882,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 lvalue = stmt.lvalues[0]
                 assert isinstance(lvalue, NameExpr)
                 # Only treat marked class variables as class variables.
-                if not is_class_var(lvalue):
+                if not (is_class_var(lvalue) or stmt.is_final_def):
                     continue
 
                 typ = self.load_native_type_object(cdef.fullname)
@@ -1331,6 +1333,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         line = stmt.rvalue.line
         rvalue_reg = self.accept(stmt.rvalue)
+        if len(self.fn_infos) <= 2 and stmt.is_final_def:
+            assert isinstance(lvalue, NameExpr)
+            if lvalue.node.final_value is None:
+                self.final_names.append(lvalue.fullname)
+                self.add(InitStatic(rvalue_reg, lvalue.fullname, 'final'))
         for lvalue in stmt.lvalues:
             target = self.get_assignment_target(lvalue)
             self.assign(target, rvalue_reg, line)

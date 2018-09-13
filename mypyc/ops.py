@@ -1595,10 +1595,12 @@ class ModuleIR:
     def __init__(self,
             imports: List[str],
             functions: List[FuncIR],
-            classes: List[ClassIR]) -> None:
+            classes: List[ClassIR],
+            final_names: List[str]) -> None:
         self.imports = imports[:]
         self.functions = functions
         self.classes = classes
+        self.final_names = final_names
 
 
 class OpVisitor(Generic[T]):
