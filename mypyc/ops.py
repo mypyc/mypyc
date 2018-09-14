@@ -1083,6 +1083,11 @@ class LoadStatic(RegisterOp):
         return visitor.visit_load_static(self)
 
 
+class LoadStaticChecked(LoadStatic):
+
+    error_kind = ERR_MAGIC
+
+
 class InitStatic(RegisterOp):
     """static = value :: static
 

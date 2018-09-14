@@ -62,7 +62,7 @@ from mypyc.ops import (
     PrimitiveOp, ControlOp, LoadErrorValue, ERR_FALSE, OpDescription, RegisterOp,
     is_object_rprimitive, LiteralsMap, FuncSignature, VTableAttr, VTableMethod, VTableEntries,
     NAMESPACE_TYPE, RaiseStandardError, LoadErrorValue, NO_TRACEBACK_LINE_NO, FuncDecl,
-    FUNC_NORMAL, FUNC_STATICMETHOD, FUNC_CLASSMETHOD,
+    FUNC_NORMAL, FUNC_STATICMETHOD, FUNC_CLASSMETHOD, LoadStaticChecked,
     RUnion, is_optional_type, optional_value_type, is_short_int_rprimitive, all_concrete_classes
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
@@ -1851,6 +1851,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             fvar = expr.node
             if fvar.final_value is not None:
                 return self.load_final_literal_value(fvar.final_value, expr.line)
+            else:
+                return self.add(LoadStaticChecked(self.mapper.type_to_rtype(self.types[expr]),
+                                                  fullname, 'final', line=expr.line))
 
         if isinstance(expr.node, MypyFile):
             return self.load_module(expr.node.fullname())

@@ -43,6 +43,34 @@ print(count(5))
 2
 6
 
+[case testFinalStaticRun]
+if False:
+    from typing import Final
+
+class C:
+    x: int
+
+y = C()
+
+if bool():
+    y.x = 1
+
+y.x
+
+if bool():
+    x: 'Final' = [1]
+
+def f() -> int:
+    x.append(2)
+    return x[0]
+
+[file driver.py]
+from native import f  #, x
+print(f())
+# print(x)
+[out]
+
+
 [case testFor]
 from typing import List
 def count(n: int) -> None:
