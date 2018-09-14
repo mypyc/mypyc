@@ -1333,7 +1333,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             if class_name is None:
                 name = lvalue.fullname
             else:
-                name = '{}.{}'.format(class_name, lvalue.name())
+                name = '{}.{}'.format(class_name, lvalue.name)
             self.final_names.append(name)
             boxed = self.add(Box(rvalue_reg, lvalue.line))
             self.add(InitStatic(boxed, name, 'final'))
@@ -1932,7 +1932,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             sym = expr.expr.node.get(expr.name)
             if sym and isinstance(sym.node, Var) and sym.node.is_final:
                 final_var = sym.node
-                fullname = '{}.{}'.format(sym.node.info.fullname(), final_var.name)
+                fullname = '{}.{}'.format(sym.node.info.fullname(), final_var.name())
                 native = expr.expr.node.module_name in self.modules
         elif self.is_module_member_expr(expr):
             # a module attribute
