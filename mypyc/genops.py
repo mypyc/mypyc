@@ -1337,6 +1337,42 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.final_names.append(name)
             self.add(InitStatic(rvalue_reg, name, 'final'))
 
+    def load_final_static(self, fullname: str, typ: RType, line: int,
+                          error_name: Optional[str] = None) -> Value:
+        if error_name is None:
+            error_name = fullname
+        ok_block, error_block = BasicBlock(), BasicBlock()
+        value = self.add(LoadStatic(typ, fullname, 'final', line=line))
+        self.add(Branch(value, error_block, ok_block, Branch.IS_ERROR, rare=True))
+        self.activate_block(error_block)
+        self.add(RaiseStandardError(RaiseStandardError.VALUE_ERROR,
+                                    'value for final name "{}" was not set'.format(error_name),
+                                    line))
+        self.add(Unreachable())
+        self.activate_block(ok_block)
+        return value
+
+    def load_final_literal_value(self, val: Union[int, str, bytes, float, bool],
+                                 line: int) -> Value:
+        """Load value of a final name or class-level attribute."""
+        if isinstance(val, bool):
+            if val:
+                return self.primitive_op(true_op, [], line)
+            else:
+                return self.primitive_op(false_op, [], line)
+        elif isinstance(val, int):
+            if val > MAX_SHORT_INT:
+                return self.load_static_int(val)
+            return self.add(LoadInt(val))
+        elif isinstance(val, float):
+            return self.load_static_float(val)
+        elif isinstance(val, str):
+            return self.load_static_unicode(val)
+        elif isinstance(val, bytes):
+            return self.load_static_bytes(val)
+        else:
+            assert False, "Unsupported final literal value"
+
     def visit_assignment_stmt(self, stmt: AssignmentStmt) -> None:
         assert len(stmt.lvalues) >= 1
         self.disallow_class_assignments(stmt.lvalues)
@@ -1852,21 +1888,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         fitem = self.fn_info.fitem
         return fitem in self.free_variables and symbol in self.free_variables[fitem]
 
-    def load_final_static(self, fullname: str, typ: RType, line: int,
-                          error_name: Optional[str] = None) -> Value:
-        if error_name is None:
-            error_name = fullname
-        ok_block, error_block = BasicBlock(), BasicBlock()
-        value = self.add(LoadStatic(typ, fullname, 'final', line=line))
-        self.add(Branch(value, error_block, ok_block, Branch.IS_ERROR, rare=True))
-        self.activate_block(error_block)
-        self.add(RaiseStandardError(RaiseStandardError.VALUE_ERROR,
-                                    'value for final name "{}" was not set'.format(error_name),
-                                    line))
-        self.add(Unreachable())
-        self.activate_block(ok_block)
-        return value
-
     def visit_name_expr(self, expr: NameExpr) -> Value:
         assert expr.node, "RefExpr not resolved"
         fullname = expr.node.fullname()
@@ -1878,9 +1899,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         if isinstance(expr.node, Var) and expr.node.is_final:
             fvar = expr.node
-            if fvar.final_value is not None:
+            if fvar.final_value is not None:  # this is safe even for non-native names
                 return self.load_final_literal_value(fvar.final_value, expr.line)
-            else:
+            elif fullname.rpartition('.')[0] in self.modules:  # native final name
                 return self.load_final_static(fullname,
                                               self.mapper.type_to_rtype(self.types[expr]),
                                               expr.line, expr.name)
@@ -1901,14 +1922,18 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return isinstance(expr.expr, RefExpr) and expr.expr.kind == MODULE_REF
 
     def visit_member_expr(self, expr: MemberExpr) -> Value:
+        # First check if this is maybe a final attribute. This needs to be done differently
+        # for class and module attributes to correctly determine fully qualified name.
         final_var = None
         if isinstance(expr.expr, RefExpr) and isinstance(expr.expr.node, TypeInfo):
+            # a class attribute
             sym = expr.expr.node.get(expr.name)
             if sym and isinstance(sym.node, Var) and sym.node.is_final:
                 final_var = sym.node
                 fullname = '{}.{}'.format(sym.node.info.fullname(), final_var.name)
                 native = expr.expr.node.module_name in self.modules
         elif self.is_module_member_expr(expr):
+            # a module attribute
             if isinstance(expr.node, Var) and expr.node.is_final:
                 final_var = expr.node
                 fullname = expr.node.fullname()
@@ -3985,27 +4010,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def load_globals_dict(self) -> Value:
         return self.add(LoadStatic(object_rprimitive, 'globals', self.module_name))
-
-    def load_final_literal_value(self, val: Union[int, str, bytes, float, bool],
-                                 line: int) -> Value:
-        """Load value of a final name or class-level attribute."""
-        if isinstance(val, bool):
-            if val:
-                return self.primitive_op(true_op, [], line)
-            else:
-                return self.primitive_op(false_op, [], line)
-        elif isinstance(val, int):
-            if val > MAX_SHORT_INT:
-                return self.load_static_int(val)
-            return self.add(LoadInt(val))
-        elif isinstance(val, float):
-            return self.load_static_float(val)
-        elif isinstance(val, str):
-            return self.load_static_unicode(val)
-        elif isinstance(val, bytes):
-            return self.load_static_bytes(val)
-        else:
-            assert False, "Unsupported final literal value"
 
     def load_static_int(self, value: int) -> Value:
         """Loads a static integer Python 'int' object into a register."""
