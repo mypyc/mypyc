@@ -1335,21 +1335,23 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             else:
                 name = '{}.{}'.format(class_name, lvalue.name)
             self.final_names.append(name)
-            self.add(InitStatic(rvalue_reg, name, 'final'))
+            boxed = self.add(Box(rvalue_reg, lvalue.line))
+            self.add(InitStatic(boxed, name, 'final'))
 
     def load_final_static(self, fullname: str, typ: RType, line: int,
                           error_name: Optional[str] = None) -> Value:
         if error_name is None:
             error_name = fullname
         ok_block, error_block = BasicBlock(), BasicBlock()
-        value = self.add(LoadStatic(typ, fullname, 'final', line=line))
-        self.add(Branch(value, error_block, ok_block, Branch.IS_ERROR, rare=True))
+        boxed = self.add(LoadStatic(object_rprimitive, fullname, 'final', line=line))
+        self.add(Branch(boxed, error_block, ok_block, Branch.IS_ERROR, rare=True))
         self.activate_block(error_block)
         self.add(RaiseStandardError(RaiseStandardError.VALUE_ERROR,
                                     'value for final name "{}" was not set'.format(error_name),
                                     line))
         self.add(Unreachable())
         self.activate_block(ok_block)
+        value = self.unbox_or_cast(boxed, typ, line)
         return value
 
     def load_final_literal_value(self, val: Union[int, str, bytes, float, bool],
@@ -4014,7 +4016,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def load_static_int(self, value: int) -> Value:
         """Loads a static integer Python 'int' object into a register."""
         static_symbol = self.mapper.literal_static_name(value)
-        return self.add(LoadStatic(int_rprimitive, static_symbol, ann=value))
+        boxed = LoadStatic(int_rprimitive, static_symbol, ann=value)
+        return self.add(Unbox(boxed, int_rprimitive, -1))
 
     def load_static_float(self, value: float) -> Value:
         """Loads a static float value into a register."""
