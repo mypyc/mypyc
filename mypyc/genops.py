@@ -1333,7 +1333,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             if class_name is None:
                 name = lvalue.fullname
             else:
-                name = '{}.{}'.format(class_name, lvalue.name)
+                name = '{}.{}'.format(class_name, lvalue.name())
             self.final_names.append(name)
             boxed = self.add(Box(rvalue_reg, lvalue.line))
             self.add(InitStatic(boxed, name, 'final'))
