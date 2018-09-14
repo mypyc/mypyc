@@ -62,7 +62,7 @@ from mypyc.ops import (
     PrimitiveOp, ControlOp, LoadErrorValue, ERR_FALSE, OpDescription, RegisterOp,
     is_object_rprimitive, LiteralsMap, FuncSignature, VTableAttr, VTableMethod, VTableEntries,
     NAMESPACE_TYPE, RaiseStandardError, LoadErrorValue, NO_TRACEBACK_LINE_NO, FuncDecl,
-    FUNC_NORMAL, FUNC_STATICMETHOD, FUNC_CLASSMETHOD, LoadStaticChecked,
+    FUNC_NORMAL, FUNC_STATICMETHOD, FUNC_CLASSMETHOD,
     RUnion, is_optional_type, optional_value_type, is_short_int_rprimitive, all_concrete_classes
 )
 from mypyc.ops_primitive import binary_ops, unary_ops, func_ops, method_ops, name_ref_ops
@@ -889,6 +889,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 value = self.accept(stmt.rvalue)
                 self.primitive_op(
                     py_setattr_op, [typ, self.load_static_unicode(lvalue.name), value], stmt.line)
+                if self.non_function_scope() and stmt.is_final_def:
+                    self.init_final_static(lvalue, value, cdef.fullname)
             elif isinstance(stmt, ExpressionStmt) and isinstance(stmt.expr, StrExpr):
                 # Docstring. Ignore
                 pass
@@ -1320,6 +1322,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 assert not isinstance(var, Var) or var.is_classvar, (
                     "mypyc only supports assignment to classvars defined as ClassVar")
 
+    def non_function_scope(self) -> bool:
+        # Currently the stack always has at least two items: dummy and top-level.
+        return len(self.fn_infos) <= 2
+
+    def init_final_static(self, lvalue: Lvalue, rvalue_reg: Value,
+                          class_name: Optional[str] = None) -> None:
+        assert isinstance(lvalue, NameExpr)
+        if lvalue.node.final_value is None:
+            if class_name is None:
+                name = lvalue.fullname
+            else:
+                name = '{}.{}'.format(class_name, lvalue.name)
+            self.final_names.append(name)
+            self.add(InitStatic(rvalue_reg, name, 'final'))
+
     def visit_assignment_stmt(self, stmt: AssignmentStmt) -> None:
         assert len(stmt.lvalues) >= 1
         self.disallow_class_assignments(stmt.lvalues)
@@ -1333,11 +1350,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         line = stmt.rvalue.line
         rvalue_reg = self.accept(stmt.rvalue)
-        if len(self.fn_infos) <= 2 and stmt.is_final_def:
-            assert isinstance(lvalue, NameExpr)
-            if lvalue.node.final_value is None:
-                self.final_names.append(lvalue.fullname)
-                self.add(InitStatic(rvalue_reg, lvalue.fullname, 'final'))
+        if self.non_function_scope() and stmt.is_final_def:
+            self.init_final_static(lvalue, rvalue_reg)
         for lvalue in stmt.lvalues:
             target = self.get_assignment_target(lvalue)
             self.assign(target, rvalue_reg, line)
@@ -1838,6 +1852,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         fitem = self.fn_info.fitem
         return fitem in self.free_variables and symbol in self.free_variables[fitem]
 
+    def load_final_static(self, fullname: str, typ: RType, line: int,
+                          error_name: Optional[str] = None) -> Value:
+        if error_name is None:
+            error_name = fullname
+        ok_block, error_block = BasicBlock(), BasicBlock()
+        value = self.add(LoadStatic(typ, fullname, 'final', line=line))
+        self.add(Branch(value, error_block, ok_block, Branch.IS_ERROR, rare=True))
+        self.activate_block(error_block)
+        self.add(RaiseStandardError(RaiseStandardError.VALUE_ERROR,
+                                    'value for final name "{}" was not set'.format(error_name),
+                                    line))
+        self.add(Unreachable())
+        self.activate_block(ok_block)
+        return value
+
     def visit_name_expr(self, expr: NameExpr) -> Value:
         assert expr.node, "RefExpr not resolved"
         fullname = expr.node.fullname()
@@ -1852,16 +1881,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             if fvar.final_value is not None:
                 return self.load_final_literal_value(fvar.final_value, expr.line)
             else:
-                ok_block, error_block = BasicBlock(), BasicBlock()
-                value = self.add(LoadStatic(self.mapper.type_to_rtype(self.types[expr]),
-                                            fullname, 'final', line=expr.line))
-                self.add(Branch(value, error_block, ok_block, Branch.IS_ERROR, rare=True))
-                self.activate_block(error_block)
-                self.add(RaiseStandardError(RaiseStandardError.VALUE_ERROR,
-                                    'value for final name "{}" was not set'.format(expr.name), expr.line))
-                self.add(Unreachable())
-                self.activate_block(ok_block)
-                return value
+                return self.load_final_static(fullname,
+                                              self.mapper.type_to_rtype(self.types[expr]),
+                                              expr.line, expr.name)
 
         if isinstance(expr.node, MypyFile):
             return self.load_module(expr.node.fullname())
@@ -1879,12 +1901,25 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return isinstance(expr.expr, RefExpr) and expr.expr.kind == MODULE_REF
 
     def visit_member_expr(self, expr: MemberExpr) -> Value:
+        final_var = None
         if isinstance(expr.expr, RefExpr) and isinstance(expr.expr.node, TypeInfo):
             sym = expr.expr.node.get(expr.name)
             if sym and isinstance(sym.node, Var) and sym.node.is_final:
-                fvar = sym.node
-                if fvar.final_value is not None:
-                    return self.load_final_literal_value(fvar.final_value, expr.line)
+                final_var = sym.node
+                fullname = '{}.{}'.format(sym.node.info.fullname(), final_var.name)
+                native = expr.expr.node.module_name in self.modules
+        elif self.is_module_member_expr(expr):
+            if isinstance(expr.node, Var) and expr.node.is_final:
+                final_var = expr.node
+                fullname = expr.node.fullname()
+                native = fullname.rpartition('.')[0] in self.modules
+        if final_var is not None:
+            if final_var.final_value is not None:
+                return self.load_final_literal_value(final_var.final_value, expr.line)
+            elif native:
+                return self.load_final_static(fullname,
+                                              self.mapper.type_to_rtype(self.types[expr]),
+                                              expr.line, final_var.name())
 
         if self.is_module_member_expr(expr):
             return self.load_module_attr(expr)
