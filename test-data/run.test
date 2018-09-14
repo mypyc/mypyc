@@ -47,22 +47,12 @@ print(count(5))
 if False:
     from typing import Final
 
-class C:
-    x: int
-
-y = C()
-
-if bool():
-    y.x = 1
-
-y.x
-
 if bool():
     x: 'Final' = [1]
 
 def f() -> int:
-    x.append(2)
-    return x[0]
+    y = x
+    return y[0]
 
 [file driver.py]
 from native import f  #, x

@@ -1852,8 +1852,16 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             if fvar.final_value is not None:
                 return self.load_final_literal_value(fvar.final_value, expr.line)
             else:
-                return self.add(LoadStaticChecked(self.mapper.type_to_rtype(self.types[expr]),
-                                                  fullname, 'final', line=expr.line))
+                ok_block, error_block = BasicBlock(), BasicBlock()
+                value = self.add(LoadStatic(self.mapper.type_to_rtype(self.types[expr]),
+                                            fullname, 'final', line=expr.line))
+                self.add(Branch(value, error_block, ok_block, Branch.IS_ERROR, rare=True))
+                self.activate_block(error_block)
+                self.add(RaiseStandardError(RaiseStandardError.VALUE_ERROR,
+                                    'value for final name "{}" was not set'.format(expr.name), expr.line))
+                self.add(Unreachable())
+                self.activate_block(ok_block)
+                return value
 
         if isinstance(expr.node, MypyFile):
             return self.load_module(expr.node.fullname())

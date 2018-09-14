@@ -597,7 +597,7 @@ class Branch(ControlOp):
     }
 
     def __init__(self, left: Value, true_label: BasicBlock,
-                 false_label: BasicBlock, op: int, line: int = -1) -> None:
+                 false_label: BasicBlock, op: int, line: int = -1, *, rare: bool = False) -> None:
         super().__init__(line)
         self.left = left
         self.true = true_label
@@ -606,6 +606,7 @@ class Branch(ControlOp):
         self.negated = False
         # If not None, the true label should generate a traceback entry (func name, line number)
         self.traceback_entry = None  # type: Optional[Tuple[str, int]]
+        self.rare = rare
 
     def sources(self) -> List[Value]:
         return [self.left]
@@ -1081,11 +1082,6 @@ class LoadStatic(RegisterOp):
 
     def accept(self, visitor: 'OpVisitor[T]') -> T:
         return visitor.visit_load_static(self)
-
-
-class LoadStaticChecked(LoadStatic):
-
-    error_kind = ERR_MAGIC
 
 
 class InitStatic(RegisterOp):

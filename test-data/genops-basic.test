@@ -3175,3 +3175,14 @@ L2:
     return r1
 L3:
     unreachable
+
+[case testFinalStaticIR]
+from typing import Final
+
+x: Final = [1]
+
+def f() -> int:
+    return x[0]
+
+print(f())
+[out]
