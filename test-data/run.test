@@ -43,23 +43,6 @@ print(count(5))
 2
 6
 
-[case testFinalStaticRun]
-if False:
-    from typing import Final, Tuple
-
-x: 'Final' = [1]
-y: 'Final' = 1 + 1
-
-def f() -> int:
-    return y
-
-[file driver.py]
-from native import f, x
-print(f())
-print(x)
-[out]
-
-
 [case testFor]
 from typing import List
 def count(n: int) -> None:
@@ -3373,3 +3356,73 @@ assert f([6, 7], [8, 9]) == [(0, 6, 8), (1, 7, 9)]
 assert g([6, 7], ['a', 'b']) == [(0, 6, 'a'), (1, 7, 'b')]
 assert f([6, 7], [8]) == [(0, 6, 8)]
 assert f([6], [8, 9]) == [(0, 6, 8)]
+
+[case testFinalStaticRunFail]
+if False:
+    from typing import Final
+
+if bool():
+    x: 'Final' = [1]
+
+def f() -> int:
+    return x[0]
+
+[file driver.py]
+from native import f
+try:
+    print(f())
+except ValueError as e:
+    print(e.args[0])
+[out]
+value for final name "x" was not set
+
+[case testFinalStaticRunList]
+if False:
+    from typing import Final
+
+x: 'Final' = [1]
+
+def f() -> int:
+    return x[0]
+
+[file driver.py]
+from native import f, x
+print(f())
+print(x)
+[out]
+1
+[[1]
+
+[case testFinalStaticRunTuple]
+if False:
+    from typing import Final
+
+x: 'Final' = (1, 2)
+
+def f() -> int:
+    return x[0]
+
+[file driver.py]
+from native import f, x
+print(f())
+print(x)
+[out]
+1
+(1, 2)
+
+[case testFinalStaticRunInt]
+if False:
+    from typing import Final
+
+x: 'Final' = 1 + 1
+
+def f() -> int:
+    return x - 1
+
+[file driver.py]
+from native import f, x
+print(f())
+print(x)
+[out]
+1
+2

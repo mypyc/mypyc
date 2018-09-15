@@ -1351,7 +1351,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                     line))
         self.add(Unreachable())
         self.activate_block(ok_block)
-        value = self.unbox_or_cast(boxed, typ, line)
+        value = self.coerce(boxed, typ, line)
         return value
 
     def load_final_literal_value(self, val: Union[int, str, bytes, float, bool],
@@ -4016,8 +4016,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def load_static_int(self, value: int) -> Value:
         """Loads a static integer Python 'int' object into a register."""
         static_symbol = self.mapper.literal_static_name(value)
-        boxed = LoadStatic(int_rprimitive, static_symbol, ann=value)
-        return self.add(Unbox(boxed, int_rprimitive, -1))
+        return self.add(LoadStatic(int_rprimitive, static_symbol, ann=value))
 
     def load_static_float(self, value: float) -> Value:
         """Loads a static float value into a register."""
