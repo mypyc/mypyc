@@ -131,14 +131,3 @@ CPyL4: ;
 def f(x: List[int]) -> None: pass
 [out]
 prog.py:1: error: Name 'List' is not defined
-
-[case testFinalStatic]
-from typing import Final
-
-x: Final = [1]
-
-def f() -> int:
-    return x[0]
-
-print(f())
-[out]

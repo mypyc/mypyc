@@ -1329,13 +1329,15 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def init_final_static(self, lvalue: Lvalue, rvalue_reg: Value,
                           class_name: Optional[str] = None) -> None:
         assert isinstance(lvalue, NameExpr)
+        assert isinstance(lvalue.node, Var)
         if lvalue.node.final_value is None:
             if class_name is None:
                 name = lvalue.fullname
             else:
                 name = '{}.{}'.format(class_name, lvalue.name)
+            assert name is not None, "Full name not set for variable"
             self.final_names.append(name)
-            boxed = self.add(Box(rvalue_reg, lvalue.line))
+            boxed = self.coerce(rvalue_reg, object_rprimitive, lvalue.line)
             self.add(InitStatic(boxed, name, 'final'))
 
     def load_final_static(self, fullname: str, typ: RType, line: int,
