@@ -298,7 +298,7 @@ class Emitter:
             dest: Name of target C variable
             typ: Type of value
             declare_dest: If True, also declare the variable 'dest'
-            likely: If the cast is likely to succeed (can be False fo unions)
+            likely: If the cast is likely to succeed (can be False for unions)
         """
         if custom_message is not None:
             err = custom_message
