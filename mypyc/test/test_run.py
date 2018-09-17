@@ -64,7 +64,7 @@ class TestRun(MypycDataSuite):
     def run_case(self, testcase: DataDrivenTestCase) -> None:
         bench = testcase.config.getoption('--bench', False) and 'Benchmark' in testcase.name
 
-        # setup.py wants to be run from the root directory of the package, which we accomodate
+        # setup.py wants to be run from the root directory of the package, which we accommodate
         # by chdiring into tmp/
         with use_custom_builtins(os.path.join(self.data_prefix, ICODE_GEN_BUILTINS), testcase), (
                 chdir_manager('tmp')):
