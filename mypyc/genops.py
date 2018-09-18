@@ -1365,6 +1365,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             else:
                 return self.primitive_op(false_op, [], line)
         elif isinstance(val, int):
+            # TODO: take care of negative integer initializers
+            # (probably easier to fix this in mypy itself).
             if val > MAX_SHORT_INT:
                 return self.load_static_int(val)
             return self.add(LoadInt(val))
@@ -1874,8 +1876,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         if expr.node is None:
             return False
         if '.' in expr.node.fullname():
-            module_name = '.'.join(expr.node.fullname().split('.')[:-1])
-            return module_name in self.modules
+            return expr.node.fullname().rpartition('.')[0] in self.modules
         return True
 
     def is_native_module_ref_expr(self, expr: RefExpr) -> bool:
@@ -1892,6 +1893,53 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         fitem = self.fn_info.fitem
         return fitem in self.free_variables and symbol in self.free_variables[fitem]
 
+    def get_final_ref(self, expr: MemberExpr) -> Optional[Tuple[str, Var, bool]]:
+        """Check if `expr` is a final attribute.
+
+        This needs to be done differently for class and module attributes to
+        correctly determine fully qualified name. Return a tuple that consists of
+        the qualified name, the corresponding Var node, and a flag indicating whether
+        the final name was defined in a compiled module. Return None if `expr` does not
+        refer to a final attribute.
+        """
+        final_var = None
+        if isinstance(expr.expr, RefExpr) and isinstance(expr.expr.node, TypeInfo):
+            # a class attribute
+            sym = expr.expr.node.get(expr.name)
+            if sym and isinstance(sym.node, Var) and sym.node.is_final:
+                final_var = sym.node
+                fullname = '{}.{}'.format(sym.node.info.fullname(), final_var.name())
+                native = expr.expr.node.module_name in self.modules
+        elif self.is_module_member_expr(expr):
+            # a module attribute
+            if isinstance(expr.node, Var) and expr.node.is_final:
+                final_var = expr.node
+                fullname = expr.node.fullname()
+                native = self.is_native_ref_expr(expr)
+        if final_var is not None:
+            return fullname, final_var, native
+        return None
+
+    def emit_load_final(self, final_var: Var, fullname: str,
+                        name: str, native: bool, typ: Type, line: int) -> Optional[Value]:
+        """Emit code for loading value of a final name (if possible).
+
+        Args:
+            final_var: Var corresponding to the final name
+            fullname: its qualified name
+            name: shorter name to show in errors
+            native: whether the name was defined in a compiled module
+            typ: its type
+            line: line number where loading occurs
+        """
+        if final_var.final_value is not None:  # this is safe even for non-native names
+            return self.load_final_literal_value(final_var.final_value, line)
+        elif native:
+            return self.load_final_static(fullname, self.mapper.type_to_rtype(typ),
+                                          line, name)
+        else:
+            return None
+
     def visit_name_expr(self, expr: NameExpr) -> Value:
         assert expr.node, "RefExpr not resolved"
         fullname = expr.node.fullname()
@@ -1902,13 +1950,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.add(PrimitiveOp([], desc, expr.line))
 
         if isinstance(expr.node, Var) and expr.node.is_final:
-            fvar = expr.node
-            if fvar.final_value is not None:  # this is safe even for non-native names
-                return self.load_final_literal_value(fvar.final_value, expr.line)
-            elif fullname.rpartition('.')[0] in self.modules:  # native final name
-                return self.load_final_static(fullname,
-                                              self.mapper.type_to_rtype(self.types[expr]),
-                                              expr.line, expr.name)
+            value = self.emit_load_final(expr.node, fullname, expr.name,
+                                         self.is_native_ref_expr(expr), self.types[expr],
+                                         expr.line)
+            if value is not None:
+                return value
 
         if isinstance(expr.node, MypyFile):
             return self.load_module(expr.node.fullname())
@@ -1926,29 +1972,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return isinstance(expr.expr, RefExpr) and expr.expr.kind == MODULE_REF
 
     def visit_member_expr(self, expr: MemberExpr) -> Value:
-        # First check if this is maybe a final attribute. This needs to be done differently
-        # for class and module attributes to correctly determine fully qualified name.
-        final_var = None
-        if isinstance(expr.expr, RefExpr) and isinstance(expr.expr.node, TypeInfo):
-            # a class attribute
-            sym = expr.expr.node.get(expr.name)
-            if sym and isinstance(sym.node, Var) and sym.node.is_final:
-                final_var = sym.node
-                fullname = '{}.{}'.format(sym.node.info.fullname(), final_var.name())
-                native = expr.expr.node.module_name in self.modules
-        elif self.is_module_member_expr(expr):
-            # a module attribute
-            if isinstance(expr.node, Var) and expr.node.is_final:
-                final_var = expr.node
-                fullname = expr.node.fullname()
-                native = fullname.rpartition('.')[0] in self.modules
-        if final_var is not None:
-            if final_var.final_value is not None:
-                return self.load_final_literal_value(final_var.final_value, expr.line)
-            elif native:
-                return self.load_final_static(fullname,
-                                              self.mapper.type_to_rtype(self.types[expr]),
-                                              expr.line, final_var.name())
+        # First check if this is maybe a final attribute.
+        final = self.get_final_ref(expr)
+        if final is not None:
+            fullname, final_var, native = final
+            value = self.emit_load_final(final_var, fullname, final_var.name(), native,
+                                         self.types[expr], expr.line)
+            if value is not None:
+                return value
 
         if self.is_module_member_expr(expr):
             return self.load_module_attr(expr)

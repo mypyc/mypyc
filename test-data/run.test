@@ -3376,53 +3376,33 @@ except ValueError as e:
 [out]
 value for final name "x" was not set
 
-[case testFinalStaticRunList]
+[case testFinalStaticRunListTupleInt]
 if False:
     from typing import Final
 
 x: 'Final' = [1]
+y: 'Final' = (1, 2)
+z: 'Final' = 1 + 1
 
 def f() -> int:
     return x[0]
+def g() -> int:
+    return y[0]
+def h() -> int:
+    return z - 1
 
 [file driver.py]
-from native import f, x
+from native import f, g, h, x, y, z
 print(f())
-print(x)
+print(x[0])
+print(g())
+print(y)
+print(h())
+print(z)
 [out]
 1
-[[1]
-
-[case testFinalStaticRunTuple]
-if False:
-    from typing import Final
-
-x: 'Final' = (1, 2)
-
-def f() -> int:
-    return x[0]
-
-[file driver.py]
-from native import f, x
-print(f())
-print(x)
-[out]
+1
 1
 (1, 2)
-
-[case testFinalStaticRunInt]
-if False:
-    from typing import Final
-
-x: 'Final' = 1 + 1
-
-def f() -> int:
-    return x - 1
-
-[file driver.py]
-from native import f, x
-print(f())
-print(x)
-[out]
 1
 2

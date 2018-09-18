@@ -3059,7 +3059,7 @@ L0:
     r5 = box(None, r4)
     return r5
 
-[case FinalModuleInt]
+[case testFinalModuleInt]
 from typing import Final
 
 x: Final = 1
@@ -3085,7 +3085,7 @@ L2:
 L3:
     unreachable
 
-[case FinalModuleStr]
+[case testFinalModuleStr]
 from typing import Final
 
 x: Final = 'x'
@@ -3111,7 +3111,7 @@ L2:
 L3:
     unreachable
 
-[case FinalModuleBool]
+[case testFinalModuleBool]
 from typing import Final
 
 x: Final = True
@@ -3136,7 +3136,7 @@ L2:
 L3:
     unreachable
 
-[case FinalClass]
+[case testFinalClass]
 from typing import Final
 
 class C:
