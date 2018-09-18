@@ -8,7 +8,7 @@ from mypy.errors import CompileError
 from mypy.options import Options
 
 from mypyc import genops
-from mypyc.common import PREFIX, TOP_LEVEL_NAME
+from mypyc.common import PREFIX, TOP_LEVEL_NAME, INT_PREFIX
 from mypyc.emit import EmitterContext, Emitter, HeaderDeclaration
 from mypyc.emitfunc import generate_native_function, native_function_header
 from mypyc.emitclass import generate_class_type_decl, generate_class
@@ -119,8 +119,13 @@ class ModuleGenerator:
             self.declare_imports(module.imports, emitter)
             self.declare_finals(module.final_names, emitter)
 
-        for identifier in self.literals.values():
-            self.declare_static_pyobject(identifier, emitter)
+        for (_, literal), identifier in self.literals.items():
+            if isinstance(literal, int):
+                symbol = emitter.static_name(identifier, None)
+                self.declare_global('CPyTagged ', symbol)
+                self.declare_global('PyObject *', INT_PREFIX + symbol)
+            else:
+                self.declare_static_pyobject(identifier, emitter)
 
         for module in module_irs:
             for fn in module.functions:
@@ -177,6 +182,8 @@ class ModuleGenerator:
         for (_, literal), identifier in self.literals.items():
             symbol = emitter.static_name(identifier, None)
             if isinstance(literal, int):
+                actual_symbol = symbol
+                symbol = INT_PREFIX + symbol
                 emitter.emit_line(
                     '{} = PyLong_FromString(\"{}\", NULL, 10);'.format(
                         symbol, str(literal))
@@ -200,6 +207,11 @@ class ModuleGenerator:
                                'but the provided literal is of type {}'.format(type(literal)))
             emitter.emit_lines('if ({} == NULL)'.format(symbol),
                                '    return -1;')
+            # Ints have an unboxed representation.
+            if isinstance(literal, int):
+                emitter.emit_line(
+                    '{} = CPyTagged_FromObject({});'.format(actual_symbol, symbol)
+                )
 
         emitter.emit_lines(
             'is_initialized = 1;',
