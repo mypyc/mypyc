@@ -369,10 +369,12 @@ class ModuleGenerator:
     def declare_finals(self, final_names: Iterable[Tuple[str, RType]], emitter: Emitter) -> None:
         for name, typ in final_names:
             static_name = emitter.static_name(name, 'final')
-            static = '' if isinstance(typ, RTuple) else 'static '
             # Here we rely on the fact that undefined value and error value are always the same
-            emitter.emit_line('{}{}{} = {};'.format(static, emitter.ctype_spaced(typ), static_name,
-                                                         emitter.c_undefined_value(typ)))
+            undefined = emitter.c_undefined_value(typ)
+            if isinstance(typ, RTuple):
+                undefined = emitter.context.statics[undefined]
+            emitter.emit_line('static {}{} = {};'.format(emitter.ctype_spaced(typ), static_name,
+                                                         undefined))
 
     def declare_static_pyobject(self, identifier: str, emitter: Emitter) -> None:
         symbol = emitter.static_name(identifier, None)
