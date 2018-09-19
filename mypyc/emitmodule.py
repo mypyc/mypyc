@@ -208,7 +208,7 @@ class ModuleGenerator:
             else:
                 assert False, ('Literals must be integers, floating point numbers, or strings,',
                                'but the provided literal is of type {}'.format(type(literal)))
-            emitter.emit_lines('if ({} == NULL)'.format(symbol),
+            emitter.emit_lines('if (unlikely({} == NULL))'.format(symbol),
                                '    return -1;')
             # Ints have an unboxed representation.
             if isinstance(literal, int):
@@ -268,7 +268,7 @@ class ModuleGenerator:
                            '}')
 
         emitter.emit_lines('{} = PyModule_Create(&{}module);'.format(module_static, module_prefix),
-                           'if ({} == NULL)'.format(module_static),
+                           'if (unlikely({} == NULL))'.format(module_static),
                            '    return NULL;')
         emitter.emit_line(
             'PyObject *modname = PyObject_GetAttrString((PyObject *){}, "__name__");'.format(
@@ -276,7 +276,7 @@ class ModuleGenerator:
 
         module_globals = emitter.static_name('globals', module_name)
         emitter.emit_lines('{} = PyModule_GetDict({});'.format(module_globals, module_static),
-                           'if ({} == NULL)'.format(module_globals),
+                           'if (unlikely({} == NULL))'.format(module_globals),
                            '    return NULL;')
 
         # HACK: Manually instantiate generated classes here
@@ -286,7 +286,7 @@ class ModuleGenerator:
                 emitter.emit_lines(
                     '{t} = (PyTypeObject *)CPyType_FromTemplate({t}_template, NULL, modname);'.
                     format(t=type_struct))
-                emitter.emit_lines('if (!{})'.format(type_struct),
+                emitter.emit_lines('if (unlikely(!{}))'.format(type_struct),
                                    '    return NULL;')
 
         emitter.emit_lines('if (CPyLiteralsInit() < 0)',
