@@ -370,9 +370,11 @@ class ModuleGenerator:
         for name, typ in final_names:
             static_name = emitter.static_name(name, 'final')
             # Here we rely on the fact that undefined value and error value are always the same
-            undefined = emitter.c_undefined_value(typ)
             if isinstance(typ, RTuple):
-                undefined = emitter.context.statics[undefined]
+                # We need to inline because initializer must be static
+                undefined = '{{ {} }}'.format(', '.join(emitter.tuple_undefined_value_helper(typ)))
+            else:
+                undefined = emitter.c_undefined_value(typ)
             emitter.emit_line('static {}{} = {};'.format(emitter.ctype_spaced(typ), static_name,
                                                          undefined))
 
