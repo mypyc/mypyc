@@ -15,7 +15,7 @@ from mypyc.emitclass import generate_class_type_decl, generate_class
 from mypyc.emitwrapper import (
     generate_wrapper_function, wrapper_function_header,
 )
-from mypyc.ops import FuncIR, ClassIR, ModuleIR, LiteralsMap, format_func
+from mypyc.ops import FuncIR, ClassIR, ModuleIR, LiteralsMap, format_func, RType
 from mypyc.uninit import insert_uninit_checks
 from mypyc.refcount import insert_ref_count_opcodes
 from mypyc.exceptions import insert_exception_handling
@@ -117,7 +117,6 @@ class ModuleGenerator:
             self.declare_module(module_name, emitter)
             self.declare_internal_globals(module_name, emitter)
             self.declare_imports(module.imports, emitter)
-            self.declare_finals(module.final_names, emitter)
 
         for (_, literal), identifier in self.literals.items():
             if isinstance(literal, int):
@@ -126,6 +125,10 @@ class ModuleGenerator:
                 self.declare_global('PyObject *', INT_PREFIX + symbol)
             else:
                 self.declare_static_pyobject(identifier, emitter)
+
+        for module_name, module in self.modules:
+            # Finals must be last (types can depend on declared above)
+            self.declare_finals(module.final_names, emitter)
 
         for module in module_irs:
             for fn in module.functions:
@@ -363,10 +366,12 @@ class ModuleGenerator:
         for imp in imps:
             self.declare_module(imp, emitter)
 
-    def declare_finals(self, final_names: Iterable[str], emitter: Emitter) -> None:
-        for name in final_names:
+    def declare_finals(self, final_names: Iterable[Tuple[str, RType]], emitter: Emitter) -> None:
+        for name, typ in final_names:
             static_name = emitter.static_name(name, 'final')
-            self.declare_global('PyObject *', static_name, initializer='NULL')
+            # Here we rely on the fact that undefined value and error value are always the same
+            emitter.emit_line('static {}{} = {};'.format(emitter.ctype_spaced(typ), static_name,
+                                                         emitter.c_undefined_value(typ)))
 
     def declare_static_pyobject(self, identifier: str, emitter: Emitter) -> None:
         symbol = emitter.static_name(identifier, None)

@@ -276,10 +276,10 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         value = self.reg(op.value)
         prefix = self.PREFIX_MAP[op.namespace]
         name = self.emitter.static_name(op.identifier, op.module_name, prefix)
-        self.emit_line('Py_INCREF(%s);' % value)
         if op.namespace == NAMESPACE_TYPE:
             value = '(PyTypeObject *)%s' % value
         self.emit_line('%s = %s;' % (name, value))
+        self.emit_inc_ref(name, op.value.type)
 
     def visit_tuple_get(self, op: TupleGet) -> None:
         dest = self.reg(op)

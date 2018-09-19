@@ -115,8 +115,8 @@ CPyL1: ;
     } else
         goto CPyL2;
 CPyL2: ;
-    Py_INCREF(cpy_r_r4);
     CPyStatic_builtins_module = cpy_r_r4;
+    CPy_INCREF(CPyStatic_builtins_module);
     CPy_DECREF(cpy_r_r4);
     goto CPyL3;
 CPyL3: ;
@@ -131,8 +131,3 @@ CPyL4: ;
 def f(x: List[int]) -> None: pass
 [out]
 prog.py:1: error: Name 'List' is not defined
-
-[case testSimpleUnicode]
-x = 'hi'
-y = 1000000000000000000000000000000
-[out]
