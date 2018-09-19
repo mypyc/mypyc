@@ -15,7 +15,7 @@ from mypyc.emitclass import generate_class_type_decl, generate_class
 from mypyc.emitwrapper import (
     generate_wrapper_function, wrapper_function_header,
 )
-from mypyc.ops import FuncIR, ClassIR, ModuleIR, LiteralsMap, format_func, RType
+from mypyc.ops import FuncIR, ClassIR, ModuleIR, LiteralsMap, format_func, RType, RTuple
 from mypyc.uninit import insert_uninit_checks
 from mypyc.refcount import insert_ref_count_opcodes
 from mypyc.exceptions import insert_exception_handling
@@ -369,8 +369,9 @@ class ModuleGenerator:
     def declare_finals(self, final_names: Iterable[Tuple[str, RType]], emitter: Emitter) -> None:
         for name, typ in final_names:
             static_name = emitter.static_name(name, 'final')
+            static = '' if isinstance(typ, RTuple) else 'static '
             # Here we rely on the fact that undefined value and error value are always the same
-            emitter.emit_line('static {}{} = {};'.format(emitter.ctype_spaced(typ), static_name,
+            emitter.emit_line('{}{}{} = {};'.format(static, emitter.ctype_spaced(typ), static_name,
                                                          emitter.c_undefined_value(typ)))
 
     def declare_static_pyobject(self, identifier: str, emitter: Emitter) -> None:
