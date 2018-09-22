@@ -122,7 +122,6 @@ class ModuleGenerator:
             if isinstance(literal, int):
                 symbol = emitter.static_name(identifier, None)
                 self.declare_global('CPyTagged ', symbol)
-                self.declare_global('PyObject *', INT_PREFIX + symbol)
             else:
                 self.declare_static_pyobject(identifier, emitter)
 
@@ -188,7 +187,7 @@ class ModuleGenerator:
                 actual_symbol = symbol
                 symbol = INT_PREFIX + symbol
                 emitter.emit_line(
-                    '{} = PyLong_FromString(\"{}\", NULL, 10);'.format(
+                    'PyObject * {} = PyLong_FromString(\"{}\", NULL, 10);'.format(
                         symbol, str(literal))
                 )
             elif isinstance(literal, float):
