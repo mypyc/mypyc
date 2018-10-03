@@ -3063,10 +3063,18 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # I don't actually understand why a bunch of it is the way it is.
         # We could probably optimize the case where the manager is compiled by us,
         # but that is not our common case at all, so.
+        # XXX DOC
         mgr_v = self.accept(expr)
-        typ = self.primitive_op(type_op, [mgr_v], line)
-        exit_ = self.maybe_spill(self.py_get_attr(typ, '__exit__', line))
-        value = self.py_call(self.py_get_attr(typ, '__enter__', line), [mgr_v], line)
+        direct_calls = (isinstance(mgr_v.type, RInstance)
+                        and mgr_v.type.class_ir.has_method('__enter__')
+                        and mgr_v.type.class_ir.has_method('__exit__'))
+        if direct_calls:
+            assert False
+            value = self.gen_method_call(mgr_v, '__enter__', [], None, line)
+        else:
+            typ = self.primitive_op(type_op, [mgr_v], line)
+            exit_ = self.maybe_spill(self.py_get_attr(typ, '__exit__', line))
+            value = self.py_call(self.py_get_attr(typ, '__enter__', line), [mgr_v], line)
         mgr = self.maybe_spill(mgr_v)
         exc = self.maybe_spill_assignable(self.primitive_op(true_op, [], -1))
 
@@ -3078,9 +3086,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         def except_body() -> None:
             self.assign(exc, self.primitive_op(false_op, [], -1), line)
             out_block, reraise_block = BasicBlock(), BasicBlock()
-            self.add_bool_branch(self.py_call(self.read(exit_),
-                                              [self.read(mgr)] + self.get_sys_exc_info(), line),
-                                 out_block, reraise_block)
+            if direct_calls:
+                suppress = self.gen_method_call(self.read(mgr), '__exit__',
+                                                self.get_sys_exc_info(), None, line)
+            else:
+                suppress = self.py_call(self.read(exit_),
+                                        [self.read(mgr)] + self.get_sys_exc_info(), line)
+            self.add_bool_branch(suppress, out_block, reraise_block)
             self.activate_block(reraise_block)
             self.primitive_op(reraise_exception_op, [], NO_TRACEBACK_LINE_NO)
             self.add(Unreachable())
@@ -3091,7 +3103,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.add(Branch(self.read(exc), exit_block, out_block, Branch.BOOL_EXPR))
             self.activate_block(exit_block)
             none = self.none_object()
-            self.py_call(self.read(exit_), [self.read(mgr), none, none, none], line)
+            if direct_calls:
+                self.gen_method_call(self.read(mgr), '__exit__', [none, none, none], None, line)
+            else:
+                self.py_call(self.read(exit_), [self.read(mgr), none, none, none], line)
             self.goto_and_activate(out_block)
 
         self.visit_try_finally_stmt(
