@@ -1475,11 +1475,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         if isinstance(target, AssignmentTargetRegister):
             return target.register
         if isinstance(target, AssignmentTargetIndex):
-            reg = self.translate_special_method_call(target.base,
-                                                     '__getitem__',
-                                                     [target.index],
-                                                     None,
-                                                     line)
+            reg = self.gen_method_call(
+                target.base, '__getitem__', [target.index], target.type, line)
             if reg is not None:
                 return reg
             assert False, target.base.type
@@ -1507,12 +1504,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 boxed_reg = self.box(rvalue_reg)
                 self.add(PrimitiveOp([target.obj, key, boxed_reg], py_setattr_op, line))
         elif isinstance(target, AssignmentTargetIndex):
-            target_reg2 = self.translate_special_method_call(
-                target.base,
-                '__setitem__',
-                [target.index, rvalue_reg],
-                None,
-                line)
+            target_reg2 = self.gen_method_call(
+                target.base, '__setitem__', [target.index, rvalue_reg], None, line)
             assert target_reg2 is not None, target.base.type
         elif isinstance(target, AssignmentTargetTuple):
             if isinstance(rvalue_reg.type, RTuple):
@@ -2429,7 +2422,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                         base: Value,
                         name: str,
                         arg_values: List[Value],
-                        return_rtype: RType,
+                        return_rtype: Optional[RType],
                         line: int,
                         arg_kinds: Optional[List[int]] = None,
                         arg_names: Optional[List[Optional[str]]] = None) -> Value:
@@ -2460,6 +2453,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
                 return self.add(MethodCall(base, name, arg_values, line))
         elif isinstance(base.type, RUnion):
+            return_rtype = return_rtype or object_rprimitive
             return self.union_method_call(base, base.type, name, arg_values, return_rtype, line,
                                           arg_kinds, arg_names)
 
