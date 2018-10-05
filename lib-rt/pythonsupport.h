@@ -135,6 +135,73 @@ init_subclass(PyTypeObject *type, PyObject *kwds)
 }
 #endif
 
+// Adapted from longobject.c in Python 3.7.0
+/* This function adapted from PyLong_AsLongLongAndOverflow, but with
+ * some safety checks removed and specialized to only work for objects
+ * that are already longs.
+ * About half of the win this provides, though, just comes from being
+ * able to inline the function, which in addition to saving function call
+ * overhead allows the out-parameter overflow flag to be collapsed into
+ * control flow. */
+#define PY_ABS_LLONG_MIN (0-(unsigned long long)PY_LLONG_MIN)
+static inline long long
+CPyLong_AsLongLongAndOverflow(PyObject *vv, int *overflow)
+{
+    /* This version by Tim Peters */
+    PyLongObject *v = (PyLongObject *)vv;
+    unsigned long long x, prev;
+    long long res;
+    Py_ssize_t i;
+    int sign;
+
+    *overflow = 0;
+
+    res = -1;
+    i = Py_SIZE(v);
+
+    switch (i) {
+    case -1:
+        res = -(sdigit)v->ob_digit[0];
+        break;
+    case 0:
+        res = 0;
+        break;
+    case 1:
+        res = v->ob_digit[0];
+        break;
+    default:
+        sign = 1;
+        x = 0;
+        if (i < 0) {
+            sign = -1;
+            i = -(i);
+        }
+        while (--i >= 0) {
+            prev = x;
+            x = (x << PyLong_SHIFT) + v->ob_digit[i];
+            if ((x >> PyLong_SHIFT) != prev) {
+                *overflow = sign;
+                goto exit;
+            }
+        }
+        /* Haven't lost any bits, but casting to long requires extra
+         * care (see comment above).
+         */
+        if (x <= (unsigned long long)PY_LLONG_MAX) {
+            res = (long long)x * sign;
+        }
+        else if (sign < 0 && x == PY_ABS_LLONG_MIN) {
+            res = PY_LLONG_MIN;
+        }
+        else {
+            *overflow = sign;
+            /* res is already set to -1 */
+        }
+    }
+  exit:
+    return res;
+}
+
 #ifdef __cplusplus
 }
 #endif
