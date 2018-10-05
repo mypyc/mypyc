@@ -1757,8 +1757,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 and isinstance(expr.callee, RefExpr)):
             if (expr.callee.fullname == 'builtins.range'
                     and (len(expr.args) <= 2
-                             or (len(expr.args) == 2
-                                 and self.extract_int(expr.args[2]) is not None))
+                         or (len(expr.args) == 2
+                             and self.extract_int(expr.args[2]) is not None))
                     and set(expr.arg_kinds) == {ARG_POS}):
                 # Special case "for x in range(...)".
                 # We support the 3 arg form but only for int literals, since it doesn't
