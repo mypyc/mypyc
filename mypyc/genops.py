@@ -1807,7 +1807,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     and len(expr.args) == 1
                     and expr.arg_kinds == [ARG_POS]
                     and is_list_rprimitive(self.node_type(expr.args[0]))):
-                # Special case "for x in <list>".
+                # Special case "for x in reversed(<list>)".
                 expr_reg = self.accept(expr.args[0])
                 target_list_type = self.types[expr.args[0]]
                 assert isinstance(target_list_type, Instance)
