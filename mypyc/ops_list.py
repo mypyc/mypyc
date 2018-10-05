@@ -59,6 +59,7 @@ list_get_item_unsafe_op = custom_op(
     arg_types=[list_rprimitive, short_int_rprimitive],
     result_type=object_rprimitive,
     error_kind=ERR_NEVER,
+    format_str='{dest} = {args[0]}[{args[1]}] :: unsafe list',
     emit=simple_emit('{dest} = CPyList_GetItemUnsafe({args[0]}, {args[1]});'))
 
 
