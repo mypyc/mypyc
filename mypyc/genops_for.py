@@ -169,6 +169,9 @@ class ForList(ForGenerator):
             builder.read(self.expr_target, line), '__getitem__',
             [builder.read(self.index_target, line)], None, line)
         assert value_box
+        # We coerce to the type of list elements here so that
+        # iterating with tuple unpacking generates a tuple based
+        # unpack instead of an iterator based one.
         builder.assign(builder.get_assignment_target(self.index),
                        builder.unbox_or_cast(value_box, self.target_type, line), line)
 
