@@ -2453,7 +2453,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
                 return self.add(MethodCall(base, name, arg_values, line))
         elif isinstance(base.type, RUnion):
-            return_rtype = return_rtype or object_rprimitive
             return self.union_method_call(base, base.type, name, arg_values, return_rtype, line,
                                           arg_kinds, arg_names)
 
@@ -2470,10 +2469,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                           obj_type: RUnion,
                           name: str,
                           arg_values: List[Value],
-                          return_rtype: RType,
+                          return_rtype: Optional[RType],
                           line: int,
                           arg_kinds: Optional[List[int]],
                           arg_names: Optional[List[Optional[str]]]) -> Value:
+        # Union method call needs a return_rtype for the type of the output register.
+        # If we don't have one, use object_rprimitive.
+        return_rtype = return_rtype or object_rprimitive
+
         def call_union_item(value: Value) -> Value:
             return self.gen_method_call(value, name, arg_values, return_rtype, line,
                                         arg_kinds, arg_names)
