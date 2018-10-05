@@ -1,3 +1,7 @@
+// Collects code that was copied in from cpython, for a couple of different reasons:
+//  * We wanted to modify it to produce a more efficient version for our uses
+//  * We needed to call it and it was static :(
+
 #ifndef CPY_PYTHONSUPPORT_H
 #define CPY_PYTHONSUPPORT_H
 
@@ -136,14 +140,19 @@ init_subclass(PyTypeObject *type, PyObject *kwds)
 #endif
 
 // Adapted from longobject.c in Python 3.7.0
+#define CPY_TAGGED_MAX ((1LL << 62) - 1)
+#define CPY_TAGGED_MIN (-(1LL << 62))
+#define CPY_TAGGED_ABS_MIN (0-(unsigned long long)CPY_TAGGED_MIN)
+
 /* This function adapted from PyLong_AsLongLongAndOverflow, but with
  * some safety checks removed and specialized to only work for objects
  * that are already longs.
  * About half of the win this provides, though, just comes from being
  * able to inline the function, which in addition to saving function call
  * overhead allows the out-parameter overflow flag to be collapsed into
- * control flow. */
-#define PY_ABS_LLONG_MIN (0-(unsigned long long)PY_LLONG_MIN)
+ * control flow.
+ * Additionally, we check against the possible range of CPyTagged, not of
+ * long long. */
 static inline long long
 CPyLong_AsLongLongAndOverflow(PyObject *vv, int *overflow)
 {
@@ -187,11 +196,11 @@ CPyLong_AsLongLongAndOverflow(PyObject *vv, int *overflow)
         /* Haven't lost any bits, but casting to long requires extra
          * care (see comment above).
          */
-        if (x <= (unsigned long long)PY_LLONG_MAX) {
+        if (x <= (unsigned long long)CPY_TAGGED_MAX) {
             res = (long long)x * sign;
         }
-        else if (sign < 0 && x == PY_ABS_LLONG_MIN) {
-            res = PY_LLONG_MIN;
+        else if (sign < 0 && x == CPY_TAGGED_ABS_MIN) {
+            res = CPY_TAGGED_MIN;
         }
         else {
             *overflow = sign;

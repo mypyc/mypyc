@@ -293,10 +293,9 @@ static CPyTagged CPyTagged_FromLongLong(long long value) {
 
 static CPyTagged CPyTagged_FromObject(PyObject *object) {
     int overflow;
+    // The overflow check knows about CPyTagged's width
     PY_LONG_LONG value = CPyLong_AsLongLongAndOverflow(object, &overflow);
-    // We use a Python object if the value shifted left by 1 is too
-    // large for long long.
-    if (overflow != 0 || CPyTagged_LongLongTooBig(value)) {
+    if (overflow != 0) {
         Py_INCREF(object);
         return ((CPyTagged)object) | CPY_INT_TAG;
     } else {
@@ -306,10 +305,9 @@ static CPyTagged CPyTagged_FromObject(PyObject *object) {
 
 static CPyTagged CPyTagged_StealFromObject(PyObject *object) {
     int overflow;
+    // The overflow check knows about CPyTagged's width
     PY_LONG_LONG value = CPyLong_AsLongLongAndOverflow(object, &overflow);
-    // We use a Python object if the value shifted left by 1 is too
-    // large for long long.
-    if (overflow != 0 || CPyTagged_LongLongTooBig(value)) {
+    if (overflow != 0) {
         return ((CPyTagged)object) | CPY_INT_TAG;
     } else {
         Py_DECREF(object);
@@ -319,12 +317,9 @@ static CPyTagged CPyTagged_StealFromObject(PyObject *object) {
 
 static CPyTagged CPyTagged_BorrowFromObject(PyObject *object) {
     int overflow;
+    // The overflow check knows about CPyTagged's width
     PY_LONG_LONG value = CPyLong_AsLongLongAndOverflow(object, &overflow);
-    // We use a Python object if the value shifted left by 1 is too
-    // large for long long.  The latter check is micro-optimized where
-    // the common case where long long is small enough.
-    if (overflow != 0 || (((unsigned long long)value >= (1LL << 62)) &&
-                          (value >= 0 || value < -(1LL << 62)))) {
+    if (overflow != 0) {
         return ((CPyTagged)object) | CPY_INT_TAG;
     } else {
         return value << 1;
