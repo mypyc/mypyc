@@ -715,6 +715,9 @@ def discard1(s: Set[int]) -> None:
 def pop(s : Set[int]) -> int:
     return s.pop()
 
+def update(s: Set[int], x: List[int]) -> None:
+    s.update(x)
+
 [file driver.py]
 from native import instantiateLiteral
 val = instantiateLiteral()
@@ -784,6 +787,11 @@ try:
     w = pop(s)
 except KeyError as e:
     print(e)
+
+from native import update
+s = {1, 2, 3}
+update(s, [5, 4, 3])
+assert s == {1, 2, 3, 4, 5}
 
 [out]
 1

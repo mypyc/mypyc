@@ -115,6 +115,7 @@ class set(Generic[T]):
     def discard(self, x: T) -> None: pass
     def clear(self) -> None: pass
     def pop(self) -> T: pass
+    def update(self, x: Iterable[S]) -> None: pass
     def __or__(self, s: Set[S]) -> Set[Union[T, S]]: ...
 
 class slice: pass
