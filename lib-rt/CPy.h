@@ -6,6 +6,7 @@
 #include <frameobject.h>
 #include <assert.h>
 #include "pythonsupport.h"
+#include "mypyc_util.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -13,10 +14,6 @@ extern "C" {
 #if 0
 } // why isn't emacs smart enough to not indent this
 #endif
-
-#define likely(x)       __builtin_expect((x),1)
-#define unlikely(x)     __builtin_expect((x),0)
-#define CPy_Unreachable() __builtin_unreachable()
 
 // Naming conventions:
 //
@@ -39,14 +36,6 @@ static void CPyDebug_Print(const char *msg) {
     printf("%s\n", msg);
     fflush(stdout);
 }
-
-// INCREF and DECREF that assert the pointer is not NULL.
-// asserts are disabled in release builds so there shouldn't be a perf hit.
-// I'm honestly kind of surprised that this isn't done by default.
-#define CPy_INCREF(p) do { assert(p); Py_INCREF(p); } while (0)
-#define CPy_DECREF(p) do { assert(p); Py_DECREF(p); } while (0)
-// Here just for consistency
-#define CPy_XDECREF(p) Py_XDECREF(p)
 
 // Search backwards through the trait part of a vtable (which sits *before*
 // the start of the vtable proper) looking for the subvtable describing a trait

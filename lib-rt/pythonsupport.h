@@ -9,6 +9,7 @@
 #include <Python.h>
 #include <frameobject.h>
 #include <assert.h>
+#include "mypyc_util.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -140,9 +141,6 @@ init_subclass(PyTypeObject *type, PyObject *kwds)
 #endif
 
 // Adapted from longobject.c in Python 3.7.0
-#define CPY_TAGGED_MAX ((1LL << 62) - 1)
-#define CPY_TAGGED_MIN (-(1LL << 62))
-#define CPY_TAGGED_ABS_MIN (0-(unsigned long long)CPY_TAGGED_MIN)
 
 /* This function adapted from PyLong_AsLongLongAndOverflow, but with
  * some safety checks removed and specialized to only work for objects
@@ -168,17 +166,13 @@ CPyLong_AsLongLongAndOverflow(PyObject *vv, int *overflow)
     res = -1;
     i = Py_SIZE(v);
 
-    switch (i) {
-    case -1:
-        res = -(sdigit)v->ob_digit[0];
-        break;
-    case 0:
-        res = 0;
-        break;
-    case 1:
+    if (likely(i == 1)) {
         res = v->ob_digit[0];
-        break;
-    default:
+    } else if (likely(i == 0)) {
+        res = 0;
+    } else if (i == -1) {
+        res = -(sdigit)v->ob_digit[0];
+    } else {
         sign = 1;
         x = 0;
         if (i < 0) {
