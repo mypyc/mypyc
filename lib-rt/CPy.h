@@ -754,6 +754,20 @@ static PyObject *CPyDict_GetItem(PyObject *dict, PyObject *key) {
     }
 }
 
+static PyObject *CPyDict_Get(PyObject *dict, PyObject *key, PyObject *fallback) {
+    // We are dodgily assuming that get on a subclass doesn't have
+    // different behavior.
+    PyObject *res = PyDict_GetItemWithError(dict, key);
+    if (!res) {
+        if (PyErr_Occurred()) {
+            return NULL;
+        }
+        res = fallback;
+    }
+    Py_INCREF(res);
+    return res;
+}
+
 static int CPyDict_SetItem(PyObject *dict, PyObject *key, PyObject *value) {
     if (PyDict_CheckExact(dict)) {
         return PyDict_SetItem(dict, key, value);
