@@ -3204,7 +3204,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.module_path, o.line))
 
         list_ops = self.generate_list_comprehension(o)
-        return self.primitive_op(iter_op, [list_ops], o.line)
+        return list_ops
+        # return self.primitive_op(iter_op, [list_ops], o.line)
 
     def comprehension_helper(self,
                              loop_params: List[Tuple[Lvalue, Expression, List[Expression]]],
