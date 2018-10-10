@@ -80,6 +80,21 @@ new_dict_op = func_op(
     format_str='{dest} = {{}}',
     emit=call_emit('PyDict_New'))
 
+func_op(
+    name='builtins.dict',
+    arg_types=[dict_rprimitive],
+    result_type=dict_rprimitive,
+    error_kind=ERR_MAGIC,
+    emit=call_emit('PyDict_Copy'),
+    priority=2)
+
+func_op(
+    name='builtins.dict',
+    arg_types=[object_rprimitive],
+    result_type=dict_rprimitive,
+    error_kind=ERR_MAGIC,
+    emit=call_emit('CPyDict_FromSeq'))
+
 
 def emit_len(emitter: EmitterInterface, args: List[str], dest: str) -> None:
     temp = emitter.temp_name()
