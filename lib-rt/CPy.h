@@ -817,6 +817,24 @@ static int CPyDict_UpdateFromSeq(PyObject *dict, PyObject *stuff) {
     }
 }
 
+PyObject *CPyDict_FromSeq(PyObject *obj) {
+    // Argh this sucks
+    if (PyDict_Check(obj)) {
+        return PyDict_Copy(obj);
+    } else {
+        PyObject *dict = PyDict_New();
+        if (!dict) {
+            return NULL;
+        }
+        int res = PyDict_MergeFromSeq2(dict, obj, 1);
+        if (res < 0) {
+            Py_DECREF(dict);
+            return NULL;
+        }
+        return dict;
+    }
+}
+
 // mypy lets ints silently coerce to floats, so a mypyc runtime float
 // might be an int also
 static inline bool CPyFloat_Check(PyObject *o) {
