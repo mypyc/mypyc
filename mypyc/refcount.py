@@ -225,6 +225,12 @@ def after_branch_increfs(label: BasicBlock,
     return ()
 
 
+def matches(existing: DecIncs, needed: DecIncs) -> bool:
+    d1, i1 = set(existing[0]), set(existing[1])
+    d2, i2 = set(needed[0]), set(needed[1])
+    return d1.issubset(d2) and i1.issubset(i2)
+
+
 def add_block(decincs: DecIncs, cache: BlockCache,
               blocks: List[BasicBlock], label: BasicBlock) -> BasicBlock:
     decs, incs = decincs
@@ -234,11 +240,18 @@ def add_block(decincs: DecIncs, cache: BlockCache,
     # TODO: be able to share *partial* results
     if (label, decincs) in cache:
         return cache[label, decincs]
+    candidates = [(v, k) for (target, k), v in cache.items()
+                  if matches(k, decincs) if target == label]
+    real_target = label
+    if candidates:
+        real_target, (odecs, oincs) = max(candidates, key=lambda v: len(v[1][0]) + len(v[1][1]))
+        decs = tuple(x for x in decs if x not in odecs)
+        incs = tuple(x for x in incs if x not in oincs)
 
     block = BasicBlock()
     blocks.append(block)
     block.ops.extend(DecRef(reg, is_xdec=xdec) for reg, xdec in decs)
     block.ops.extend(IncRef(reg) for reg in incs)
-    block.ops.append(Goto(label))
+    block.ops.append(Goto(real_target))
     cache[label, decincs] = block
     return block
