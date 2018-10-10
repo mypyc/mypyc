@@ -3161,17 +3161,19 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def visit_cast_expr(self, o: CastExpr) -> Value:
         assert False, "CastExpr handled in CallExpr"
 
-    def visit_list_comprehension(self, o: ListComprehension) -> Value:
-        gen = o.generator
-        list_ops = self.primitive_op(new_list_op, [], o.line)
+    def generate_list_comprehension(self, gen: GeneratorExpr) -> Value:
+        list_ops = self.primitive_op(new_list_op, [], gen.line)
         loop_params = list(zip(gen.indices, gen.sequences, gen.condlists))
 
         def gen_inner_stmts() -> None:
             e = self.accept(gen.left_expr)
-            self.primitive_op(list_append_op, [list_ops, e], o.line)
+            self.primitive_op(list_append_op, [list_ops, e], gen.line)
 
-        self.comprehension_helper(loop_params, gen_inner_stmts, o.line)
+        self.comprehension_helper(loop_params, gen_inner_stmts, gen.line)
         return list_ops
+
+    def visit_list_comprehension(self, o: ListComprehension) -> Value:
+        return self.generate_list_comprehension(o.generator)
 
     def visit_set_comprehension(self, o: SetComprehension) -> Value:
         gen = o.generator
@@ -3201,15 +3203,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         print('{}:{}: Warning: treating generator comprehension as list'.format(
             self.module_path, o.line))
 
-        gen = o
-        list_ops = self.primitive_op(new_list_op, [], o.line)
-        loop_params = list(zip(gen.indices, gen.sequences, gen.condlists))
-
-        def gen_inner_stmts() -> None:
-            e = self.accept(gen.left_expr)
-            self.primitive_op(list_append_op, [list_ops, e], o.line)
-
-        self.comprehension_helper(loop_params, gen_inner_stmts, o.line)
+        list_ops = self.generate_list_comprehension(o)
         return self.primitive_op(iter_op, [list_ops], o.line)
 
     def comprehension_helper(self,
