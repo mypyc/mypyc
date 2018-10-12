@@ -636,6 +636,15 @@ f(5)
 [out]
 5
 
+[case testImportMissing]
+# pytest doesn't have stubs but it is obviously installed...
+import pytest  # type: ignore
+import pytest as lol  # type: ignore
+assert pytest.__name__ == 'pytest'
+assert lol.__name__ == 'pytest'
+[file driver.py]
+import native
+
 [case testOptional]
 from typing import Optional
 
