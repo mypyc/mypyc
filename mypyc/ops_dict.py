@@ -56,7 +56,7 @@ method_op(
     arg_types=[dict_rprimitive, object_rprimitive],
     result_type=bool_rprimitive,
     error_kind=ERR_FALSE,
-    emit=simple_emit('{dest} = CPyDict_UpdateFromSeq({args[0]}, {args[1]}) != -1;'))
+    emit=simple_emit('{dest} = CPyDict_UpdateFromAny({args[0]}, {args[1]}) != -1;'))
 
 method_op(
     name='get',
@@ -93,7 +93,7 @@ func_op(
     arg_types=[object_rprimitive],
     result_type=dict_rprimitive,
     error_kind=ERR_MAGIC,
-    emit=call_emit('CPyDict_FromSeq'))
+    emit=call_emit('CPyDict_FromAny'))
 
 
 def emit_len(emitter: EmitterInterface, args: List[str], dest: str) -> None:

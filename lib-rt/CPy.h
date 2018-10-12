@@ -798,7 +798,7 @@ static int CPyDict_Update(PyObject *dict, PyObject *stuff) {
     }
 }
 
-static int CPyDict_UpdateFromSeq(PyObject *dict, PyObject *stuff) {
+static int CPyDict_UpdateFromAny(PyObject *dict, PyObject *stuff) {
     if (PyDict_CheckExact(dict)) {
         // Argh this sucks
         _Py_IDENTIFIER(keys);
@@ -812,7 +812,7 @@ static int CPyDict_UpdateFromSeq(PyObject *dict, PyObject *stuff) {
     }
 }
 
-PyObject *CPyDict_FromSeq(PyObject *obj) {
+static PyObject *CPyDict_FromAny(PyObject *obj) {
     if (PyDict_Check(obj)) {
         return PyDict_Copy(obj);
     } else {
