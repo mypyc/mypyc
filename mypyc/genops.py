@@ -3303,13 +3303,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             func_reg = decorated_func
         else:
             # Obtain the the function name in order to construct the name of the helper function.
-            # The module name is later used to load the callable object representing the function.
-            module, _, name = dec.func.fullname().rpartition('.')
+            name = dec.func.fullname().split('.')[-1]
             helper_name = decorator_helper_name(name)
-            fullname = '{}.{}'.format(module, helper_name)
 
             # Load the callable object representing the non-decorated function, and decorate it.
-            orig_func = self.load_module_attr_by_fullname(fullname, dec.func.line)
+            orig_func = self.load_global_str(helper_name, dec.line)
             decorated_func = self.load_decorated_func(dec.func, orig_func)
 
             # Set the callable object representing the decorated function as a global.
@@ -4104,9 +4102,12 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 and not self.is_synthetic_type(expr.node)):
             assert expr.fullname is not None
             return self.load_native_type_object(expr.fullname)
+        return self.load_global_str(expr.name, expr.line)
+
+    def load_global_str(self, name: str, line: int) -> Value:
         _globals = self.load_globals_dict()
-        reg = self.load_static_unicode(expr.name)
-        return self.add(PrimitiveOp([_globals, reg], dict_get_item_op, expr.line))
+        reg = self.load_static_unicode(name)
+        return self.primitive_op(dict_get_item_op, [_globals, reg], line)
 
     def load_globals_dict(self) -> Value:
         return self.add(LoadStatic(dict_rprimitive, 'globals', self.module_name))
