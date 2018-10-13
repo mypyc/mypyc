@@ -265,7 +265,7 @@ class ModuleGenerator:
         # be populated when it is imported by a compiled module. We want that
         # reference to only be populated when the module has been succesfully
         # imported, whereas this we want to have stop a circular import.
-        module_static = 'module'
+        module_static = 'this_module'
         emitter.emit_lines('static PyObject *{};'.format(module_static))
 
         emitter.emit_lines('if ({}) {{'.format(module_static),
