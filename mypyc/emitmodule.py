@@ -260,8 +260,15 @@ class ModuleGenerator:
             declaration = 'PyObject *CPyInit_{}(void)'.format(exported_name(module_name))
         emitter.emit_lines(declaration,
                            '{')
-        module_static = self.module_static_name(module_name, emitter)
-        emitter.emit_lines('if ({} != Py_None) {{'.format(module_static),
+        # Store the module reference in a static and return it when necessary.
+        # This is separate from the *global* reference to the module that will
+        # be populated when it is imported by a compiled module. We want that
+        # reference to only be populated when the module has been succesfully
+        # imported, whereas this we want to have stop a circular import.
+        module_static = 'module'
+        emitter.emit_lines('static PyObject *{};'.format(module_static))
+
+        emitter.emit_lines('if ({}) {{'.format(module_static),
                            'Py_INCREF({});'.format(module_static),
                            'return {};'.format(module_static),
                            '}')
