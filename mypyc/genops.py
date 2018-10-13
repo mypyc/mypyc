@@ -958,13 +958,17 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def _gen_import(self, id: str, line: int) -> None:
         self.imports.append(id)
 
-        needs_import, out = BasicBlock(), BasicBlock()
+        # Always do the import (to match python semantics, and to
+        # ensure that the module is in sys.modules), but only init the
+        # static if it was uninitialized.
+        value = self.primitive_op(import_op, [self.load_static_unicode(id)], line)
+
+        needs_init, out = BasicBlock(), BasicBlock()
         first_load = self.add(LoadStatic(object_rprimitive, 'module', id))
         comparison = self.binary_op(first_load, self.none_object(), 'is not', line)
-        self.add_bool_branch(comparison, out, needs_import)
+        self.add_bool_branch(comparison, out, needs_init)
 
-        self.activate_block(needs_import)
-        value = self.primitive_op(import_op, [self.load_static_unicode(id)], line)
+        self.activate_block(needs_init)
         self.add(InitStatic(value, 'module', id))
         self.goto_and_activate(out)
 
