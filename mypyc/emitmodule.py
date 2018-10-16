@@ -265,8 +265,7 @@ class ModuleGenerator:
         # be populated when it is imported by a compiled module. We want that
         # reference to only be populated when the module has been succesfully
         # imported, whereas this we want to have stop a circular import.
-        module_static = 'this_module'
-        emitter.emit_lines('static PyObject *{};'.format(module_static))
+        module_static = self.module_internal_static_name(module_name, emitter)
 
         emitter.emit_lines('if ({}) {{'.format(module_static),
                            'Py_INCREF({});'.format(module_static),
@@ -361,11 +360,17 @@ class ModuleGenerator:
         static_name = emitter.static_name('globals', module_name)
         self.declare_global('PyObject *', static_name)
 
-    def module_static_name(self, module_name: str, emitter: Emitter) -> str:
-        return emitter.static_name('module', module_name)
+    def module_internal_static_name(self, module_name: str, emitter: Emitter) -> str:
+        return emitter.static_name('module_internal', module_name)
 
     def declare_module(self, module_name: str, emitter: Emitter) -> None:
-        static_name = self.module_static_name(module_name, emitter)
+        # We declare two globals for each module:
+        # one used internally in the implementation of module init to cache results
+        # and prevent infinite recursion in import cycles, and one used
+        # by other modules to refer to it.
+        internal_static_name = self.module_internal_static_name(module_name, emitter)
+        self.declare_global('CPyModule *', internal_static_name, initializer='NULL')
+        static_name = emitter.static_name('module', module_name)
         self.declare_global('CPyModule *', static_name, initializer='Py_None')
 
     def declare_imports(self, imps: Iterable[str], emitter: Emitter) -> None:
