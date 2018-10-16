@@ -264,7 +264,7 @@ class ModuleGenerator:
         # This is separate from the *global* reference to the module that will
         # be populated when it is imported by a compiled module. We want that
         # reference to only be populated when the module has been succesfully
-        # imported, whereas this we want to have stop a circular import.
+        # imported, whereas this we want to have to stop a circular import.
         module_static = self.module_internal_static_name(module_name, emitter)
 
         emitter.emit_lines('if ({}) {{'.format(module_static),
