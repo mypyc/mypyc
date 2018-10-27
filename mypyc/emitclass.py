@@ -461,7 +461,7 @@ def generate_dealloc_for_class(cl: ClassIR,
     emitter.emit_line('static void')
     emitter.emit_line('{}({} *self)'.format(dealloc_func_name, cl.struct_name(emitter.names)))
     emitter.emit_line('{')
-    emitter.emit_line('PyObject_GC_UnTrack(self);')
+    emitter.emit_line('_PyObject_GC_UNTRACK(self);')
     emitter.emit_line('{}(self);'.format(clear_func_name))
     emitter.emit_line('Py_TYPE(self)->tp_free((PyObject *)self);')
     emitter.emit_line('}')
