@@ -76,9 +76,11 @@ class TestRun(MypycDataSuite):
             options.use_builtins_fixtures = True
             options.show_traceback = True
             options.strict_optional = True
-            # N.B: We explicitly check with the current version of python, since we are
-            # going to link and run against the current version of python.
-            options.python_version = sys.version_info[:2]
+            # N.B: We try to (and ought to!) run with the current
+            # version of python, since we are going to link and run
+            # against the current version of python.
+            # But a lot of the tests use type annotations so we can't say it is 3.5.
+            options.python_version = max(sys.version_info[:2], (3, 6))
             options.export_types = True
 
             # Avoid checking modules/packages named 'unchecked', to provide a way
