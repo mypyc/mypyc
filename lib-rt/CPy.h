@@ -64,6 +64,9 @@ static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
     PyObject *bases = NULL;
     PyObject *slots;
 
+    // If the type of the class (the metaclass) is NULL, we default it
+    // to being type.  (This allows us to avoid needing to initialize
+    // it explicitly on windows.)
     if (!Py_TYPE(template_)) {
         Py_TYPE(template_) = &PyType_Type;
     }

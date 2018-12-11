@@ -138,9 +138,18 @@ PyInit_{modname}(void)
 }}
 """
 
-# As far as I could tell, Windows lacks the rpath style features
-# we would need in order to do everything at load time, which means
-# that instead we get to do it dynamically.
+# As far as I could tell, Windows lacks the rpath style features we
+# would need in automatically load the shared library (located
+# relative to the module library) when a module library is loaded,
+# which means that instead we get to do it dynamically.
+#
+# We do this by, at module initialization time, finding the location
+# of the module dll and using it to compute the location of the shared
+# library. We then load the shared library with LoadLibrary, find the
+# appropriate CPyInit_ routine using GetProcAddress, and call it.
+#
+# The relative path of the shared library (from the shim library) is provided
+# as the preprocessor define MYPYC_LIBRARY.
 shim_template_windows = r"""\
 #include <Python.h>
 #include <windows.h>
@@ -160,13 +169,16 @@ PyInit_{modname}(void)
     HINSTANCE hinstLib;
     INITPROC proc;
 
+    // get the file name of this dll
     DWORD res = GetModuleFileName((HINSTANCE)&__ImageBase, path, sizeof(path));
     if (res == 0 || res == sizeof(path)) {{
         PyErr_SetString(PyExc_RuntimeError, "GetModuleFileName failed");
         return NULL;
     }}
 
+    // find the directory this dll is in
     _splitpath(path, drive, directory, NULL, NULL);
+    // and use it to construct a path to the shared library
     snprintf(path, sizeof(path), "%s%s%s", drive, directory, MYPYC_LIBRARY);
 
     hinstLib = LoadLibrary(path);
