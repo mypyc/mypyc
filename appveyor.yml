@@ -16,6 +16,7 @@ install:
 build: off
 
 test_script:
+    - "SET PYTHONPATH=%CD%\\external\\mypy"
     - "%PYTHON%\\python.exe -m pytest mypyc"
 
 skip_commits:
