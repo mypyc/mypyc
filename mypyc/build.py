@@ -378,15 +378,15 @@ def mypycify(paths: List[str],
             '-Wno-unreachable-code', '-Wno-unused-variable', '-Wno-trigraphs',
             '-Wno-unused-command-line-argument'
         ]
+        if 'gcc' in compiler.compiler[0]:
+            # This flag is needed for gcc but does not exist on clang.
+            cflags += ['-Wno-unused-but-set-variable']
     elif compiler.compiler_type == 'msvc':
         if opt_level == '3':
             opt_level = '2'
         cflags += [
             '/O{}'.format(opt_level)
         ]
-    if 'gcc' in compiler.compiler[0]:
-        # This flag is needed for gcc but does not exist on clang.
-        cflags += ['-Wno-unused-but-set-variable']
 
     if use_shared_lib:
         assert lib_name
