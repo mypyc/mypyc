@@ -108,7 +108,7 @@ class ModuleGenerator:
         self.names = self.context.names
         # Initializations of globals to simple values that we can't
         # do statically because the windows loader is bad.
-        self.simple_inits = {}  # type: Dict[str, str]
+        self.simple_inits = []  # type: List[Tuple[str, str]]
         self.shared_lib_name = shared_lib_name
         self.use_shared_lib = shared_lib_name is not None
 
@@ -198,7 +198,7 @@ class ModuleGenerator:
         )
 
         emitter.emit_line('CPy_Init();')
-        for symbol, fixup in self.simple_inits.items():
+        for symbol, fixup in self.simple_inits:
             emitter.emit_line('{} = {};'.format(symbol, fixup))
 
         for (_, literal), identifier in self.literals.items():
@@ -393,7 +393,7 @@ class ModuleGenerator:
         self.declare_global('CPyModule *', internal_static_name, initializer='NULL')
         static_name = emitter.static_name('module', module_name)
         self.declare_global('CPyModule *', static_name)
-        self.simple_inits[static_name] = 'Py_None'
+        self.simple_inits.append((static_name, 'Py_None'))
 
     def declare_imports(self, imps: Iterable[str], emitter: Emitter) -> None:
         for imp in imps:
