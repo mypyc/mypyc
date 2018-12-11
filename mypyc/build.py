@@ -386,9 +386,9 @@ def mypycify(paths: List[str],
             opt_level = '2'
         cflags += [
             '/O{}'.format(opt_level),
-            '/wd4102', # unreferenced label
-            '/wd4101', # unreferenced local variable
-            '/wd4146', # negating unsigned int
+            '/wd4102',  # unreferenced label
+            '/wd4101',  # unreferenced local variable
+            '/wd4146',  # negating unsigned int
         ]
 
     if use_shared_lib:
