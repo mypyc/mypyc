@@ -147,7 +147,8 @@ class TestRun(MypycDataSuite):
             run_setup(setup_file, ['build_ext', '--inplace'])
             # Oh argh run_setup doesn't propagate failure. For now we'll just assert
             # that the file is there.
-            if not glob.glob('native.*.so') and not glob.glob('native.*.pyd'):
+            suffix = 'pyd' if sys.platform == 'win32' else 'so'
+            if not glob.glob('native.*.{}'.format(suffix)):
                 show_c(ctext)
                 assert False, "Compilation failed"
 

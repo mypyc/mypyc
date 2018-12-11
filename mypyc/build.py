@@ -57,7 +57,7 @@ else:
     from distutils.core import setup, Extension
     from distutils.command.build_ext import build_ext  # type: ignore
 
-from distutils import sysconfig
+from distutils import sysconfig, ccompiler
 
 
 def setup_mypycify_vars() -> None:
@@ -333,15 +333,13 @@ def mypycify(paths: List[str],
       * opt_level: The optimization level, as a string. Defaults to '3' (meaning '-O3').
     """
 
-    # XXX: what is the right way to figure this out??
-    if sys.platform == 'win32':
-        compiler = 'msvc'
-    elif sys.platform == 'darwin':
-        compiler = 'clang'
-    else:
-        compiler = 'clang' if 'clang' in os.getenv('CC', '') else 'gcc'
-
     setup_mypycify_vars()
+
+    # Create a compiler object so we can make decisions based on what
+    # compiler is being used. typeshed is missing some attribues on the
+    # compiler object so we give it type Any
+    compiler = ccompiler.new_compiler()  # type: Any
+    sysconfig.customize_compiler(compiler)
 
     expanded_paths = []
     for path in paths:
@@ -374,19 +372,19 @@ def mypycify(paths: List[str],
             f.write(ctext)
 
     cflags = []  # type: List[str]
-    if compiler in ('clang', 'gcc'):
+    if compiler.compiler_type == 'unix':
         cflags += [
             '-O{}'.format(opt_level), '-Werror', '-Wno-unused-function', '-Wno-unused-label',
             '-Wno-unreachable-code', '-Wno-unused-variable', '-Wno-trigraphs',
             '-Wno-unused-command-line-argument'
         ]
-    elif compiler == 'msvc':
+    elif compiler.compiler_type == 'msvc':
         if opt_level == '3':
             opt_level = '2'
         cflags += [
             '/O{}'.format(opt_level)
         ]
-    if compiler == 'gcc':
+    if 'gcc' in compiler.compiler[0]:
         # This flag is needed for gcc but does not exist on clang.
         cflags += ['-Wno-unused-but-set-variable']
 

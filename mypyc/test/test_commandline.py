@@ -55,8 +55,8 @@ class TestCommandLine(MypycDataSuite):
                 [python3_path, program],
                 cwd='tmp')
         finally:
-            so_paths = glob.glob('tmp/**/*.so', recursive=True)
-            so_paths += glob.glob('tmp/**/*.pyd', recursive=True)
+            suffix = 'pyd' if sys.platform == 'win32' else 'so'
+            so_paths = glob.glob('tmp/**/*.{}'.format(suffix), recursive=True)
             for path in so_paths:
                 os.remove(path)
 
