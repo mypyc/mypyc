@@ -5,9 +5,23 @@
 #include <frameobject.h>
 #include <assert.h>
 
+#if defined(__clang__) || defined(__GNUC__)
 #define likely(x)       __builtin_expect((x),1)
 #define unlikely(x)     __builtin_expect((x),0)
 #define CPy_Unreachable() __builtin_unreachable()
+#define CPy_dllexport __attribute__ ((dllexport))
+#else
+#define likely(x)       (x)
+#define unlikely(x)     (x)
+#define CPy_Unreachable() abort()
+
+#if defined(_MSC_VER)
+#define CPy_dllexport __declspec(dllexport)
+#else
+#define CPy_dllexport
+#endif
+
+#endif
 
 #define CPY_TAGGED_MAX ((1LL << 62) - 1)
 #define CPY_TAGGED_MIN (-(1LL << 62))

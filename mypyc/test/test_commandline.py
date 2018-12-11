@@ -46,7 +46,9 @@ class TestCommandLine(MypycDataSuite):
 
         try:
             # Compile program
-            subprocess.check_call(['%s/scripts/mypyc' % base_path] + args, cwd='tmp')
+            subprocess.check_call([sys.executable,
+                                   os.path.join(base_path, 'scripts', 'mypyc')] + args,
+                                  cwd='tmp')
 
             # Run main program
             out = subprocess.check_output(
@@ -54,6 +56,7 @@ class TestCommandLine(MypycDataSuite):
                 cwd='tmp')
         finally:
             so_paths = glob.glob('tmp/**/*.so', recursive=True)
+            so_paths += glob.glob('tmp/**/*.pyd', recursive=True)
             for path in so_paths:
                 os.remove(path)
 
