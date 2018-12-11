@@ -92,9 +92,9 @@ class TestRun(MypycDataSuite):
             os.mkdir(workdir)
 
             source_path = 'native.py'
-            with open(source_path, 'w') as f:
+            with open(source_path, 'w', encoding='utf-8') as f:
                 f.write(text)
-            with open('interpreted.py', 'w') as f:
+            with open('interpreted.py', 'w', encoding='utf-8') as f:
                 f.write(text)
 
             source = build.BuildSource(source_path, 'native', text)
