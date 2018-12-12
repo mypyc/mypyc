@@ -26,6 +26,7 @@ import os.path
 import subprocess
 import hashlib
 import time
+import shutil
 
 from typing import List, Tuple, Any, Optional, Union, Dict, cast
 MYPY = False
@@ -372,7 +373,8 @@ def mypycify(paths: List[str],
             cfile = os.path.join(build_dir, cfile)
             with open(cfile, 'w', encoding='utf-8') as f:
                 f.write(ctext)
-            cfilenames.append(cfile)
+            if os.path.splitext(cfile)[1] == '.c':
+                cfilenames.append(cfile)
     else:
         cfilenames = glob.glob(os.path.join(build_dir, '*.c'))
 
@@ -395,6 +397,11 @@ def mypycify(paths: List[str],
             '/wd4101',  # unreferenced local variable
             '/wd4146',  # negating unsigned int
         ]
+
+    # Copy the runtime library in
+    rt_file = os.path.join(build_dir, 'CPy.c')
+    shutil.copyfile(os.path.join(include_dir(), 'CPy.c'), rt_file)
+    cfilenames.append(rt_file)
 
     if use_shared_lib:
         assert lib_name
