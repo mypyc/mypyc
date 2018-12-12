@@ -43,7 +43,7 @@ def parse_and_typecheck(sources: List[BuildSource], options: Options,
 
 def compile_modules_to_c(result: BuildResult, module_names: List[str],
                          shared_lib_name: Optional[str],
-                         ops: Optional[List[str]] = None) -> str:
+                         ops: Optional[List[str]] = None) -> List[Tuple[str, str]]:
     """Compile Python module(s) to C that can be used from Python C extension modules."""
 
     # Generate basic IR, with missing exception and refcount handling.
@@ -112,7 +112,7 @@ class ModuleGenerator:
         self.shared_lib_name = shared_lib_name
         self.use_shared_lib = shared_lib_name is not None
 
-    def generate_c_for_modules(self) -> str:
+    def generate_c_for_modules(self) -> List[Tuple[str, str]]:
         emitter = Emitter(self.context)
 
         module_irs = [module_ir for _, module_ir in self.modules]
@@ -186,7 +186,7 @@ class ModuleGenerator:
         for static_def in self.context.statics.values():
             declarations.emit_line(static_def)
 
-        return ''.join(declarations.fragments + emitter.fragments)
+        return [('__native.c', ''.join(declarations.fragments + emitter.fragments))]
 
     def generate_globals_init(self, emitter: Emitter) -> None:
         emitter.emit_lines(

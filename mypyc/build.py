@@ -227,7 +227,7 @@ def include_dir() -> str:
 
 
 def generate_c(sources: List[BuildSource], options: Options,
-               shared_lib_name: Optional[str]) -> Tuple[str, str]:
+               shared_lib_name: Optional[str]) -> Tuple[List[Tuple[str, str]], str]:
     """Drive the actual core compilation step.
 
     Returns the C source code and (for debugging) the pretty printed IR.
@@ -257,7 +257,7 @@ def generate_c(sources: List[BuildSource], options: Options,
 
 def build_using_shared_lib(sources: List[BuildSource],
                            lib_name: str,
-                           cfile: str,
+                           cfiles: List[str],
                            build_dir: str,
                            extra_compile_args: List[str],
                            ) -> List[MypycifyExtension]:
@@ -275,7 +275,7 @@ def build_using_shared_lib(sources: List[BuildSource],
     shared_lib = MypycifyExtension(
         'lib' + lib_name,
         is_mypyc_shared=True,
-        sources=[cfile],
+        sources=cfiles,
         include_dirs=[include_dir()],
         extra_compile_args=extra_compile_args,
     )
@@ -302,7 +302,7 @@ def build_using_shared_lib(sources: List[BuildSource],
 
 
 def build_single_module(sources: List[BuildSource],
-                        cfile: str,
+                        cfiles: List[str],
                         extra_compile_args: List[str],
                         ) -> List[MypycifyExtension]:
     """Produce the list of extension modules for a standalone extension.
@@ -311,7 +311,7 @@ def build_single_module(sources: List[BuildSource],
     """
     return [MypycifyExtension(
         sources[0].module,
-        sources=[cfile],
+        sources=cfiles,
         include_dirs=[include_dir()],
         extra_compile_args=extra_compile_args,
     )]
@@ -356,7 +356,6 @@ def mypycify(paths: List[str],
     # of the modules are in package. (Because I didn't want to fuss
     # around with making the single module code handle packages.)
     use_shared_lib = len(sources) > 1 or any('.' in x.module for x in sources)
-    cfile = os.path.join(build_dir, '__native.c')
 
     lib_name = shared_lib_name([source.module for source in sources]) if use_shared_lib else None
 
@@ -364,12 +363,18 @@ def mypycify(paths: List[str],
     # so that it can do a corner-cutting version without full stubs.
     # TODO: Be able to do this based on file mtimes?
     if not skip_cgen:
-        ctext, ops_text = generate_c(sources, options, lib_name)
+        cfiles, ops_text = generate_c(sources, options, lib_name)
         # TODO: unique names?
         with open(os.path.join(build_dir, 'ops.txt'), 'w') as f:
             f.write(ops_text)
-        with open(cfile, 'w', encoding='utf-8') as f:
-            f.write(ctext)
+        cfilenames = []
+        for cfile, ctext in cfiles:
+            cfile = os.path.join(build_dir, cfile)
+            with open(cfile, 'w', encoding='utf-8') as f:
+                f.write(ctext)
+            cfilenames.append(cfile)
+    else:
+        cfilenames = glob.glob(os.path.join(build_dir, '*.c'))
 
     cflags = []  # type: List[str]
     if compiler.compiler_type == 'unix':
@@ -393,9 +398,9 @@ def mypycify(paths: List[str],
 
     if use_shared_lib:
         assert lib_name
-        extensions = build_using_shared_lib(sources, lib_name, cfile, build_dir, cflags)
+        extensions = build_using_shared_lib(sources, lib_name, cfilenames, build_dir, cflags)
     else:
-        extensions = build_single_module(sources, cfile, cflags)
+        extensions = build_single_module(sources, cfilenames, cflags)
 
     return extensions
 

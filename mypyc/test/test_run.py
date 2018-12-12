@@ -127,7 +127,7 @@ class TestRun(MypycDataSuite):
                     sources=sources,
                     options=options,
                     alt_lib_path='.')
-                ctext = emitmodule.compile_modules_to_c(
+                cfiles = emitmodule.compile_modules_to_c(
                     result,
                     module_names=module_names,
                     shared_lib_name=lib_name)
@@ -136,9 +136,9 @@ class TestRun(MypycDataSuite):
                     print(line)
                 assert False, 'Compile error'
 
-            cpath = os.path.abspath(os.path.join(workdir, '__native.c'))
-            with open(cpath, 'w', encoding='utf-8') as f:
-                f.write(ctext)
+            for cfile, ctext in cfiles:
+                with open(os.path.join(workdir, cfile), 'w', encoding='utf-8') as f:
+                    f.write(ctext)
 
             setup_file = os.path.abspath(os.path.join(workdir, 'setup.py'))
             with open(setup_file, 'w') as f:
@@ -149,7 +149,7 @@ class TestRun(MypycDataSuite):
             # that the file is there.
             suffix = 'pyd' if sys.platform == 'win32' else 'so'
             if not glob.glob('native.*.{}'.format(suffix)):
-                show_c(ctext)
+                show_c(cfiles)
                 assert False, "Compilation failed"
 
             for p in to_delete:
@@ -178,7 +178,7 @@ class TestRun(MypycDataSuite):
             output = output.decode('utf8')
             outlines = output.splitlines()
 
-            show_c(ctext)
+            show_c(cfiles)
             if proc.returncode != 0:
                 print()
                 print('*** Exit status: %d' % proc.returncode)
