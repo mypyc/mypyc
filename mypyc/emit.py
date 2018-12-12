@@ -19,9 +19,11 @@ from mypyc.sametype import is_same_type
 
 
 class HeaderDeclaration:
-    def __init__(self, dependencies: Set[str], body: List[str]) -> None:
+    def __init__(self,
+                 dependencies: Set[str], decl: List[str], defn: Optional[List[str]]) -> None:
         self.dependencies = dependencies
-        self.body = body
+        self.decl = decl
+        self.defn = defn
 
 
 class EmitterContext:
@@ -203,8 +205,10 @@ class Emitter:
         if name not in context.declarations:
             struct_name = self.tuple_struct_name(rtuple)
             values = self.tuple_undefined_value_helper(rtuple)
-            init = 'struct {} {} = {{ {} }};'.format(struct_name, name, ''.join(values))
-            context.declarations[name] = HeaderDeclaration(set([struct_name]), [init])
+            var = 'struct {} {}'.format(struct_name, name)
+            decl = '{};'.format(var)
+            init = '{} = {{ {} }};'.format(var, ''.join(values))
+            context.declarations[name] = HeaderDeclaration(set([struct_name]), [decl], [init])
         return name
 
     def tuple_undefined_value_helper(self, rtuple: RTuple) -> List[str]:
@@ -237,6 +241,7 @@ class Emitter:
             self.context.declarations[struct_name] = HeaderDeclaration(
                 dependencies,
                 self.tuple_c_declaration(tuple_type),
+                None,
             )
 
     def emit_inc_ref(self, dest: str, rtype: RType) -> None:

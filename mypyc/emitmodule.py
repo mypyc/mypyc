@@ -144,7 +144,12 @@ class ModuleGenerator:
                     emitter.emit_line()
                     generate_wrapper_function(fn, emitter)
 
+        sorted_decls = self.toposort_declarations()
+
         self.generate_globals_init(emitter)
+        for declaration in sorted_decls:
+            if declaration.defn:
+                emitter.emit_lines(*declaration.defn)
 
         emitter.emit_line()
 
@@ -167,10 +172,8 @@ class ModuleGenerator:
         declarations.emit_line('static int CPyGlobalsInit(void);')
         declarations.emit_line()
 
-        declarations.emit_line('/* decls */')
-        for declaration in self.toposort_declarations():
-            declarations.emit_lines(*declaration.body)
-        declarations.emit_line('/* not decls */')
+        for declaration in sorted_decls:
+            declarations.emit_lines(*declaration.decl)
 
         for module_name, module in self.modules:
             self.declare_finals(module.final_names, declarations)
@@ -364,12 +367,16 @@ class ModuleGenerator:
 
     def declare_global(self, type_spaced: str, name: str, static: bool = True,
                        initializer: Optional[str] = None) -> None:
-        initializer_body = '' if not initializer else ' = {}'.format(initializer)
         static_str = 'static ' if static else ''
+        if not initializer:
+            defn = None
+        else:
+            defn = ['{}{}{} = {};'.format(static_str, type_spaced, name, initializer)]
         if name not in self.context.declarations:
             self.context.declarations[name] = HeaderDeclaration(
                 set(),
-                ['{}{}{}{};'.format(static_str, type_spaced, name, initializer_body)],
+                ['{}{}{};'.format(static_str, type_spaced, name)],
+                defn,
             )
 
     def declare_internal_globals(self, module_name: str, emitter: Emitter) -> None:
