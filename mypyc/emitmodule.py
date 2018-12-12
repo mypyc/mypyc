@@ -115,12 +115,7 @@ class ModuleGenerator:
     def generate_c_for_modules(self) -> List[Tuple[str, str]]:
         emitter = Emitter(self.context)
 
-        module_irs = [module_ir for _, module_ir in self.modules]
-
-        for module_name, module in self.modules:
-            self.declare_module(module_name, emitter)
-            self.declare_internal_globals(module_name, emitter)
-            self.declare_imports(module.imports, emitter)
+        emitter.emit_line('#include "__native.h"')
 
         for (_, literal), identifier in self.literals.items():
             if isinstance(literal, int):
@@ -130,38 +125,28 @@ class ModuleGenerator:
                 self.declare_static_pyobject(identifier, emitter)
 
         for module_name, module in self.modules:
+            self.declare_module(module_name, emitter)
+            self.declare_internal_globals(module_name, emitter)
+            self.declare_imports(module.imports, emitter)
             # Finals must be last (types can depend on declared above)
-            self.declare_finals(module.final_names, emitter)
+            self.define_finals(module.final_names, emitter)
 
-        for module in module_irs:
-            for fn in module.functions:
-                generate_function_declaration(fn, emitter)
+            for cl in module.classes:
+                generate_class(cl, module_name, emitter)
 
-        self.generate_globals_init(emitter)
-
-        classes = []
-        for module_name, module in self.modules:
-            classes.extend([(module_name, cl) for cl in module.classes])
-        # We must topo sort so that base classes are generated first.
-        classes = sort_classes(classes)
-        for module_name, cl in classes:
-            generate_class_type_decl(cl, emitter)
-        for module_name, cl in classes:
-            generate_class(cl, module_name, emitter)
-
-        emitter.emit_line()
-
-        # Generate Python extension module definitions and module initialization functions.
-        for module_name, module in self.modules:
+            # Generate Python extension module definitions and module initialization functions.
             self.generate_module_def(emitter, module_name, module)
 
-        for module_name, module in self.modules:
             for fn in module.functions:
                 emitter.emit_line()
                 generate_native_function(fn, emitter, self.source_paths[module_name], module_name)
                 if fn.name != TOP_LEVEL_NAME:
                     emitter.emit_line()
                     generate_wrapper_function(fn, emitter)
+
+        self.generate_globals_init(emitter)
+
+        emitter.emit_line()
 
         # Generate a dummy initialization function for the shared lib,
         # since the windows linker gets mad if it isn't present.
@@ -179,17 +164,27 @@ class ModuleGenerator:
         declarations.emit_line('#include <Python.h>')
         declarations.emit_line('#include <CPy.h>')
         declarations.emit_line()
+        declarations.emit_line('static int CPyGlobalsInit(void);')
+        declarations.emit_line()
 
+        declarations.emit_line('/* decls */')
         for declaration in self.toposort_declarations():
             declarations.emit_lines(*declaration.body)
+        declarations.emit_line('/* not decls */')
 
-        for static_def in self.context.statics.values():
-            declarations.emit_line(static_def)
+        for module_name, module in self.modules:
+            self.declare_finals(module.final_names, declarations)
+            for cl in module.classes:
+                generate_class_type_decl(cl, declarations)
+            for fn in module.functions:
+                generate_function_declaration(fn, declarations)
 
-        return [('__native.c', ''.join(declarations.fragments + emitter.fragments))]
+        return [('__native.c', ''.join(emitter.fragments)),
+                ('__native.h', ''.join(declarations.fragments))]
 
     def generate_globals_init(self, emitter: Emitter) -> None:
         emitter.emit_lines(
+            '',
             'static int CPyGlobalsInit(void)',
             '{',
             'static int is_initialized = 0;',
@@ -400,6 +395,11 @@ class ModuleGenerator:
             self.declare_module(imp, emitter)
 
     def declare_finals(self, final_names: Iterable[Tuple[str, RType]], emitter: Emitter) -> None:
+        for name, typ in final_names:
+            static_name = emitter.static_name(name, 'final')
+            emitter.emit_line('static {}{};'.format(emitter.ctype_spaced(typ), static_name))
+
+    def define_finals(self, final_names: Iterable[Tuple[str, RType]], emitter: Emitter) -> None:
         for name, typ in final_names:
             static_name = emitter.static_name(name, 'final')
             # Here we rely on the fact that undefined value and error value are always the same

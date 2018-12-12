@@ -34,7 +34,7 @@ class EmitterContext:
         # Map from tuple types to unique ids for them
         self.tuple_ids = {}  # type: Dict[RTuple, str]
 
-        # The two maps below are used for generating declarations or
+        # The map below is used for generating declarations and
         # definitions at the top of the C file. The main idea is that they can
         # be generated at any time during the emit phase.
 
@@ -42,11 +42,6 @@ class EmitterContext:
         # used for declaring structs and the key corresponds to the name of the struct.
         # The declaration contains the body of the struct.
         self.declarations = OrderedDict()  # type: Dict[str, HeaderDeclaration]
-
-        # A map from C identifier to code that defined the C identifier. This
-        # is similar to to 'declarations', but these may appear after the
-        # declarations in the generated code.
-        self.statics = OrderedDict()  # type: Dict[str, str]
 
 
 class Emitter:
@@ -205,11 +200,11 @@ class Emitter:
         context = self.context
         id = self.tuple_unique_id(rtuple)
         name = 'tuple_undefined_' + id
-        if name not in context.statics:
+        if name not in context.declarations:
             struct_name = self.tuple_struct_name(rtuple)
             values = self.tuple_undefined_value_helper(rtuple)
             init = 'struct {} {} = {{ {} }};'.format(struct_name, name, ''.join(values))
-            context.statics[name] = init
+            context.declarations[name] = HeaderDeclaration(set([struct_name]), [init])
         return name
 
     def tuple_undefined_value_helper(self, rtuple: RTuple) -> List[str]:
