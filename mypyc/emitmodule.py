@@ -113,9 +113,12 @@ class ModuleGenerator:
         self.use_shared_lib = shared_lib_name is not None
 
     def generate_c_for_modules(self) -> List[Tuple[str, str]]:
-        emitter = Emitter(self.context)
+        file_contents = []
+        multi_file = self.use_shared_lib
 
-        emitter.emit_line('#include "__native.h"')
+        base_emitter = Emitter(self.context)
+        base_emitter.emit_line('#include "__native.h"')
+        emitter = base_emitter
 
         for (_, literal), identifier in self.literals.items():
             if isinstance(literal, int):
@@ -125,6 +128,10 @@ class ModuleGenerator:
                 self.declare_static_pyobject(identifier, emitter)
 
         for module_name, module in self.modules:
+            if multi_file:
+                emitter = Emitter(self.context)
+                emitter.emit_line('#include "__native.h"')
+
             self.declare_module(module_name, emitter)
             self.declare_internal_globals(module_name, emitter)
             self.declare_imports(module.imports, emitter)
@@ -144,8 +151,13 @@ class ModuleGenerator:
                     emitter.emit_line()
                     generate_wrapper_function(fn, emitter)
 
+            if multi_file:
+                name = ('__native_{}.c'.format(emitter.names.private_name(module_name)))
+                file_contents.append((name, ''.join(emitter.fragments)))
+
         sorted_decls = self.toposort_declarations()
 
+        emitter = base_emitter
         self.generate_globals_init(emitter)
         for declaration in sorted_decls:
             if declaration.defn:
@@ -169,7 +181,7 @@ class ModuleGenerator:
         declarations.emit_line('#include <Python.h>')
         declarations.emit_line('#include <CPy.h>')
         declarations.emit_line()
-        declarations.emit_line('static int CPyGlobalsInit(void);')
+        declarations.emit_line('int CPyGlobalsInit(void);')
         declarations.emit_line()
 
         for declaration in sorted_decls:
@@ -182,13 +194,13 @@ class ModuleGenerator:
             for fn in module.functions:
                 generate_function_declaration(fn, declarations)
 
-        return [('__native.c', ''.join(emitter.fragments)),
-                ('__native.h', ''.join(declarations.fragments))]
+        return file_contents + [('__native.c', ''.join(emitter.fragments)),
+                                ('__native.h', ''.join(declarations.fragments))]
 
     def generate_globals_init(self, emitter: Emitter) -> None:
         emitter.emit_lines(
             '',
-            'static int CPyGlobalsInit(void)',
+            'int CPyGlobalsInit(void)',
             '{',
             'static int is_initialized = 0;',
             'if (is_initialized) return 0;',
@@ -367,7 +379,9 @@ class ModuleGenerator:
 
     def declare_global(self, type_spaced: str, name: str, static: bool = True,
                        initializer: Optional[str] = None) -> None:
-        static_str = 'static ' if static else ''
+        # XXX
+        static_str = ''
+        # static_str = 'static ' if static else ''
         if not initializer:
             defn = None
         else:
@@ -404,7 +418,7 @@ class ModuleGenerator:
     def declare_finals(self, final_names: Iterable[Tuple[str, RType]], emitter: Emitter) -> None:
         for name, typ in final_names:
             static_name = emitter.static_name(name, 'final')
-            emitter.emit_line('static {}{};'.format(emitter.ctype_spaced(typ), static_name))
+            emitter.emit_line('{}{};'.format(emitter.ctype_spaced(typ), static_name))
 
     def define_finals(self, final_names: Iterable[Tuple[str, RType]], emitter: Emitter) -> None:
         for name, typ in final_names:
@@ -415,8 +429,8 @@ class ModuleGenerator:
                 undefined = '{{ {} }}'.format(''.join(emitter.tuple_undefined_value_helper(typ)))
             else:
                 undefined = emitter.c_undefined_value(typ)
-            emitter.emit_line('static {}{} = {};'.format(emitter.ctype_spaced(typ), static_name,
-                                                         undefined))
+            emitter.emit_line('{}{} = {};'.format(emitter.ctype_spaced(typ), static_name,
+                                                  undefined))
 
     def declare_static_pyobject(self, identifier: str, emitter: Emitter) -> None:
         symbol = emitter.static_name(identifier, None)

@@ -72,7 +72,7 @@ def generate_slots(cl: ClassIR, table: SlotTable, emitter: Emitter) -> Dict[str,
 
 
 def generate_class_type_decl(cl: ClassIR, emitter: Emitter) -> None:
-    emitter.emit_line('static PyTypeObject *{};'.format(emitter.type_struct_name(cl)))
+    emitter.emit_line('PyTypeObject *{};'.format(emitter.type_struct_name(cl)))
     emitter.emit_line()
     generate_object_struct(cl, emitter)
     emitter.emit_line()
