@@ -385,11 +385,11 @@ class ModuleGenerator:
         if not initializer:
             defn = None
         else:
-            defn = ['{}{}{} = {};'.format(type_spaced, name, initializer)]
+            defn = ['{}{} = {};'.format(type_spaced, name, initializer)]
         if name not in self.context.declarations:
             self.context.declarations[name] = HeaderDeclaration(
                 set(),
-                ['{}{}{};'.format(type_spaced, name)],
+                ['{}{};'.format(type_spaced, name)],
                 defn,
             )
 
