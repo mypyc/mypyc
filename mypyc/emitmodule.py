@@ -380,19 +380,16 @@ class ModuleGenerator:
 
         return result
 
-    def declare_global(self, type_spaced: str, name: str, static: bool = True,
+    def declare_global(self, type_spaced: str, name: str,
                        initializer: Optional[str] = None) -> None:
-        # XXX
-        static_str = ''
-        # static_str = 'static ' if static else ''
         if not initializer:
             defn = None
         else:
-            defn = ['{}{}{} = {};'.format(static_str, type_spaced, name, initializer)]
+            defn = ['{}{}{} = {};'.format(type_spaced, name, initializer)]
         if name not in self.context.declarations:
             self.context.declarations[name] = HeaderDeclaration(
                 set(),
-                ['{}{}{};'.format(static_str, type_spaced, name)],
+                ['{}{}{};'.format(type_spaced, name)],
                 defn,
             )
 
