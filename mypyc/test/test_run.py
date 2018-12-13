@@ -130,6 +130,7 @@ class TestRun(MypycDataSuite):
                 cfiles = emitmodule.compile_modules_to_c(
                     result,
                     module_names=module_names,
+                    multi_file=True,
                     shared_lib_name=lib_name)
             except CompileError as e:
                 for line in e.messages:

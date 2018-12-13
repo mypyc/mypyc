@@ -43,6 +43,7 @@ def parse_and_typecheck(sources: List[BuildSource], options: Options,
 
 def compile_modules_to_c(result: BuildResult, module_names: List[str],
                          shared_lib_name: Optional[str],
+                         multi_file: bool,
                          ops: Optional[List[str]] = None) -> List[Tuple[str, str]]:
     """Compile Python module(s) to C that can be used from Python C extension modules."""
 
@@ -70,7 +71,7 @@ def compile_modules_to_c(result: BuildResult, module_names: List[str],
     # Generate C code.
     source_paths = {module_name: result.files[module_name].path
                     for module_name in module_names}
-    generator = ModuleGenerator(literals, modules, source_paths, shared_lib_name)
+    generator = ModuleGenerator(literals, modules, source_paths, shared_lib_name, multi_file)
     return generator.generate_c_for_modules()
 
 
@@ -100,7 +101,8 @@ class ModuleGenerator:
                  literals: LiteralsMap,
                  modules: List[Tuple[str, ModuleIR]],
                  source_paths: Dict[str, str],
-                 shared_lib_name: Optional[str]) -> None:
+                 shared_lib_name: Optional[str],
+                 multi_file: bool) -> None:
         self.literals = literals
         self.modules = modules
         self.source_paths = source_paths
@@ -111,10 +113,11 @@ class ModuleGenerator:
         self.simple_inits = []  # type: List[Tuple[str, str]]
         self.shared_lib_name = shared_lib_name
         self.use_shared_lib = shared_lib_name is not None
+        self.multi_file = multi_file
 
     def generate_c_for_modules(self) -> List[Tuple[str, str]]:
         file_contents = []
-        multi_file = self.use_shared_lib
+        multi_file = self.use_shared_lib and self.multi_file
 
         base_emitter = Emitter(self.context)
         base_emitter.emit_line('#include "__native.h"')
