@@ -46,7 +46,7 @@ class TestCompiler(MypycDataSuite):
                     options=options,
                     alt_lib_path=test_temp_dir)
                 cfiles = emitmodule.compile_modules_to_c(
-                    result, module_names=['prog'], multi_file=False, shared_lib_name=None)
+                    result, module_names=['prog'], multi_file=True, shared_lib_name=None)
                 out = []
                 for cfile, ctext in cfiles:
                     out.append('== {} =='.format(cfile))
