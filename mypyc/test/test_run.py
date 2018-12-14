@@ -63,6 +63,7 @@ class TestRun(MypycDataSuite):
     files = files
     base_path = test_temp_dir
     optional_out = True
+    multi_file = False
 
     def run_case(self, testcase: DataDrivenTestCase) -> None:
         bench = testcase.config.getoption('--bench', False) and 'Benchmark' in testcase.name
@@ -130,7 +131,7 @@ class TestRun(MypycDataSuite):
                 cfiles = emitmodule.compile_modules_to_c(
                     result,
                     module_names=module_names,
-                    multi_file=True,
+                    multi_file=self.multi_file,
                     shared_lib_name=lib_name)
             except CompileError as e:
                 for line in e.messages:
@@ -192,3 +193,13 @@ class TestRun(MypycDataSuite):
                 assert_test_output(testcase, outlines, 'Invalid output')
 
             assert proc.returncode == 0
+
+
+# Run the main multi-module tests in multi-file compliation mode
+class TestRunMultiFile(TestRun):
+    multi_file = True
+    test_name_suffix = '_multi'
+    files = [
+        'run-multimodule.test',
+        'run-mypy-sim.test',
+    ]
