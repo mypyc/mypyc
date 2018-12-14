@@ -323,7 +323,7 @@ def build_single_module(sources: List[BuildSource],
 def mypycify(paths: List[str],
              mypy_options: Optional[List[str]] = None,
              opt_level: str = '3',
-             multi_file: bool = False,
+             multi_file: bool = True,
              skip_cgen: bool = False) -> List[MypycifyExtension]:
     """Main entry point to building using mypyc.
 
