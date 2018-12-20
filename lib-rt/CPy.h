@@ -855,6 +855,8 @@ static PyObject *CPy_FetchStopIterationValue(void)
 
 static PyObject *CPyIter_Send(PyObject *iter, PyObject *val)
 {
+    // Do a send, or a next if second arg is None.
+    // (This behavior is to match the PEP 380 spec for yield from.)
     _Py_IDENTIFIER(send);
     if (val == Py_None) {
         return CPyIter_Next(iter);
@@ -1056,10 +1058,10 @@ void CPy_Init(void);
 // This implements most of the bodies of the `except` blocks in the
 // pseudocode in PEP 380.
 //
-// Returns true if a StopIteration was received and we should return.
-// Returns false if a value should be yielded.
+// Returns true (1) if a StopIteration was received and we should return.
+// Returns false (0) if a value should be yielded.
 // In both cases the value is stored in outp.
-// Signals an error if the an exception should be propagated.
+// Signals an error (2) if the an exception should be propagated.
 static int CPy_YieldFromErrorHandle(PyObject *iter, PyObject **outp)
 {
     _Py_IDENTIFIER(close);

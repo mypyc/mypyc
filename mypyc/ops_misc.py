@@ -50,8 +50,8 @@ iter_op = func_op(name='builtins.iter',
                   error_kind=ERR_MAGIC,
                   emit=call_emit('PyObject_GetIter'))
 
-# Although the error_kind is set to be ERR_NEVER, this can actually return NULL, and thus it must
-# be checked using Branch.IS_ERROR.
+# Although the error_kind is set to be ERR_NEVER, this can actually
+# return NULL, and thus it must be checked using Branch.IS_ERROR.
 next_op = custom_op(name='next',
                     arg_types=[object_rprimitive],
                     result_type=object_rprimitive,
@@ -59,16 +59,19 @@ next_op = custom_op(name='next',
                     emit=call_emit('PyIter_Next'))
 
 # Do a next, don't swallow StopIteration, but also don't
-# propagate an error. It *can* return NULL.
+# propagate an error.
+# Can return NULL: see next_op.
 next_raw_op = custom_op(name='next',
                         arg_types=[object_rprimitive],
                         result_type=object_rprimitive,
                         error_kind=ERR_NEVER,
                         emit=call_emit('CPyIter_Next'))
 
-# Do a send, or a next if second arg is None, don't swallow
-# StopIteration, but also don't propagate an error. It *can* return
-# NULL.
+# Do a send, or a next if second arg is None.
+# (This behavior is to match the PEP 380 spec for yield from.)
+# Like next_raw_op, don't swallow StopIteration,
+# but also don't propagate an error.
+# Can return NULL: see next_op.
 send_op = custom_op(name='send',
                     arg_types=[object_rprimitive, object_rprimitive],
                     result_type=object_rprimitive,

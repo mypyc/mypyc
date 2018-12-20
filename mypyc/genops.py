@@ -3422,8 +3422,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         _y_init = self.primitive_op(next_raw_op, [self.read(iter_reg)], o.line)
         self.add(Branch(_y_init, stop_block, main_block, Branch.IS_ERROR))
 
-        # If the initial next() raised, assume it was a StopIteration and extract
-        # the value. If it wasn't, we keep raising.
+        # Try extracting a return value from a StopIteration and return it.
+        # If it wasn't, this rereaises the exception.
         self.activate_block(stop_block)
         self.assign(result, self.primitive_op(check_stop_op, [], o.line), o.line)
         self.goto(done_block)
