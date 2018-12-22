@@ -1,5 +1,7 @@
 """Generate C code for a Python C extension module from Python source code."""
 
+import sys
+
 from collections import OrderedDict
 from typing import List, Tuple, Dict, Iterable, Set, TypeVar, Optional
 
@@ -49,7 +51,10 @@ def compile_modules_to_c(result: BuildResult, module_names: List[str],
 
     # Generate basic IR, with missing exception and refcount handling.
     file_nodes = [result.files[name] for name in module_names]
-    literals, modules = genops.build_ir(file_nodes, result.graph, result.types)
+    literals, modules, errors = genops.build_ir(file_nodes, result.graph, result.types)
+    if errors > 0:
+        print("Aborting due to {} error{}".format(errors, "s" if errors > 1 else ""))
+        sys.exit(1)
     # Insert uninit checks.
     for _, module in modules:
         for fn in module.functions:

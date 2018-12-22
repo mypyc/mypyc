@@ -93,3 +93,66 @@ assert a.f(10) == 100
 [file a.py]
 def f(x: int) -> int:
     return x*x
+
+[case testErrorOutput]
+# cmd: test.py
+
+[file test.py]
+from typing import List, Any
+from typing_extensions import Final
+
+def args(*x: int) -> int:
+    return sum(x)
+
+def foo(x: List[int]) -> List[int]:
+    return [1, 2, *x]
+
+def busted(b: bool) -> None:
+    for i in range(1, 10, 0):
+        try:
+            if i == 5:
+                break
+        finally:
+            print('oops')
+
+print(foo([1,2,3]))
+
+x = [1,2]
+
+class Foo:
+    a, b = (10, 20)
+    x[0] = 10
+    lol = 20
+
+    if 1+1 == 2:
+        x = 10
+
+Foo.lol = 50
+
+print(x)
+del x
+
+def decorator(x: Any) -> Any:
+    return x
+
+class NeverMetaclass(type):
+    pass
+
+@decorator
+class Wrong(metaclass=NeverMetaclass):
+    pass
+
+[out]
+test.py:38: error: Inheriting from most builtin types is unimplemented
+test.py:41: error: Metaclasses are not supported
+test.py:41: error: Class decorators are not supported
+test.py:4: error: Accepting *args or **kwargs is unimplemented
+test.py:8: error: Star expressions (in non call contexts) are unimplemented
+test.py:11: error: range() step can't be zero
+test.py:14: error: break inside try/finally block is unimplemented
+test.py:23: error: Only assignment to variables is supported in class bodies
+test.py:24: error: Only assignment to variables is supported in class bodies
+test.py:27: error: Unsupported statement in class body
+test.py:30: error: Only class variables defined as ClassVar can be assigned to
+test.py:33: error: Unimplemented del operation
+Aborting due to 12 errors
