@@ -65,7 +65,7 @@ class TestCommandLine(MypycDataSuite):
 
         # Strip out 'tmp/' from error message paths in the testcase output,
         # due to a mismatch between this test and mypy's test suite.
-        expected = [x.replace('tmp' + os.sep, '') for x in testcase.output]
+        expected = [x.replace('tmp/', '') for x in testcase.output]
 
         # Verify output
         actual = out.decode().splitlines()
