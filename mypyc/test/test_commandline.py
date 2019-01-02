@@ -12,6 +12,7 @@ import sys
 
 from mypy.test.data import DataDrivenTestCase
 from mypy.test.config import test_temp_dir
+from mypy.test.helpers import normalize_error_messages
 
 from mypyc.test.testutil import MypycDataSuite, assert_test_output
 
@@ -68,5 +69,5 @@ class TestCommandLine(MypycDataSuite):
         expected = [x.replace('tmp/', '') for x in testcase.output]
 
         # Verify output
-        actual = out.decode().splitlines()
+        actual = normalize_error_messages(out.decode().splitlines())
         assert_test_output(testcase, actual, 'Invalid output', expected=expected)
