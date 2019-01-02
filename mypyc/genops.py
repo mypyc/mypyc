@@ -3467,6 +3467,60 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         assert cls.send_arg_reg is not None
         return cls.send_arg_reg
 
+    def yield_from_try_body(self,
+                            to_yield_reg: Register,
+                            received_reg: Register,
+                            line: int) -> None:
+        self.assign(received_reg, self.emit_yield(self.read(to_yield_reg), line), line)
+
+    def yield_from_except_body(self,
+                               iter_reg: Union[AssignmentTarget, Register],
+                               to_yield_reg: Register,
+                               result: Register,
+                               line: int) -> None:
+        # The body of the except is all implemented in a C function to
+        # reduce how much code we need to generate. It returns a value
+        # indicating whether to break or yield (or raise an exception).
+        res = self.primitive_op(yield_from_except_op, [self.read(iter_reg)], line)
+        to_stop = self.add(TupleGet(res, 0, line))
+        val = self.add(TupleGet(res, 1, line))
+
+        ok, stop = BasicBlock(), BasicBlock()
+        self.add(Branch(to_stop, stop, ok, Branch.BOOL_EXPR))
+
+        # The exception got swallowed. Continue, yielding the returned value
+        self.activate_block(ok)
+        self.assign(to_yield_reg, val, line)
+        self.nonlocal_control[-1].gen_continue(self, line)
+
+        # The exception was a StopIteration. Stop iterating.
+        self.activate_block(stop)
+        self.assign(result, val, line)
+        self.nonlocal_control[-1].gen_break(self, line)
+
+    def yield_from_else_body(self,
+                             received_reg: Register,
+                             to_yield_reg: Register,
+                             iter_reg: Union[AssignmentTarget, Register],
+                             result: Register,
+                             line: int) -> None:
+        # Do a next() or a .send(). It will return NULL on exception
+        # but it won't automatically propagate.
+        _y = self.primitive_op(send_op, [self.read(iter_reg), self.read(received_reg)], line)
+        ok, stop = BasicBlock(), BasicBlock()
+        self.add(Branch(_y, stop, ok, Branch.IS_ERROR))
+
+        # Everything's fine. Yield it.
+        self.activate_block(ok)
+        self.assign(to_yield_reg, _y, line)
+        self.nonlocal_control[-1].gen_continue(self, line)
+
+        # Try extracting a return value from a StopIteration and return it.
+        # If it wasn't, this rereaises the exception.
+        self.activate_block(stop)
+        self.assign(result, self.primitive_op(check_stop_op, [], line), line)
+        self.nonlocal_control[-1].gen_break(self, line)
+
     def visit_yield_from_expr(self, o: YieldFromExpr) -> Value:
         # This is basically an implementation of the code in PEP 380.
 
@@ -3494,50 +3548,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         loop_block = BasicBlock()
         self.goto_and_activate(loop_block)
 
-        def try_body() -> None:
-            self.assign(received_reg, self.emit_yield(self.read(to_yield_reg), o.line), o.line)
-
-        def except_body() -> None:
-            # The body of the except is all implemented in a C function to
-            # reduce how much code we need to generate. It returns a value
-            # indicating whether to break or yield (or raise an exception).
-            res = self.primitive_op(yield_from_except_op, [self.read(iter_reg)], o.line)
-            to_stop = self.add(TupleGet(res, 0, o.line))
-            val = self.add(TupleGet(res, 1, o.line))
-
-            ok, stop = BasicBlock(), BasicBlock()
-            self.add(Branch(to_stop, stop, ok, Branch.BOOL_EXPR))
-
-            # The exception got swallowed. Continue, yielding the returned value
-            self.activate_block(ok)
-            self.assign(to_yield_reg, val, o.line)
-            self.nonlocal_control[-1].gen_continue(self, o.line)
-
-            # The exception was a StopIteration. Stop iterating.
-            self.activate_block(stop)
-            self.assign(result, val, o.line)
-            self.nonlocal_control[-1].gen_break(self, o.line)
-
-        def else_body() -> None:
-            # Do a next() or a .send(). It will return NULL on exception
-            # but it won't automatically propagate.
-            _y = self.primitive_op(send_op, [self.read(iter_reg), self.read(received_reg)], o.line)
-            ok, stop = BasicBlock(), BasicBlock()
-            self.add(Branch(_y, stop, ok, Branch.IS_ERROR))
-
-            # Everything's fine. Yield it.
-            self.activate_block(ok)
-            self.assign(to_yield_reg, _y, o.line)
-            self.nonlocal_control[-1].gen_continue(self, o.line)
-
-            # Try extracting a return value from a StopIteration and return it.
-            # If it wasn't, this rereaises the exception.
-            self.activate_block(stop)
-            self.assign(result, self.primitive_op(check_stop_op, [], o.line), o.line)
-            self.nonlocal_control[-1].gen_break(self, o.line)
-
         self.push_loop_stack(loop_block, done_block)
-        self.visit_try_except(try_body, [(None, None, except_body)], else_body, o.line)
+        self.visit_try_except(lambda: self.yield_from_try_body(to_yield_reg, received_reg, o.line),
+                              [(None, None,
+                                lambda: self.yield_from_except_body(
+                                    iter_reg, to_yield_reg, result, o.line))],
+                              lambda: self.yield_from_else_body(
+                                  received_reg, to_yield_reg, iter_reg, result, o.line),
+                              o.line)
         self.pop_loop_stack()
 
         self.goto_and_activate(done_block)
