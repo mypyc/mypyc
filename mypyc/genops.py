@@ -440,6 +440,10 @@ def prepare_class_def(path: str, module_name: str, cdef: ClassDef,
         elif cls.fullname() == 'builtins.object':
             pass
         elif cls.fullname().startswith('builtins.'):
+            # Note that if we try to subclass a C extension class that
+            # isn't in builtins, bad things will happen and we won't
+            # catch it here! But this should catch a lot of the most
+            # common pitfalls.
             errors.error("Inheriting from most builtin types is unimplemented", path, cdef.line)
 
     if ir.builtin_base:
@@ -1256,6 +1260,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         """
         if any(kind in (ARG_STAR, ARG_STAR2) for kind in fitem.arg_kinds):
             self.error('Accepting *args or **kwargs is unimplemented', fitem.line)
+
+        if fitem.is_coroutine:
+            self.error('async functions are unimplemented', fitem.line)
 
         func_reg = None  # type: Optional[Value]
 
@@ -3465,7 +3472,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.bail("Star expressions (in non call contexts) are unimplemented", o.line)
 
     def visit_reveal_expr(self, o: RevealExpr) -> Value:
-        self.bail("reveal_from can't be run", o.line)
+        name = "reveal_type" if o.kind == mypy.nodes.REVEAL_TYPE else "reveal_locals"
+        self.bail("{} can't be run".format(name), o.line)
 
     # Unimplemented constructs that shouldn't come up because they are py2 only
     def visit_backquote_expr(self, o: BackquoteExpr) -> Value:
@@ -3480,7 +3488,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def visit_unicode_expr(self, o: UnicodeExpr) -> Value:
         self.bail("Python 2 features are unsupported", o.line)
 
-    # Construccts that shouldn't ever show up
+    # Constructs that shouldn't ever show up
     def visit_enum_call_expr(self, o: EnumCallExpr) -> Value:
         assert False, "can't compile analysis-only expressions"
 

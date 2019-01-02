@@ -95,11 +95,12 @@ def f(x: int) -> int:
     return x*x
 
 [case testErrorOutput]
-# cmd: test.py
+# cmd: test.py foo/__init__.py foo/bar.py
 
 [file test.py]
 from typing import List, Any
 from typing_extensions import Final
+from mypy_extensions import trait
 
 def args(*x: int) -> int:
     return sum(x)
@@ -112,8 +113,12 @@ def busted(b: bool) -> None:
         try:
             if i == 5:
                 break
+            elif i == 4:
+                continue
         finally:
             print('oops')
+    reveal_type(b)  # type: ignore
+    reveal_locals()  # type: ignore
 
 print(foo([1,2,3]))
 
@@ -123,6 +128,8 @@ class Foo:
     a, b = (10, 20)
     x[0] = 10
     lol = 20
+    l = [10]
+    c = d = 50
 
     if 1+1 == 2:
         x = 10
@@ -142,17 +149,72 @@ class NeverMetaclass(type):
 class Wrong(metaclass=NeverMetaclass):
     pass
 
+class Concrete1:
+    pass
+
+@trait
+class Trait1(Concrete1):
+    pass
+
+class Concrete2:
+    pass
+
+@trait
+class Trait2(Concrete2):
+    pass
+
+cmplx = 2+5j
+
+def warning(x: List[int] = []) -> None:
+    pass
+
+# check that concrete bases need to come first and that non-trait MRO must be linear
+class Nope(Trait1, Concrete2):
+    pass
+
+iterator_warning = (i+1 for i in range(10))
+
+d1 = {1: 2}
+d2 = {2: 3, **d1}
+
+async def aio(x: Any) -> Any:
+    await x
+
+def yieldfrom(x: Any) -> Any:
+    yield from x
+
+[file foo/__init__.py]
+x = 20
+
+[file foo/bar.py]
+from . import x
+
+
 [out]
-test.py:38: error: Inheriting from most builtin types is unimplemented
-test.py:41: error: Metaclasses are not supported
-test.py:41: error: Class decorators are not supported
-test.py:4: error: Accepting *args or **kwargs is unimplemented
-test.py:8: error: Star expressions (in non call contexts) are unimplemented
-test.py:11: error: range() step can't be zero
-test.py:14: error: break inside try/finally block is unimplemented
-test.py:23: error: Only assignment to variables is supported in class bodies
-test.py:24: error: Only assignment to variables is supported in class bodies
-test.py:27: error: Unsupported statement in class body
-test.py:30: error: Only class variables defined as ClassVar can be assigned to
-test.py:33: error: Unimplemented del operation
-Aborting due to 12 errors
+test.py:45: error: Inheriting from most builtin types is unimplemented
+test.py:48: error: Metaclasses are not supported
+test.py:48: error: Class decorators are not supported
+test.py:72: error: Non-trait bases appear first in parent list
+test.py:72: error: Non-trait MRO must be linear
+test.py:5: error: Accepting *args or **kwargs is unimplemented
+test.py:9: error: Star expressions (in non call contexts) are unimplemented
+test.py:12: error: range() step can't be zero
+test.py:15: error: break inside try/finally block is unimplemented
+test.py:17: error: continue inside try/finally block is unimplemented
+test.py:28: error: Only assignment to variables is supported in class bodies
+test.py:29: error: Only assignment to variables is supported in class bodies
+test.py:32: error: Multiple assignment in class bodies not supported
+test.py:34: error: Unsupported statement in class body
+test.py:31: warning: Unsupported default attribute value
+test.py:37: error: Only class variables defined as ClassVar can be assigned to
+test.py:40: error: Unimplemented del operation
+test.py:66: error: complex literals are unimplemented
+test.py:68: warning: Unsupported default argument value
+test.py:75: warning: Treating generator comprehension as list
+test.py:78: error: **args in dict expressions is unimplemented
+test.py:80: error: async functions are unimplemented
+test.py:81: error: await is unimplemented
+test.py:84: error: yield from is unimplemented
+foo/bar.py:1: error: Relative imports are unimplemented
+Aborting due to 22 errors
+
