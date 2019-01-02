@@ -40,6 +40,7 @@ from mypy.nodes import (
     ARG_OPT, ARG_NAMED, ARG_STAR, ARG_STAR2, is_class_var
 )
 import mypy.nodes
+import mypy.errors
 from mypy.types import (
     Type, Instance, CallableType, NoneTyp, TupleType, UnionType, AnyType, TypeVarType, PartialType,
     TypeType, FunctionLike, Overloaded, TypeOfAny, UninhabitedType, UnboundType,
@@ -107,14 +108,19 @@ class Errors:
     def __init__(self) -> None:
         self.num_errors = 0
         self.num_warnings = 0
+        self._errors = mypy.errors.Errors()
 
     def error(self, msg: str, path: str, line: int) -> None:
-        print('{}:{}: error: {}'.format(path, line, msg))
+        self._errors.report(line, None, msg, severity='error', file=path)
         self.num_errors += 1
 
     def warning(self, msg: str, path: str, line: int) -> None:
-        print('{}:{}: warning: {}'.format(path, line, msg))
+        self._errors.report(line, None, msg, severity='warning', file=path)
         self.num_warnings += 1
+
+    def flush_errors(self) -> None:
+        for error in self._errors.new_messages():
+            print(error)
 
 
 def build_ir(modules: List[MypyFile],
@@ -179,6 +185,8 @@ def build_ir(modules: List[MypyFile],
     # Compute vtables.
     for cir in class_irs:
         compute_vtable(cir)
+
+    errors.flush_errors()
 
     return mapper.literals, result, errors.num_errors
 
@@ -461,7 +469,7 @@ def prepare_class_def(path: str, module_name: str, cdef: ClassDef,
     bases = [mapper.type_to_ir[base.type] for base in info.bases
              if base.type in mapper.type_to_ir]
     if not all(c.is_trait for c in bases[1:]):
-        errors.error("Non-trait bases appear first in parent list", path, cdef.line)
+        errors.error("Non-trait bases must appear first in parent list", path, cdef.line)
     ir.traits = [c for c in bases if c.is_trait]
 
     mro = []
@@ -3471,10 +3479,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def visit_star_expr(self, o: StarExpr) -> Value:
         self.bail("Star expressions (in non call contexts) are unimplemented", o.line)
 
-    def visit_reveal_expr(self, o: RevealExpr) -> Value:
-        name = "reveal_type" if o.kind == mypy.nodes.REVEAL_TYPE else "reveal_locals"
-        self.bail("{} can't be run".format(name), o.line)
-
     # Unimplemented constructs that shouldn't come up because they are py2 only
     def visit_backquote_expr(self, o: BackquoteExpr) -> Value:
         self.bail("Python 2 features are unsupported", o.line)
@@ -3514,6 +3518,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         assert False, "can't compile analysis-only expressions"
 
     def visit_typeddict_expr(self, o: TypedDictExpr) -> Value:
+        assert False, "can't compile analysis-only expressions"
+
+    def visit_reveal_expr(self, o: RevealExpr) -> Value:
         assert False, "can't compile analysis-only expressions"
 
     def visit_var(self, o: Var) -> None:

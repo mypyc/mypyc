@@ -53,7 +53,6 @@ def compile_modules_to_c(result: BuildResult, module_names: List[str],
     file_nodes = [result.files[name] for name in module_names]
     literals, modules, errors = genops.build_ir(file_nodes, result.graph, result.types)
     if errors > 0:
-        print("Aborting due to {} error{}".format(errors, "s" if errors > 1 else ""))
         sys.exit(1)
     # Insert uninit checks.
     for _, module in modules:

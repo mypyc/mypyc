@@ -102,50 +102,51 @@ from typing import List, Any
 from typing_extensions import Final
 from mypy_extensions import trait
 
-def args(*x: int) -> int:
+def args(*x: int) -> int:  # E: Accepting *args or **kwargs is unimplemented
     return sum(x)
 
+def kwargs(**x: int) -> None:  # E: Accepting *args or **kwargs is unimplemented
+    pass
+
 def foo(x: List[int]) -> List[int]:
-    return [1, 2, *x]
+    return [1, 2, *x]  # E: Star expressions (in non call contexts) are unimplemented
 
 def busted(b: bool) -> None:
-    for i in range(1, 10, 0):
+    for i in range(1, 10, 0):  # E: range() step can't be zero
         try:
             if i == 5:
-                break
+                break  # E: break inside try/finally block is unimplemented
             elif i == 4:
-                continue
+                continue  # E: continue inside try/finally block is unimplemented
         finally:
             print('oops')
-    reveal_type(b)  # type: ignore
-    reveal_locals()  # type: ignore
 
 print(foo([1,2,3]))
 
 x = [1,2]
 
 class Foo:
-    a, b = (10, 20)
-    x[0] = 10
+    a, b = (10, 20)  # E: Only assignment to variables is supported in class bodies
+    x[0] = 10  # E: Only assignment to variables is supported in class bodies
     lol = 20
-    l = [10]
-    c = d = 50
+    l = [10]  # W: Unsupported default attribute value
+    c = d = 50  # E: Multiple assignment in class bodies not supported
 
-    if 1+1 == 2:
+    if 1+1 == 2:  # E: Unsupported statement in class body
         x = 10
 
-Foo.lol = 50
+Foo.lol = 50  # E: Only class variables defined as ClassVar can be assigned to
 
 print(x)
-del x
+del x  # E: Unimplemented del operation
 
 def decorator(x: Any) -> Any:
     return x
 
-class NeverMetaclass(type):
+class NeverMetaclass(type):  # E: Inheriting from most builtin types is unimplemented
     pass
 
-@decorator
+@decorator  # E: Metaclasses are not supported  # E: Class decorators are not supported
 class Wrong(metaclass=NeverMetaclass):
     pass
 
@@ -163,58 +164,27 @@ class Concrete2:
 class Trait2(Concrete2):
     pass
 
-cmplx = 2+5j
+cmplx = 2+5j  # E: complex literals are unimplemented
 
-def warning(x: List[int] = []) -> None:
+def warning(x: List[int] = []) -> None:  # W: Unsupported default argument value
     pass
 
-# check that concrete bases need to come first and that non-trait MRO must be linear
-class Nope(Trait1, Concrete2):
+class Nope(Trait1, Concrete2):  # E: Non-trait bases must appear first in parent list  # E: Non-trait MRO must be linear
     pass
 
-iterator_warning = (i+1 for i in range(10))
+iterator_warning = (i+1 for i in range(10))  # W: Treating generator comprehension as list
 
 d1 = {1: 2}
-d2 = {2: 3, **d1}
+d2 = {2: 3, **d1}  # E: **args in dict expressions is unimplemented
 
-async def aio(x: Any) -> Any:
-    await x
+async def aio(x: Any) -> Any:  # E: async functions are unimplemented
+    await x  # E: await is unimplemented
 
 def yieldfrom(x: Any) -> Any:
-    yield from x
+    yield from x  # E: yield from is unimplemented
 
 [file foo/__init__.py]
 x = 20
 
 [file foo/bar.py]
-from . import x
-
-
-[out]
-test.py:45: error: Inheriting from most builtin types is unimplemented
-test.py:48: error: Metaclasses are not supported
-test.py:48: error: Class decorators are not supported
-test.py:72: error: Non-trait bases appear first in parent list
-test.py:72: error: Non-trait MRO must be linear
-test.py:5: error: Accepting *args or **kwargs is unimplemented
-test.py:9: error: Star expressions (in non call contexts) are unimplemented
-test.py:12: error: range() step can't be zero
-test.py:15: error: break inside try/finally block is unimplemented
-test.py:17: error: continue inside try/finally block is unimplemented
-test.py:28: error: Only assignment to variables is supported in class bodies
-test.py:29: error: Only assignment to variables is supported in class bodies
-test.py:32: error: Multiple assignment in class bodies not supported
-test.py:34: error: Unsupported statement in class body
-test.py:31: warning: Unsupported default attribute value
-test.py:37: error: Only class variables defined as ClassVar can be assigned to
-test.py:40: error: Unimplemented del operation
-test.py:66: error: complex literals are unimplemented
-test.py:68: warning: Unsupported default argument value
-test.py:75: warning: Treating generator comprehension as list
-test.py:78: error: **args in dict expressions is unimplemented
-test.py:80: error: async functions are unimplemented
-test.py:81: error: await is unimplemented
-test.py:84: error: yield from is unimplemented
-foo/bar.py:1: error: Relative imports are unimplemented
-Aborting due to 22 errors
-
+from . import x  # E: Relative imports are unimplemented
