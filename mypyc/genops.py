@@ -371,19 +371,14 @@ class Mapper:
             ret = object_rprimitive
         return FuncSignature(args, ret)
 
-    def literal_static_name(self, value: Union[int, float, str, bytes]) -> str:
+    def literal_static_name(self, value: Union[int, float, complex, str, bytes]) -> str:
         # Include type to distinguish between 1 and 1.0, and so on.
         key = (type(value), value)
         if key not in self.literals:
             if isinstance(value, str):
                 prefix = 'unicode_'
-            elif isinstance(value, float):
-                prefix = 'float_'
-            elif isinstance(value, bytes):
-                prefix = 'bytes_'
             else:
-                assert isinstance(value, int)
-                prefix = 'int_'
+                prefix = type(value).__name__ + '_'
             self.literals[key] = prefix + str(len(self.literals))
         return self.literals[key]
 
@@ -2016,6 +2011,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def visit_float_expr(self, expr: FloatExpr) -> Value:
         return self.load_static_float(expr.value)
 
+    def visit_complex_expr(self, expr: ComplexExpr) -> Value:
+        return self.load_static_complex(expr.value)
+
     def visit_bytes_expr(self, expr: BytesExpr) -> Value:
         value = bytes(expr.value, 'utf8').decode('unicode-escape').encode('raw-unicode-escape')
         return self.load_static_bytes(value)
@@ -3550,9 +3548,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def visit_await_expr(self, o: AwaitExpr) -> Value:
         self.bail("await is unimplemented", o.line)
 
-    def visit_complex_expr(self, o: ComplexExpr) -> Value:
-        self.bail("complex literals are unimplemented", o.line)
-
     def visit_star_expr(self, o: StarExpr) -> Value:
         self.bail("Star expressions (in non call contexts) are unimplemented", o.line)
 
@@ -4329,6 +4324,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def load_static_bytes(self, value: bytes) -> Value:
         """Loads a static bytes value into a register."""
+        static_symbol = self.mapper.literal_static_name(value)
+        return self.add(LoadStatic(object_rprimitive, static_symbol, ann=value))
+
+    def load_static_complex(self, value: complex) -> Value:
+        """Loads a static complex value into a register."""
         static_symbol = self.mapper.literal_static_name(value)
         return self.add(LoadStatic(object_rprimitive, static_symbol, ann=value))
 
