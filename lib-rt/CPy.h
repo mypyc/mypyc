@@ -51,7 +51,7 @@ static inline void CPy_FixupTraitVtable(CPyVTableItem *vtable, int count) {
     }
 }
 
-static inline bool _CPy_IsSafeMetaClass(PyTypeObject *metaclass) {
+static bool _CPy_IsSafeMetaClass(PyTypeObject *metaclass) {
     // mypyc classes can't work with metaclasses in
     // general. Through some various nasty hacks we *do*
     // manage to work with TypingMeta and its friends.
@@ -80,9 +80,9 @@ static inline bool _CPy_IsSafeMetaClass(PyTypeObject *metaclass) {
 // This is super hacky and maybe we should suck it up and use PyType_FromSpec instead.
 // We allow bases to be NULL to represent just inheriting from object.
 // We don't support NULL bases and a non-type metaclass.
-static inline PyObject *CPyType_FromTemplate(PyTypeObject *template_,
-                                             PyObject *orig_bases,
-                                             PyObject *modname) {
+static PyObject *CPyType_FromTemplate(PyTypeObject *template_,
+                                      PyObject *orig_bases,
+                                      PyObject *modname) {
     PyHeapTypeObject *t = NULL;
     PyTypeObject *dummy_class = NULL;
     PyObject *name = NULL;
