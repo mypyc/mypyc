@@ -3079,7 +3079,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def try_finally_body(
             self, finally_block: BasicBlock, finally_body: GenFunc,
-            ret_reg: Optional[Value], old_exc: Value) -> Tuple[BasicBlock, FinallyNonlocalControl]:
+            ret_reg: Optional[Value], old_exc: Value) -> Tuple[BasicBlock,
+                                                               'FinallyNonlocalControl']:
         cleanup_block = BasicBlock()
         # Compile the finally block with the nonlocal control flow overridden to restore exc_info
         self.error_handlers.append(cleanup_block)
