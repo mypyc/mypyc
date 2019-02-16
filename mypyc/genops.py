@@ -1280,7 +1280,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         func_reg = None  # type: Optional[Value]
 
+        # We treat lambdas as always being nested because we we always generate
+        # a class for lambdas, no matter where they are. (It would probably also
+        # work to special case toplevel lambdas and generate a non-class function.)
         is_nested = fitem in self.nested_fitems or isinstance(fitem, LambdaExpr)
+
         contains_nested = fitem in self.encapsulating_fitems
         is_decorated = fitem in self.fdefs_to_decorators
         self.enter(FuncInfo(fitem, name, class_name, self.gen_func_ns(),
