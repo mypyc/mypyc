@@ -8,23 +8,6 @@ cache:
 
 matrix:
   include:
-    - os: linux
-      sudo: false
-      python: "3.5"
-      env: PYTHON_DEBUG_BUILD=0
-    - os: linux
-      sudo: false
-      python: "3.6"
-      env: PYTHON_DEBUG_BUILD=0
-    - os: linux
-      sudo: false
-      python: "3.6"
-      env: PYTHON_DEBUG_BUILD=1
-    - os: linux
-      dist: xenial
-      sudo: required
-      python: "3.7"
-      env: PYTHON_DEBUG_BUILD=0
     - os: osx
       osx_image: xcode8.3
       language: generic
@@ -78,5 +61,7 @@ script: |
       pytest -n4 mypyc/test/test_run.py mypyc/test/test_external.py -k 'not test_self_type_check'
     fi
   elif [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
-    pytest -n4 mypyc
+    #pytest -n4 mypyc
+    python3 -c 'from distutils import sysconfig; print(sysconfig.get_config_vars())'
+
   fi
