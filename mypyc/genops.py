@@ -679,35 +679,33 @@ class GeneratorClass(ImplicitClass):
 # Infrastructure for special casing calls to builtin functions in a
 # programmatic way.  Most special cases should be handled using the
 # data driven "primitive ops" system, but certain operations require
-# special handling with nontrivial logic.
+# special handling that has access to the AST/IR directly and can make
+# decisions/optimizations based on it.
 #
-# An "early" special case is attempted before compiling the arguments
-# to the function while a "late" special case is attempted after.
-# Special case compilation functions can return None to indicate that
-# they failed and the construct should be compiled normally.
+# For example, we use specializers to statically emit the length of a
+# fixed length tuple and to emit optimized code for any/all calls with
+# generator comprehensions as the argument.
 #
-# Early special cases can operate on methods, as well, and are keyed on
-# the name and RType in that case.
+# Specalizers are attempted before compiling the arguments to the
+# function.  Specializers can return None to indicate that they failed
+# and the call should be compiled normally. Otherwise they should emit
+# code for the call and return a value containing the result.
+#
+# Specializers take three arguments: the IRBuilder, the CallExpr being
+# compiled, and the RefExpr that is the left hand side of the call.
+#
+# Specializers can operate on methods as well, and are keyed on the
+# name and RType in that case.
 Specializer = Callable[['IRBuilder', CallExpr, RefExpr], Optional[Value]]
-SpecializerWArgs = Callable[['IRBuilder', CallExpr, RefExpr, List[Value]], Optional[Value]]
 
 specializers = {}  # type: Dict[Tuple[str, Optional[RType]], Specializer]
-specializers_with_args = {}  # type: Dict[str, SpecializerWArgs]
 
 
 def specialize_function(
         name: str, typ: Optional[RType] = None) -> Callable[[Specializer], Specializer]:
-    """Decorator to register a function as implementing an "early" special case."""
+    """Decorator to register a function as being a specializer."""
     def wrapper(f: Specializer) -> Specializer:
         specializers[name, typ] = f
-        return f
-    return wrapper
-
-
-def specialize_function_with_args(name: str) -> Callable[[SpecializerWArgs], SpecializerWArgs]:
-    """Decorator to register a function as implementing a "late" special case."""
-    def wrapper(f: SpecializerWArgs) -> SpecializerWArgs:
-        specializers_with_args[name] = f
         return f
     return wrapper
 
@@ -2430,8 +2428,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # TODO: Allow special cases to have default args or named args. Currently they don't since
         # they check that everything in arg_kinds is ARG_POS.
 
-        # Check programmatic special cases that need to prevent the
-        # normal compilation of the arguments.
+        # If there is a specializer for this function, try calling it.
         if callee.fullname and (callee.fullname, None) in specializers:
             val = specializers[callee.fullname, None](self, expr, callee)
             if val is not None:
@@ -2439,13 +2436,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         # Gen the argument values
         arg_values = [self.accept(arg) for arg in expr.args]
-
-        # Check programmatic special cases that need to run after
-        # compiling the arguments.
-        if callee.fullname in specializers_with_args:
-            val = specializers_with_args[callee.fullname](self, expr, callee, arg_values)
-            if val is not None:
-                return val
 
         # Handle data-driven special-cased primitive call ops.
         if callee.fullname is not None and expr.arg_kinds == [ARG_POS] * len(arg_values):
@@ -2516,6 +2506,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         else:
             receiver_typ = self.node_type(callee.expr)
 
+            # If there is a specializer for this method name/type, try calling it.
             if (callee.name, receiver_typ) in specializers:
                 val = specializers[callee.name, receiver_typ](self, expr, callee)
                 if val is not None:
@@ -3536,6 +3527,27 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     # Builtin function special cases
 
+    @specialize_function('builtins.globals')
+    def translate_globals(self, expr: CallExpr, callee: RefExpr) -> Optional[Value]:
+        # Special case builtins.globals
+        if len(expr.args) == 0:
+            return self.load_globals_dict()
+        return None
+
+    @specialize_function('builtins.len')
+    def translate_len(
+            self, expr: CallExpr, callee: RefExpr) -> Optional[Value]:
+        # Special case builtins.len
+        if (len(expr.args) == 1
+                and expr.arg_kinds == [ARG_POS]):
+            expr_rtype = self.node_type(expr.args[0])
+            if isinstance(expr_rtype, RTuple):
+                # len() of fixed-length tuple can be trivially determined statically,
+                # though we still need to evaluate it.
+                self.accept(expr.args[0])
+                return self.add(LoadInt(len(expr_rtype.types)))
+        return None
+
     @specialize_function('builtins.any')
     def translate_any_call(self, expr: CallExpr, callee: RefExpr) -> Optional[Value]:
         if (len(expr.args) == 1
@@ -3611,26 +3623,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 else:
                     return None
             return res
-
-    @specialize_function_with_args('builtins.len')
-    def translate_len(
-            self, expr: CallExpr, callee: RefExpr, arg_values: List[Value]) -> Optional[Value]:
-        # Special case builtins.len
-        if (len(expr.args) == 1
-                and expr.arg_kinds == [ARG_POS]):
-            expr_rtype = arg_values[0].type
-            if isinstance(expr_rtype, RTuple):
-                # len() of fixed-length tuple can be trivially determined statically.
-                return self.add(LoadInt(len(expr_rtype.types)))
-        return None
-
-    @specialize_function_with_args('builtins.globals')
-    def translate_globals(
-            self, expr: CallExpr, callee: RefExpr, arg_values: List[Value]) -> Optional[Value]:
-        # Special case builtins.globals
-        if len(expr.args) == 0:
-            return self.load_globals_dict()
-        return None
 
     # Unimplemented constructs
     def visit_await_expr(self, o: AwaitExpr) -> Value:
