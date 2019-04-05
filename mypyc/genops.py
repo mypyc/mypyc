@@ -3620,6 +3620,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     # Special case for calling next() on a generator expression, an
     # idiom that shows up some in mypy.
+    #
+    # For example, next(x for x in l if x.id == 12, None) will
+    # generate code that searches l for an element where x.id == 12
+    # and produce the first such object, or None if no such element
+    # exists.
     @specialize_function('builtins.next')
     def translate_next_call(self, expr: CallExpr, callee: RefExpr) -> Optional[Value]:
         if not (expr.arg_kinds in ([ARG_POS], [ARG_POS, ARG_POS])
@@ -3636,14 +3641,17 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         exit_block = BasicBlock()
 
         def gen_inner_stmts() -> None:
-            # If we ever hit something inside, we're done! Congrats!
+            # next takes the first element of the generator, so if
+            # something gets produced, we are done.
             self.assign(retval, self.accept(gen.left_expr), gen.left_expr.line)
             self.goto(exit_block)
 
         loop_params = list(zip(gen.indices, gen.sequences, gen.condlists))
         self.comprehension_helper(loop_params, gen_inner_stmts, gen.line)
 
-        # Now we need the case for when nothing got hit:
+        # Now we need the case for when nothing got hit. If there was
+        # a default value, we produce it, and otherwise we raise
+        # StopIteration.
         if default_val:
             self.assign(retval, default_val, gen.left_expr.line)
             self.goto(exit_block)
