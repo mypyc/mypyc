@@ -182,9 +182,9 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
         emit_line()
         generate_new_for_class(cl, new_name, vtable_name, setup_name, emitter)
         emit_line()
-        generate_traverse_for_class(cl, traverse_name, emitter)
+        generate_traverse_for_class(cl, traverse_name, emitter, has_dict)
         emit_line()
-        generate_clear_for_class(cl, clear_name, emitter)
+        generate_clear_for_class(cl, clear_name, emitter, has_dict)
         emit_line()
         generate_dealloc_for_class(cl, dealloc_name, clear_name, emitter)
         emit_line()
@@ -464,7 +464,8 @@ def generate_new_for_class(cl: ClassIR,
 
 def generate_traverse_for_class(cl: ClassIR,
                                 func_name: str,
-                                emitter: Emitter) -> None:
+                                emitter: Emitter,
+                                has_dict: bool) -> None:
     """Emit function that performs cycle GC traversal of an instance."""
     emitter.emit_line('static int')
     emitter.emit_line('{}({} *self, visitproc visit, void *arg)'.format(
@@ -474,19 +475,36 @@ def generate_traverse_for_class(cl: ClassIR,
     for base in reversed(cl.base_mro):
         for attr, rtype in base.attributes.items():
             emitter.emit_gc_visit('self->{}'.format(emitter.attr(attr)), rtype)
+    if has_dict:
+        struct_name = cl.struct_name(emitter.names)
+        emitter.emit_gc_visit('*((PyObject **)((uintptr_t)self + sizeof({})))'.format(
+            struct_name), object_rprimitive)
+        emitter.emit_gc_visit(
+            '*((PyObject **)((uintptr_t)self + sizeof(PyObject *) + sizeof({})))'.format(
+                struct_name),
+            object_rprimitive)
     emitter.emit_line('return 0;')
     emitter.emit_line('}')
 
 
 def generate_clear_for_class(cl: ClassIR,
                              func_name: str,
-                             emitter: Emitter) -> None:
+                             emitter: Emitter,
+                             has_dict: bool) -> None:
     emitter.emit_line('static int')
     emitter.emit_line('{}({} *self)'.format(func_name, cl.struct_name(emitter.names)))
     emitter.emit_line('{')
     for base in reversed(cl.base_mro):
         for attr, rtype in base.attributes.items():
             emitter.emit_gc_clear('self->{}'.format(emitter.attr(attr)), rtype)
+    if has_dict:
+        struct_name = cl.struct_name(emitter.names)
+        emitter.emit_gc_clear('*((PyObject **)((uintptr_t)self + sizeof({})))'.format(
+            struct_name), object_rprimitive)
+        emitter.emit_gc_clear(
+            '*((PyObject **)((uintptr_t)self + sizeof(PyObject *) + sizeof({})))'.format(
+                struct_name),
+            object_rprimitive)
     emitter.emit_line('return 0;')
     emitter.emit_line('}')
 
