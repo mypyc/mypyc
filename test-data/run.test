@@ -3881,8 +3881,8 @@ def make_garbage(x: List[str]) -> None:
 
 [file base.py]
 class Base:
-    x: object
-    y: object
+    x = None  # type: object
+    y = None  # type: object
 
 [file driver.py]
 from native import make_garbage
