@@ -1315,15 +1315,16 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         if any(kind in (ARG_STAR, ARG_STAR2) for kind in kinds):
             self.error('Accepting *args or **kwargs is unimplemented', fitem.line)
 
-        # Disallow kwonly args appearing after optional ones, since we would miscompile
-        # the C API wrappers.
+        # Disallow required kwonly args appearing after optional ones,
+        # since we would miscompile the C API wrappers.
         seen_optional = False
         for kind in kinds:
             if kind in (ARG_OPT, ARG_NAMED_OPT):
                 seen_optional = True
             if kind == ARG_NAMED and seen_optional:
-                self.error('Keyword-only args that appear after optional args are unimplemented',
-                           fitem.line)
+                self.error(
+                    'Required keyword-only args that appear after optional args are unimplemented',
+                    fitem.line)
                 break
 
         if fitem.is_coroutine:
