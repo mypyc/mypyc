@@ -213,7 +213,7 @@ def specialize_parent_vtable(cls: ClassIR, parent: ClassIR) -> VTableEntries:
     for entry in parent.vtable_entries:
         if isinstance(entry, VTableMethod):
             # Find the original method corresponding to this vtable entry.
-            # (This may not be the method in the entry, if it was overloaded.)
+            # (This may not be the method in the entry, if it was overridden.)
             orig_parent_method = entry.cls.get_method(entry.name)
             assert orig_parent_method
             method_cls = cls.get_method_and_class(entry.name)
