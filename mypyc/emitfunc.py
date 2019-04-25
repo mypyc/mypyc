@@ -314,11 +314,8 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
         assert method is not None
 
         # Can we call the method directly, bypassing vtable?
-        is_direct = False
-        if not class_ir.is_trait:
-            if all(subc.get_method(name) is method
-                    for subc in class_ir.concrete_subclasses()):
-                is_direct = True
+        is_direct = all(subc.get_method(name) is method
+                for subc in class_ir.subclasses())
 
         # The first argument gets omitted for static methods and
         # turned into the class for class methods

@@ -459,37 +459,6 @@ assert test2() == 22
 d = D()
 assert d.f() == 22
 
-[case testDiamond]
-from mypy_extensions import trait
-
-@trait
-class Base:
-    def get_value(self) -> str:
-        return "Base"
-
-@trait
-class Trait(Base):
-    def get_value(self) -> str:
-        return "Trait"
-
-class Message(Base):
-    def show_message(self) -> None:
-        print("I am a " + self.get_value())
-
-class DerivedMessage(Message, Trait):
-    pass
-
-[file driver.py]
-from native import *
-a = Message()
-a.show_message()
-b = DerivedMessage()
-b.show_message()
-
-[out]
-I am a Base
-I am a Trait
-
 [case testSuper]
 from mypy_extensions import trait
 from typing import List
