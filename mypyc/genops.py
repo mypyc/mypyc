@@ -2734,7 +2734,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                        extend_op: OpDescription,
                        line: int
                        ) -> Value:
-        accepted_items = [(isinstance(item, StarExpr), self.accept(item)) for item in items]
+        accepted_items = []
+        for item in items:
+            if isinstance(item, StarExpr):
+                accepted_items.append((True, self.accept(item.expr)))
+            else:
+                accepted_items.append((False, self.accept(item)))
+
         result = None
         initial_items = []
         for starred, value in accepted_items:
@@ -3752,9 +3758,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     return None
             return res
 
-    def visit_star_expr(self, o: StarExpr) -> Value:
-        return self.accept(o.expr)
-
     # Unimplemented constructs
     def visit_await_expr(self, o: AwaitExpr) -> Value:
         self.bail("await is unimplemented", o.line)
@@ -3808,6 +3811,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def visit_cast_expr(self, o: CastExpr) -> Value:
         assert False, "CastExpr should have been handled in CallExpr"
+
+    def visit_star_expr(self, o: StarExpr) -> Value:
+        assert False, "should have been handled in Tuple/List/Set/DictExpr or CallExpr"
 
     # Helpers
 
