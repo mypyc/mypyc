@@ -949,6 +949,9 @@ static void CPy_AddTraceback(const char *filename, const char *funcname, int lin
                              PyObject *globals) {
 
     PyObject *exc, *val, *tb;
+    PyThreadState *thread_state = PyThreadState_GET();
+    PyFrameObject *frame_obj;
+
     // We need to save off the exception state because in 3.8,
     // PyFrame_New fails if there is an error set and it fails to look
     // up builtins in the globals. (_PyTraceback_Add documents that it
@@ -956,13 +959,12 @@ static void CPy_AddTraceback(const char *filename, const char *funcname, int lin
     // FS encoding, which could have a decoder in Python. We don't do
     // that so *that* doesn't apply to us.)
     PyErr_Fetch(&exc, &val, &tb);
-
     PyCodeObject *code_obj = CPy_CreateCodeObject(filename, funcname, line);
     if (code_obj == NULL) {
         goto error;
     }
-    PyThreadState *thread_state = PyThreadState_GET();
-    PyFrameObject *frame_obj = PyFrame_New(thread_state, code_obj, globals, 0);
+
+    frame_obj = PyFrame_New(thread_state, code_obj, globals, 0);
     if (frame_obj == NULL) {
         Py_DECREF(code_obj);
         goto error;
