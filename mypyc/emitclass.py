@@ -233,6 +233,10 @@ def setter_name(cl: ClassIR, attribute: str, names: NameGenerator) -> str:
     return names.private_name(cl.module_name, '{}_set{}'.format(cl.name, attribute))
 
 
+def attr_context_name(cl: ClassIR, attribute: str, names: NameGenerator) -> str:
+    return names.private_name(cl.module_name, '{}_attrcontext{}'.format(cl.name, attribute))
+
+
 def generate_object_struct(cl: ClassIR, emitter: Emitter) -> None:
     emitter.emit_lines('typedef struct {',
                        'PyObject_HEAD',
@@ -556,15 +560,24 @@ def generate_side_table_for_class(cl: ClassIR,
 
 def generate_getseter_declarations(cl: ClassIR, emitter: Emitter) -> None:
     if not cl.is_trait:
-        for attr in cl.attributes:
-            emitter.emit_line('static PyObject *')
-            emitter.emit_line('{}({} *self, void *closure);'.format(
-                getter_name(cl, attr, emitter.names),
-                cl.struct_name(emitter.names)))
-            emitter.emit_line('static int')
-            emitter.emit_line('{}({} *self, PyObject *value, void *closure);'.format(
-                setter_name(cl, attr, emitter.names),
-                cl.struct_name(emitter.names)))
+        for attr, rtype in cl.attributes.items():
+            if rtype._ctype == 'PyObject *':
+                emitter.emit_line('static struct getsetcontext {} = {{'.format(
+                    attr_context_name(cl, attr, emitter.names)))
+                emitter.emit_line('"{}", offsetof({}, {})'.format(attr,
+                    cl.struct_name(emitter.names), emitter.attr(attr)))
+                emitter.emit_line('};')
+            else:
+                emitter.emit_line('static PyObject *')
+                emitter.emit_line('{}({} *self, void *closure);'.format(
+                    getter_name(cl, attr, emitter.names),
+                    cl.struct_name(emitter.names)))
+
+            if not is_same_type(rtype, object_rprimitive):
+                emitter.emit_line('static int')
+                emitter.emit_line('{}({} *self, PyObject *value, void *closure);'.format(
+                    setter_name(cl, attr, emitter.names),
+                    cl.struct_name(emitter.names)))
     for prop in cl.properties:
         emitter.emit_line('static PyObject *')
         emitter.emit_line('{}({} *self, void *closure);'.format(
@@ -577,11 +590,18 @@ def generate_getseters_table(cl: ClassIR,
                              emitter: Emitter) -> None:
     emitter.emit_line('static PyGetSetDef {}[] = {{'.format(name))
     if not cl.is_trait:
-        for attr in cl.attributes:
+        for attr, rtype in cl.attributes.items():
+            getter = getter_name(cl, attr, emitter.names)
+            setter = setter_name(cl, attr, emitter.names)
+            context = 'NULL'
+            if rtype._ctype == 'PyObject *':
+                getter = '_CPy_GetAttrImpl'
+                context = '(void*)&{}'.format(attr_context_name(cl, attr, emitter.names))
+                if is_same_type(rtype, object_rprimitive):
+                    setter = '_CPy_SetAttrImpl'
             emitter.emit_line('{{"{}",'.format(attr))
-            emitter.emit_line(' (getter){}, (setter){},'.format(
-                getter_name(cl, attr, emitter.names), setter_name(cl, attr, emitter.names)))
-            emitter.emit_line(' NULL, NULL},')
+            emitter.emit_line(' (getter){}, (setter){},'.format(getter, setter))
+            emitter.emit_line(' NULL, {} }},'.format(context))
     for prop in cl.properties:
         emitter.emit_line('{{"{}",'.format(prop))
         emitter.emit_line(' (getter){},'.format(getter_name(cl, prop, emitter.names)))

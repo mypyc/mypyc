@@ -1148,6 +1148,46 @@ static int CPy_YieldFromErrorHandle(PyObject *iter, PyObject **outp)
     return 2;
 }
 
+struct getsetcontext {
+    const char * gs_attrname;
+    size_t offset;
+};
+
+
+static PyObject *
+_CPy_GetAttrImpl(PyObject *self, void *closure)
+{
+    struct getsetcontext* details = ((struct getsetcontext*)closure);
+    char* addr = (char*)self;
+    addr += details->offset;
+    PyObject* val = *(PyObject**)addr;
+    if (val == NULL) {
+        PyErr_Format(PyExc_AttributeError,
+            "attribute '%s' of '%s' undefined", details->gs_attrname, Py_TYPE(self)->tp_name);
+        return NULL;
+    }
+    CPy_INCREF(val);
+    return val;
+}
+
+static int
+_CPy_SetAttrImpl(PyObject *self, PyObject* value, void *closure)
+{
+    struct getsetcontext* details = ((struct getsetcontext*)closure);
+    char* addr = (char*)self;
+    addr += details->offset;
+    PyObject* oldVal = *(PyObject**)addr;
+    if (oldVal != NULL) {
+        CPy_DECREF(oldVal);
+    }
+    if (value != NULL) {
+        CPy_INCREF(value);
+        *(PyObject**)addr = value;
+    } else {
+        *(PyObject**)addr = NULL;
+    }
+    return 0;
+}
 
 #ifdef __cplusplus
 }
