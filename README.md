@@ -107,9 +107,10 @@ These are the current planned major milestones:
 7a. More feature/compatability work. (100% compatability is distinctly
     an anti-goal, but more than we have now is a good idea.)
 
-7b. Support compiling some other prominent Python tool.
-    (Black, maybe? Let us know if you maintain a Python tool
-    or library and are interested in working with us on this!)
+7b. Support compiling Black, which is a prominent tool that could benefit
+    and has maintainer buy-in.
+    (Let us know if you maintain a another Python tool or library and are
+     interested in working with us on this!)
 
 7c. More optimization! Code size reductions in particular are likely to
     be valuable and will speed up mypyc compilation.
