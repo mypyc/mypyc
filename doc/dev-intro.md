@@ -79,7 +79,7 @@ can contain arbitrary objects.
 
 The generated code uses various helpers defined in
 `mypyc/lib-rt/CPy.h`.  The header must only contain static functions,
-since we it is included in many files. `mypyc/lib-rt/CPy.c` contains
+since it is included in many files. `mypyc/lib-rt/CPy.c` contains
 definitions that must only occur once, but really most of `CPy.h`
 should be moved into it.
 
