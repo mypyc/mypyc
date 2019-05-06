@@ -210,7 +210,7 @@ CPyTagged CPyTagged_Multiply(CPyTagged left, CPyTagged right) {
     // TODO: Consider using some clang/gcc extension
     if (CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right)) {
         if (!CPyTagged_IsMultiplyOverflow(left, right)) {
-            return left * CPyTagged_ShortAsLongLong(right);
+            return left * CPyTagged_ShortAsSsize_t(right);
         }
     }
     PyObject *left_obj = CPyTagged_AsObject(left);
@@ -229,8 +229,8 @@ CPyTagged CPyTagged_FloorDivide(CPyTagged left, CPyTagged right) {
         && !CPyTagged_MaybeFloorDivideOverflow(left, right)) {
         if (right == 0)
             abort();
-        CPySignedInt result = ((CPySignedInt)left / CPyTagged_ShortAsLongLong(right)) & ~1;
-        if (((CPySignedInt)left < 0) != (((CPySignedInt)right) < 0)) {
+        Py_ssize_t result = ((Py_ssize_t)left / CPyTagged_ShortAsSsize_t(right)) & ~1;
+        if (((Py_ssize_t)left < 0) != (((Py_ssize_t)right) < 0)) {
             if (result / 2 * right != left) {
                 // Round down
                 result -= 2;
@@ -252,8 +252,8 @@ CPyTagged CPyTagged_FloorDivide(CPyTagged left, CPyTagged right) {
 CPyTagged CPyTagged_Remainder(CPyTagged left, CPyTagged right) {
     if (CPyTagged_CheckShort(left) && CPyTagged_CheckShort(right)
         && !CPyTagged_MaybeRemainderOverflow(left, right)) {
-        CPySignedInt result = (CPySignedInt)left % (CPySignedInt)right;
-        if (((CPySignedInt)right < 0) != ((CPySignedInt)left < 0) && result != 0) {
+        Py_ssize_t result = (Py_ssize_t)left % (Py_ssize_t)right;
+        if (((Py_ssize_t)right < 0) != ((Py_ssize_t)left < 0) && result != 0) {
             result += right;
         }
         return result;
@@ -270,7 +270,7 @@ CPyTagged CPyTagged_Remainder(CPyTagged left, CPyTagged right) {
 }
 
 PyObject *CPyList_GetItemShort(PyObject *list, CPyTagged index) {
-    long long n = CPyTagged_ShortAsLongLong(index);
+    Py_ssize_t n = CPyTagged_ShortAsSsize_t(index);
     Py_ssize_t size = PyList_GET_SIZE(list);
     if (n >= 0) {
         if (n >= size) {
@@ -291,7 +291,7 @@ PyObject *CPyList_GetItemShort(PyObject *list, CPyTagged index) {
 
 PyObject *CPyList_GetItem(PyObject *list, CPyTagged index) {
     if (CPyTagged_CheckShort(index)) {
-        long long n = CPyTagged_ShortAsLongLong(index);
+        Py_ssize_t n = CPyTagged_ShortAsSsize_t(index);
         Py_ssize_t size = PyList_GET_SIZE(list);
         if (n >= 0) {
             if (n >= size) {
@@ -316,7 +316,7 @@ PyObject *CPyList_GetItem(PyObject *list, CPyTagged index) {
 
 bool CPyList_SetItem(PyObject *list, CPyTagged index, PyObject *value) {
     if (CPyTagged_CheckShort(index)) {
-        long long n = CPyTagged_ShortAsLongLong(index);
+        Py_ssize_t n = CPyTagged_ShortAsSsize_t(index);
         Py_ssize_t size = PyList_GET_SIZE(list);
         if (n >= 0) {
             if (n >= size) {
@@ -343,7 +343,7 @@ bool CPyList_SetItem(PyObject *list, CPyTagged index, PyObject *value) {
 
 PyObject *CPyList_Pop(PyObject *obj, CPyTagged index) {
     if (CPyTagged_CheckShort(index)) {
-        long long n = CPyTagged_ShortAsLongLong(index);
+        Py_ssize_t n = CPyTagged_ShortAsSsize_t(index);
         return list_pop_impl((PyListObject *)obj, n);
     } else {
         PyErr_SetString(PyExc_IndexError, "pop index out of range");
@@ -364,7 +364,7 @@ bool CPySet_Remove(PyObject *set, PyObject *key) {
 
 PyObject *CPySequenceTuple_GetItem(PyObject *tuple, CPyTagged index) {
     if (CPyTagged_CheckShort(index)) {
-        long long n = CPyTagged_ShortAsLongLong(index);
+        Py_ssize_t n = CPyTagged_ShortAsSsize_t(index);
         Py_ssize_t size = PyTuple_GET_SIZE(tuple);
         if (n >= 0) {
             if (n >= size) {
