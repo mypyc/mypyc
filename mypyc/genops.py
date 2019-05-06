@@ -102,7 +102,7 @@ from mypyc.sametype import is_same_type, is_same_method_signature
 from mypyc.crash import catch_errors
 
 GenFunc = Callable[[], None]
-KeyDatum = Tuple[Optional[Value], Value]
+DictEntry = Tuple[Optional[Value], Value]
 
 
 class UnsupportedException(Exception):
@@ -2340,7 +2340,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         assert arg_names is not None
 
         pos_arg_values = []
-        kw_arg_key_value_pairs = []  # type: List[KeyDatum]
+        kw_arg_key_value_pairs = []  # type: List[DictEntry]
         star_arg_values = []
         for value, kind, name in zip(arg_values, arg_kinds, arg_names):
             if kind == ARG_POS:
@@ -3949,7 +3949,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def box_expr(self, expr: Expression) -> Value:
         return self.box(self.accept(expr))
 
-    def make_dict(self, key_value_pairs: List[KeyDatum], line: int) -> Value:
+    def make_dict(self, key_value_pairs: Sequence[DictEntry], line: int) -> Value:
         dict_reg = self.add(PrimitiveOp([], new_dict_op, line))
         for key, value in key_value_pairs:
             if key is not None:
