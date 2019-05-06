@@ -516,12 +516,6 @@ def prepare_class_def(path: str, module_name: str, cdef: ClassDef,
     for base in bases:
         base.children.append(ir)
 
-    # We need to know whether any children of a class have a __bool__
-    # method in order to know whether we can assume it is always true.
-    if ir.has_method('__bool__'):
-        for base in ir.mro:
-            base.has_bool = True
-
 
 class FuncInfo(object):
     """Contains information about functions as they are generated."""
@@ -2030,12 +2024,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         class_ir = ltype.class_ir
         # Check whether any subclasses of the operand redefines __eq__.
-        cmp_varies_at_runtime = False
-        for cmp_op in ('__eq__', '__ne__'):
-            method = class_ir.get_method(cmp_op)
-            if any(subc.get_method(cmp_op) is not method
-                    for subc in class_ir.concrete_subclasses()):
-                cmp_varies_at_runtime = True
+        cmp_varies_at_runtime = not class_ir.is_method_final('__eq__') \
+            or not class_ir.is_method_final('__ne__')
 
         if cmp_varies_at_runtime:
             # We might need to call left.__eq__(right) or right.__eq__(left)
@@ -2929,10 +2919,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 is_none = self.binary_op(value, self.none_object(), 'is not', value.line)
                 branch = Branch(is_none, true, false, Branch.BOOL_EXPR)
                 self.add(branch)
-                if isinstance(value_type, RInstance) and not value_type.class_ir.has_bool:
-                    # Optional[X] where X is always truthy
-                    pass
-                else:
+                always_truthy = False
+                if isinstance(value_type, RInstance):
+                    # check whether X.__bool__ is always just the default (object.__bool__)
+                    if not value_type.class_ir.has_method('__bool__') and \
+                            value_type.class_ir.is_method_final('__bool__'):
+                        always_truthy = True
+
+                if not always_truthy:
                     # Optional[X] where X may be falsey and requires a check
                     branch.true = self.new_block()
                     # unbox_or_cast instead of coerce because we want the
