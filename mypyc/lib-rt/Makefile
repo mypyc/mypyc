@@ -17,11 +17,14 @@ LDFLAGS += $(shell $(PYTHONCONFIG) --ldflags)
 test_capi.o: test_capi.cc CPy.h pythonsupport.h mypyc_util.h Makefile ../test/test_external.py
 	c++ -c -o test_capi.o $(CFLAGS) test_capi.cc
 
-test_capi: test_capi.o
-	c++ -o test_capi test_capi.o ../../external/googletest/make/gtest-all.o $(LDFLAGS)
+test_capi: test_capi.o CPy.o
+	c++ -o test_capi test_capi.o CPy.o ../../external/googletest/make/gtest-all.o $(LDFLAGS)
+
+CPy.o: pythonsupport.h mypyc_util.h 
+	c++ CPy.c -c -o CPy.o $(CFLAGS)
 
 test: test_capi
 	./test_capi --gtest_print_time=0
 
 clean:
-	rm -f test_capi test_capi.o
+	rm -f test_capi test_capi.o CPy.o
