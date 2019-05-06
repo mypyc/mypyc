@@ -387,14 +387,6 @@ static inline PyObject *CPyList_PopLast(PyObject *obj) {
 }
 
 PyObject *CPyList_Pop(PyObject *obj, CPyTagged index);
-    if (CPyTagged_CheckShort(index)) {
-        Py_ssize_t n = CPyTagged_ShortAsSsize_t(index);
-        return list_pop_impl((PyListObject *)obj, n);
-    } else {
-        PyErr_SetString(PyExc_IndexError, "pop index out of range");
-        return NULL;
-    }
-}
 
 static CPyTagged CPyList_Count(PyObject *obj, PyObject *value)
 {
