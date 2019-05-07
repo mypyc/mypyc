@@ -45,7 +45,7 @@ def generate_wrapper_function(fn: FuncIR, emitter: Emitter) -> None:
 
     reordered_args = required_pos + optional_pos + optional_kwonly + required_kwonly
 
-    arg_names = ''.join('"{}", '.format(arg.name) for arg in real_args)
+    arg_names = ''.join('"{}", '.format(arg.name) for arg in reordered_args)
     emitter.emit_line('static char *kwlist[] = {{{}0}};'.format(arg_names))
     for arg in real_args:
         emitter.emit_line('PyObject *obj_{}{};'.format(
@@ -62,7 +62,7 @@ def generate_wrapper_function(fn: FuncIR, emitter: Emitter) -> None:
         main_format += '@' + 'O' * len(required_kwonly)
 
     arg_format = '{}:{}'.format(main_format, fn.name)
-    arg_ptrs = ''.join(', &obj_{}'.format(arg.name) for arg in real_args)
+    arg_ptrs = ''.join(', &obj_{}'.format(arg.name) for arg in reordered_args)
     emitter.emit_lines(
         'if (!CPyArg_ParseTupleAndKeywords(args, kw, "{}", kwlist{})) {{'.format(
             arg_format, arg_ptrs),

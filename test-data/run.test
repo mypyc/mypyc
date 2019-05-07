@@ -3971,7 +3971,7 @@ def kwonly1(x: int = 0, *, y: int) -> Tuple[int, int]:
 def kwonly2(*, x: int = 0, y: int) -> Tuple[int, int]:
     return x, y
 
-def kwonly3(a: int, b: int = 0, *, x: int = 1, y: int) -> Tuple[int, int, int, int]:
+def kwonly3(a: int, b: int = 0, *, y: int, x: int = 1) -> Tuple[int, int, int, int]:
     return a, b, x, y
 
 [file testutil.py]
