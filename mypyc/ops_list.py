@@ -28,12 +28,13 @@ func_op(
 
 
 def emit_new(emitter: EmitterInterface, args: List[str], dest: str) -> None:
-    # TODO: This would be better split into multiple smaller ops.
-    emitter.emit_line('%s = PyList_New(%d); ' % (dest, len(args)))
-    emitter.emit_line('if (likely(%s != NULL)) {' % dest)
-    for i, arg in enumerate(args):
-        emitter.emit_line('PyList_SET_ITEM(%s, %s, %s);' % (dest, i, arg))
-    emitter.emit_line('}')
+    if args:
+        fmt = ''.join(['O' for arg in args])
+        values = ', '.join(args)
+        emitter.emit_line('%s = Py_BuildValue("[%s]", %s); ' %
+                          (dest, fmt, values))
+    else:
+        emitter.emit_line('%s = PyList_New(%d); ' % (dest, 0))
 
 
 new_list_op = custom_op(arg_types=[object_rprimitive],
