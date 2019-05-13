@@ -3968,11 +3968,15 @@ from typing import Tuple
 
 def kwonly1(x: int = 0, *, y: int) -> Tuple[int, int]:
     return x, y
+
 def kwonly2(*, x: int = 0, y: int) -> Tuple[int, int]:
     return x, y
 
 def kwonly3(a: int, b: int = 0, *, y: int, x: int = 1) -> Tuple[int, int, int, int]:
     return a, b, x, y
+
+def kwonly4(*, x: int, y: int) -> Tuple[int, int]:
+    return x, y
 
 [file testutil.py]
 # TODO: This should go into some general mypyc test support lib (along
@@ -3991,7 +3995,7 @@ def assertRaises(typ: type, msg: str = '') -> Iterator[None]:
         assert False, "Expected {} but got no exception".format(typ.__name__)
 
 [file driver.py]
-from native import kwonly1, kwonly2, kwonly3
+from native import kwonly1, kwonly2, kwonly3, kwonly4
 from testutil import assertRaises
 
 assert kwonly1(10, y=20) == (10, 20)
@@ -4025,3 +4029,13 @@ with assertRaises(TypeError, "missing required argument 'a'"):
     kwonly3(b=30, x=40, y=20)
 with assertRaises(TypeError, "missing required keyword-only argument 'y'"):
     kwonly3(10)
+
+assert kwonly4(x=1, y=2) == (1, 2)
+assert kwonly4(y=2, x=1) == (1, 2)
+
+with assertRaises(TypeError, "missing required keyword-only argument 'y'"):
+    kwonly4(x=1)
+with assertRaises(TypeError, "missing required keyword-only argument 'x'"):
+    kwonly4(y=1)
+with assertRaises(TypeError, "missing required keyword-only argument 'x'"):
+    kwonly4()
