@@ -2024,8 +2024,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         class_ir = ltype.class_ir
         # Check whether any subclasses of the operand redefines __eq__.
-        cmp_varies_at_runtime = not class_ir.is_method_final('__eq__') \
-            or not class_ir.is_method_final('__ne__')
+        cmp_varies_at_runtime = (not class_ir.is_method_final('__eq__')
+            or not class_ir.is_method_final('__ne__'))
 
         if cmp_varies_at_runtime:
             # We might need to call left.__eq__(right) or right.__eq__(left)
@@ -2922,8 +2922,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 always_truthy = False
                 if isinstance(value_type, RInstance):
                     # check whether X.__bool__ is always just the default (object.__bool__)
-                    if not value_type.class_ir.has_method('__bool__') and \
-                            value_type.class_ir.is_method_final('__bool__'):
+                    if (not value_type.class_ir.has_method('__bool__') and
+                            value_type.class_ir.is_method_final('__bool__')):
                         always_truthy = True
 
                 if not always_truthy:
