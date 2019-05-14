@@ -2922,8 +2922,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 always_truthy = False
                 if isinstance(value_type, RInstance):
                     # check whether X.__bool__ is always just the default (object.__bool__)
-                    if (not value_type.class_ir.has_method('__bool__') and
-                            value_type.class_ir.is_method_final('__bool__')):
+                    if (not value_type.class_ir.has_method('__bool__')
+                            and value_type.class_ir.is_method_final('__bool__')):
                         always_truthy = True
 
                 if not always_truthy:
