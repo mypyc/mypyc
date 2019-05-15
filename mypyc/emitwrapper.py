@@ -21,6 +21,22 @@ def wrapper_function_header(fn: FuncIR, names: NameGenerator) -> str:
         name=fn.cname(names))
 
 
+def make_format_string(func_name: str, groups: List[List[RuntimeArg]]) -> str:
+    # Construct the format string. Each group requires the previous
+    # groups delimiters to be present first.
+    main_format = ''
+    if groups[ARG_STAR] or groups[ARG_STAR2]:
+        main_format += '%'
+    main_format += 'O' * len(groups[ARG_POS])
+    if groups[ARG_OPT] or groups[ARG_NAMED_OPT] or groups[ARG_NAMED]:
+        main_format += '|' + 'O' * len(groups[ARG_OPT])
+    if groups[ARG_NAMED_OPT] or groups[ARG_NAMED]:
+        main_format += '$' + 'O' * len(groups[ARG_NAMED_OPT])
+    if groups[ARG_NAMED]:
+        main_format += '@' + 'O' * len(groups[ARG_NAMED])
+    return '{}:{}'.format(main_format, func_name)
+
+
 def generate_wrapper_function(fn: FuncIR, emitter: Emitter) -> None:
     """Generates a CPython-compatible wrapper function for a native function.
 
@@ -38,14 +54,8 @@ def generate_wrapper_function(fn: FuncIR, emitter: Emitter) -> None:
     # Need to order args as: required, optional, kwonly optional, kwonly required
     # This is because CPyArg_ParseTupleAndKeywords format string requires
     # them grouped in that way.
-    required_pos = [arg for arg in real_args if arg.kind == ARG_POS]
-    optional_pos = [arg for arg in real_args if arg.kind == ARG_OPT]
-    optional_kwonly = [arg for arg in real_args if arg.kind == ARG_NAMED_OPT]
-    required_kwonly = [arg for arg in real_args if arg.kind == ARG_NAMED]
-    star_args = next((arg for arg in real_args if arg.kind == ARG_STAR), None)
-    star2_args = next((arg for arg in real_args if arg.kind == ARG_STAR2), None)
-
-    reordered_args = required_pos + optional_pos + optional_kwonly + required_kwonly
+    groups = [[arg for arg in real_args if arg.kind == k] for k in range(ARG_NAMED_OPT + 1)]
+    reordered_args = groups[ARG_POS] + groups[ARG_OPT] + groups[ARG_NAMED_OPT] + groups[ARG_NAMED]
 
     arg_names = ''.join('"{}", '.format(arg.name) for arg in reordered_args)
     emitter.emit_line('static char *kwlist[] = {{{}0}};'.format(arg_names))
@@ -53,48 +63,22 @@ def generate_wrapper_function(fn: FuncIR, emitter: Emitter) -> None:
         emitter.emit_line('PyObject *obj_{}{};'.format(
                           arg.name, ' = NULL' if arg.optional else ''))
 
-    # Construct the format string. Each group requires the previous
-    # groups delimiters to be present first.
-    main_format = ''
-    if star_args or star2_args:
-        main_format += '%'
-    main_format += 'O' * len(required_pos)
-    if optional_pos or optional_kwonly or required_kwonly:
-        main_format += '|' + 'O' * len(optional_pos)
-    if optional_kwonly or required_kwonly:
-        main_format += '$' + 'O' * len(optional_kwonly)
-    if required_kwonly:
-        main_format += '@' + 'O' * len(required_kwonly)
+    cleanups = ['CPy_DECREF(obj_{});'.format(arg.name)
+                for arg in groups[ARG_STAR] + groups[ARG_STAR2]]
 
-    cleanups = []
-    arg_ptrs = ''
-    if star_args or star2_args:
-        arg_ptrs += ', &obj_{}'.format(star_args.name) if star_args else ', NULL'
-        arg_ptrs += ', &obj_{}'.format(star2_args.name) if star2_args else ', NULL'
-        if star_args:
-            cleanups.append('CPy_DECREF(obj_{});'.format(star_args.name))
-        if star2_args:
-            cleanups.append('CPy_DECREF(obj_{});'.format(star2_args.name))
-        error_code = 'goto fail;'
-    else:
-        error_code = 'return NULL;'
+    arg_ptrs = []  # type: List[str]
+    if groups[ARG_STAR] or groups[ARG_STAR2]:
+        arg_ptrs += ['&obj_{}'.format(groups[ARG_STAR][0].name) if groups[ARG_STAR] else 'NULL']
+        arg_ptrs += ['&obj_{}'.format(groups[ARG_STAR2][0].name) if groups[ARG_STAR2] else 'NULL']
+    arg_ptrs += ['&obj_{}'.format(arg.name) for arg in reordered_args]
 
-    arg_ptrs += ''.join(', &obj_{}'.format(arg.name) for arg in reordered_args)
-
-    arg_format = '{}:{}'.format(main_format, fn.name)
     emitter.emit_lines(
         'if (!CPyArg_ParseTupleAndKeywords(args, kw, "{}", kwlist{})) {{'.format(
-            arg_format, arg_ptrs),
+            make_format_string(fn.name, groups), ''.join(', ' + n for n in arg_ptrs)),
         'return NULL;',
         '}')
-    generate_wrapper_core(fn, emitter, optional_pos + optional_kwonly,
-                          cleanups=cleanups,
-                          error_code=error_code)
-
-    if star_args or star2_args:
-        emitter.emit_label('fail')
-        emitter.emit_lines(*cleanups)
-        emitter.emit_lines('return NULL;')
+    generate_wrapper_core(fn, emitter, groups[ARG_OPT] + groups[ARG_NAMED_OPT],
+                          cleanups=cleanups)
 
     emitter.emit_line('}')
 
@@ -216,14 +200,15 @@ def generate_bool_wrapper(cl: ClassIR, fn: FuncIR, emitter: Emitter) -> str:
 def generate_wrapper_core(fn: FuncIR, emitter: Emitter,
                           optional_args: List[RuntimeArg] = [],
                           arg_names: Optional[List[str]] = None,
-                          cleanups: Optional[List[str]] = None,
-                          error_code: str = 'return NULL;') -> None:
+                          cleanups: Optional[List[str]] = None) -> None:
     """Generates the core part of a wrapper function for a native function.
     This expects each argument as a PyObject * named obj_{arg} as a precondition.
     It converts the PyObject *s to the necessary types, checking and unboxing if necessary,
     makes the call, then boxes the result if necessary and returns it.
     """
     cleanups = cleanups or []
+    error_code = 'return NULL;' if not cleanups else 'goto fail;'
+
     arg_names = arg_names or [arg.name for arg in fn.args]
     for arg_name, arg in zip(arg_names, fn.args):
         # Suppress the argument check for *args/**kwargs, since we know it must be right.
@@ -248,6 +233,11 @@ def generate_wrapper_core(fn: FuncIR, emitter: Emitter,
                                                     fn.cname(emitter.names),
                                                     native_args))
         # TODO: Tracebacks?
+
+    if cleanups:
+        emitter.emit_label('fail')
+        emitter.emit_lines(*cleanups)
+        emitter.emit_lines('return NULL;')
 
 
 def generate_arg_check(name: str, typ: RType, emitter: Emitter,
