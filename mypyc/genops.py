@@ -4660,9 +4660,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                   arg_names: Sequence[Optional[str]],
                                   sig: FuncSignature,
                                   line: int) -> List[Optional[Value]]:
+        """Prepare arguments for a native call.
+
+        Given args/kinds/names and a target signature for a native call, map
+        keyword arguments to their appropriate place in the argument list and
+        and package arguments that will go into *args/**kwargs into a tuple/dict.
+        """
         # TODO: missing_args_to_error_values and coerce_native_call_args should just
-        # be merged into this. Leaving it to a later PR because it will cause a bunch
-        # of genops test churn.
+        # be merged into this. Leaving it to a later PR because it is a bunch of churn.
 
         sig_arg_kinds = [arg.kind for arg in sig.args]
         sig_arg_names = [arg.name for arg in sig.args]
@@ -4679,8 +4684,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         for idx, lst in enumerate(formal_to_actual):
             output_arg = None
             if sig_arg_kinds[idx] == ARG_STAR:
-                pos_args_list = self.primitive_op(new_list_op, [args[i] for i in lst], line)
-                output_arg = self.primitive_op(list_tuple_op, [pos_args_list], line)
+                output_arg = self.add(TupleSet([args[i] for i in lst], line))
             elif sig_arg_kinds[idx] == ARG_STAR2:
                 dict_entries = [(self.load_static_unicode(cast(str, arg_names[i])), args[i])
                                 for i in lst]
