@@ -70,13 +70,6 @@ static const char *skipitem(const char **, va_list *, int);
 /* Handle cleanup of allocated memory in case of exception */
 
 static int
-cleanup_ref(PyObject *self, void *ptr)
-{
-    Py_XDECREF((PyObject *)ptr);
-    return 0;
-}
-
-static int
 cleanup_ptr(PyObject *self, void *ptr)
 {
     if (ptr) {
@@ -1169,7 +1162,6 @@ vgetargskeywords(PyObject *args, PyObject *kwargs, const char *format,
     PyObject *current_arg;
     freelistentry_t static_entries[STATIC_FREELIST_ENTRIES];
     freelist_t freelist;
-    int max_freelist_entries;
     int bound_pos_args;
 
     PyObject **p_args = NULL, **p_kwargs = NULL;
@@ -1214,9 +1206,8 @@ vgetargskeywords(PyObject *args, PyObject *kwargs, const char *format,
         format++;
     }
 
-    max_freelist_entries = len + !!p_args + !!p_kwargs;
-    if (max_freelist_entries > STATIC_FREELIST_ENTRIES) {
-        freelist.entries = PyMem_NEW(freelistentry_t, max_freelist_entries);
+    if (len > STATIC_FREELIST_ENTRIES) {
+        freelist.entries = PyMem_NEW(freelistentry_t, len);
         if (freelist.entries == NULL) {
             PyErr_NoMemory();
             return 0;
@@ -1433,7 +1424,6 @@ vgetargskeywords(PyObject *args, PyObject *kwargs, const char *format,
         if (!*p_args) {
             return cleanreturn(0, &freelist);
         }
-        addcleanup(*p_args, &freelist, cleanup_ref);
     }
 
     if (p_kwargs) {
@@ -1450,9 +1440,8 @@ vgetargskeywords(PyObject *args, PyObject *kwargs, const char *format,
 
         *p_kwargs = PyDict_New();
         if (!*p_kwargs) {
-            return cleanreturn(0, &freelist);
+            goto latefail;
         }
-        addcleanup(*p_kwargs, &freelist, cleanup_ref);
     }
 
     if (nkwargs > 0) {
@@ -1469,10 +1458,10 @@ vgetargskeywords(PyObject *args, PyObject *kwargs, const char *format,
                              (fname == NULL) ? "function" : fname,
                              (fname == NULL) ? "" : "()",
                              kwlist[i], i+1);
-                return cleanreturn(0, &freelist);
+                goto latefail;
             }
             else if (PyErr_Occurred()) {
-                return cleanreturn(0, &freelist);
+                goto latefail;
             }
         }
         /* make sure there are no extraneous keyword arguments */
@@ -1482,7 +1471,7 @@ vgetargskeywords(PyObject *args, PyObject *kwargs, const char *format,
             if (!PyUnicode_Check(key)) {
                 PyErr_SetString(PyExc_TypeError,
                                 "keywords must be strings");
-                return cleanreturn(0, &freelist);
+                goto latefail;
             }
             for (i = pos; i < len; i++) {
                 if (_PyUnicode_EqualToASCIIString(key, kwlist[i])) {
@@ -1498,10 +1487,10 @@ vgetargskeywords(PyObject *args, PyObject *kwargs, const char *format,
                                  key,
                                  (fname == NULL) ? "this function" : fname,
                                  (fname == NULL) ? "" : "()");
-                    return cleanreturn(0, &freelist);
+                    goto latefail;
                 } else {
                     if (PyDict_SetItem(*p_kwargs, key, value) < 0) {
-                        return cleanreturn(0, &freelist);
+                        goto latefail;
                     }
                 }
             }
@@ -1509,6 +1498,16 @@ vgetargskeywords(PyObject *args, PyObject *kwargs, const char *format,
     }
 
     return cleanreturn(1, &freelist);
+    /* Handle failures that have happened after we have tried to
+     * create *args and **kwargs, if they exist. */
+latefail:
+    if (p_args) {
+        Py_XDECREF(*p_args);
+    }
+    if (p_kwargs) {
+        Py_XDECREF(*p_kwargs);
+    }
+    return cleanreturn(0, &freelist);
 }
 
 
