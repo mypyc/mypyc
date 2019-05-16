@@ -5,6 +5,17 @@
  * working with *that*.
  * Another probably good idea is to strip out all the formatting stuff we don't need
  * and then add in custom stuff that we do need.
+ *
+ * DOCUMENTATION OF THE EXTENSIONS:
+ *  - Arguments given after a @ format specify are required keyword-only arguments.
+ *    The | and $ specifiers must both appear before @.
+ *  - If the first character of a format string is %, then the function can support
+ *    *args and **kwargs. On seeing a %, the parser will consume two arguments,
+ *    which should be pointers to variables to store the *args and **kwargs, respectively.
+ *    Either pointer can be NULL, in which case the function doesn't take that
+ *    variety of vararg.
+ *    Unlike most format specifiers, the caller takes ownership of these objects
+ *    and is responsible for decrefing them.
  */
 
 #include "Python.h"
