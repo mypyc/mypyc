@@ -9,8 +9,9 @@ from mypyc.common import (
 )
 from mypyc.ops import (
     Any, AssignmentTarget, Environment, BasicBlock, Value, Register, RType, RTuple, RInstance,
-    RUnion, RPrimitive, is_int_rprimitive, is_short_int_rprimitive,
-    is_float_rprimitive, is_bool_rprimitive,
+    RUnion, RPrimitive, RVoid,
+    RTypeVisitor,
+    is_float_rprimitive, is_bool_rprimitive, is_int_rprimitive, is_short_int_rprimitive,
     short_name, is_list_rprimitive, is_dict_rprimitive, is_set_rprimitive, is_tuple_rprimitive,
     is_none_rprimitive, is_object_rprimitive, object_rprimitive, is_str_rprimitive, ClassIR,
     FuncIR, FuncDecl, int_rprimitive, is_optional_type, optional_value_type, all_concrete_classes
@@ -36,7 +37,7 @@ class EmitterContext:
         self.temp_counter = 0
         self.names = NameGenerator(module_names)
 
-        # Map from tuple types to unique ids for them
+        # Cache from tuple types to unique ids for them
         self.tuple_ids = {}  # type: Dict[RTuple, str]
 
         # The map below is used for generating declarations and
@@ -166,23 +167,23 @@ class Emitter:
         in the same way python can just assign a Tuple[int, bool] to a Tuple[int, bool].
         """
         if rtuple not in self.context.tuple_ids:
-            self.context.tuple_ids[rtuple] = str(len(self.context.tuple_ids))
+            self.context.tuple_ids[rtuple] = rtuple.accept(TupleNameVisitor())
         return self.context.tuple_ids[rtuple]
 
     def tuple_struct_name(self, rtuple: RTuple) -> str:
-        # max c length is 31 chars, this should be enough entropy to be unique.
-        return 'tuple_def_' + self.tuple_unique_id(rtuple)
+        # Nominally the max c length is 31 chars, but I'm not honestly worried about this.
+        return 'tuple_' + self.tuple_unique_id(rtuple)
 
     def tuple_c_declaration(self, rtuple: RTuple) -> List[str]:
         result = ['struct {} {{'.format(self.tuple_struct_name(rtuple))]
         if len(rtuple.types) == 0:  # empty tuple
-            # The behavior of empty structs in C is compiler dependent so we add a dummy variable
-            # to avoid empty tuples being defined as empty structs.
+            # Empty tuples contain a flag so that they can still indicate
+            # error values.
             result.append('int empty_struct_error_flag;')
         else:
             i = 0
             for typ in rtuple.types:
-                result.append('    {}f{};'.format(self.ctype_spaced(typ), i))
+                result.append('{}f{};'.format(self.ctype_spaced(typ), i))
                 i += 1
         result.append('};')
         result.append('')
@@ -712,3 +713,28 @@ class Emitter:
             self.emit_line('Py_CLEAR({});'.format(target))
         else:
             assert False, 'emit_gc_clear() not implemented for %s' % repr(rtype)
+
+
+class TupleNameVisitor(RTypeVisitor[str]):
+    """Produce a tuple name based on the concrete representations of types."""
+
+    def visit_rinstance(self, t: RInstance) -> str:
+        return "O"
+
+    def visit_runion(self, t: RUnion) -> str:
+        return "O"
+
+    def visit_rprimitive(self, t: RPrimitive) -> str:
+        if t._ctype == 'CPyTagged':
+            return 'I'
+        elif t._ctype == 'char':
+            return 'C'
+        assert not t.is_unboxed, "{} unexpected unboxed type".format(t)
+        return 'O'
+
+    def visit_rtuple(self, t: RTuple) -> str:
+        parts = [elem.accept(self) for elem in t.types]
+        return 'T{}{}'.format(len(parts), ''.join(parts))
+
+    def visit_rvoid(self, t: RVoid) -> str:
+        assert False, "rvoid in tuple?"
