@@ -95,7 +95,7 @@ def f(x: int) -> int:
     return x*x
 
 [case testErrorOutput]
-# cmd: test.py foo/__init__.py foo/bar.py
+# cmd: test.py foo/__init__.py
 
 [file test.py]
 from typing import List, Any
@@ -175,6 +175,3 @@ a, *b, c = [1, 2, 3, 4]  # E: Unpacking with * is unimplemented
 
 [file foo/__init__.py]
 x = 20
-
-[file foo/bar.py]
-from . import x  # E: Relative imports are unimplemented
