@@ -2,6 +2,7 @@
 
 import sys
 
+import string
 from collections import OrderedDict
 from typing import List, Tuple, Dict, Iterable, Set, TypeVar, Optional
 
@@ -294,11 +295,20 @@ class ModuleGenerator:
                     '{} = PyBytes_FromStringAndSize({}, {});'.format(
                         symbol, *encode_bytes_as_c_string(literal))
                 )
+            elif isinstance(literal, tuple):
+                emitter.emit_line(
+                    '{} = PyTuple_Pack({}, {});'.format(
+                        symbol, len(literal), ', '.join(emitter.static_name(l, None) for l in literal))
+                )
             else:
                 assert False, ('Literals must be integers, floating point numbers, or strings,',
                                'but the provided literal is of type {}'.format(type(literal)))
             emitter.emit_lines('if (unlikely({} == NULL))'.format(symbol),
                                '    return -1;')
+            if isinstance(literal, str) and set(literal) < set(string.printable) and literal.isalnum():
+                emitter.emit_line(
+                    'PyUnicode_InternInPlace(&{});'.format(symbol)
+                )
             # Ints have an unboxed representation.
             if isinstance(literal, int):
                 emitter.emit_line(

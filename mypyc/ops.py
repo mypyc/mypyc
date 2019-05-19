@@ -1604,7 +1604,12 @@ class ClassIR:
         return sorted(concrete, key=lambda c: (len(c.children), c.name))
 
 
-LiteralsMap = Dict[Tuple[Type[object], Union[int, float, str, bytes, complex]], str]
+BaseLiteral = Union[int, float, complex, str, bytes]
+BaseLiteralKey = Tuple[Type[object], BaseLiteral]
+
+Literal = Union[BaseLiteral, Tuple[BaseLiteral, ...]]
+LiteralKey =Tuple[Type[object], Union[BaseLiteral, Tuple[str, ...]]]
+LiteralsMap = Dict[LiteralKey, str] # but ordered
 
 
 class ModuleIR:

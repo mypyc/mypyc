@@ -24,6 +24,7 @@ import sys
 import traceback
 import importlib.util
 import itertools
+import collections
 
 from mypy.build import Graph
 from mypy.nodes import (
@@ -67,7 +68,7 @@ from mypyc.ops import (
     tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, exc_rtuple,
     is_tuple_rprimitive,
     PrimitiveOp, ControlOp, LoadErrorValue, ERR_FALSE, OpDescription, RegisterOp,
-    is_object_rprimitive, LiteralsMap, FuncSignature, VTableAttr, VTableMethod, VTableEntries,
+    is_object_rprimitive, Literal, LiteralsMap, FuncSignature, VTableAttr, VTableMethod, VTableEntries,
     NAMESPACE_TYPE, RaiseStandardError, LoadErrorValue, NO_TRACEBACK_LINE_NO, FuncDecl,
     FUNC_NORMAL, FUNC_STATICMETHOD, FUNC_CLASSMETHOD,
     RUnion, is_optional_type, optional_value_type, is_short_int_rprimitive, all_concrete_classes
@@ -86,8 +87,9 @@ from mypyc.ops_misc import (
     none_op, none_object_op, true_op, false_op, iter_op, next_op, next_raw_op,
     check_stop_op, send_op, yield_from_except_op,
     py_getattr_op, py_setattr_op, py_delattr_op,
-    py_call_op, py_call_with_kwargs_op, py_method_call_op,
-    fast_isinstance_op, bool_op, new_slice_op,
+    py_call_op, py_fastcall_op, py_call_with_kwargs_op, py_fastcall_with_kwargs_op,
+    py_fastcall_with_kwnames_op,
+    py_method_call_op, fast_isinstance_op, bool_op, new_slice_op,
     type_op, pytype_from_template_op, import_op, get_module_dict_op,
     ellipsis_op, method_new_op, type_is_op,
 )
@@ -306,8 +308,8 @@ class Mapper:
     def __init__(self) -> None:
         self.type_to_ir = {}  # type: Dict[TypeInfo, ClassIR]
         self.func_to_decl = {}  # type: Dict[SymbolNode, FuncDecl]
-        # Maps integer, float, and unicode literals to a static name
-        self.literals = {}  # type: LiteralsMap
+        # Maps integer, float, unicode and tuple literals to a static name
+        self.literals = collections.OrderedDict()  # type: LiteralsMap
 
     def type_to_rtype(self, typ: Optional[Type]) -> RType:
         if typ is None:
@@ -404,9 +406,12 @@ class Mapper:
             ret = object_rprimitive
         return FuncSignature(args, ret)
 
-    def literal_static_name(self, value: Union[int, float, complex, str, bytes]) -> str:
+    def literal_static_name(self, value: Literal) -> str:
         # Include type to distinguish between 1 and 1.0, and so on.
-        key = (type(value), value)
+        if isinstance(value, tuple):
+            key = (tuple, tuple(self.literal_static_name(v) for v in value))  # type: LiteralKey
+        else:
+            key = (type(value), value)
         if key not in self.literals:
             if isinstance(value, str):
                 prefix = 'unicode_'
@@ -2374,33 +2379,43 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         """Use py_call_op or py_call_with_kwargs_op for function call."""
         # If all arguments are positional, we can use py_call_op.
         if (arg_kinds is None) or all(kind == ARG_POS for kind in arg_kinds):
-            return self.primitive_op(py_call_op, [function] + arg_values, line)
+            return self.primitive_op(py_fastcall_op, [function] + arg_values, line)
 
         # Otherwise fallback to py_call_with_kwargs_op.
         assert arg_names is not None
 
         pos_arg_values = []
-        kw_arg_key_value_pairs = []  # type: List[DictEntry]
+        kw_arg_key_value_pairs = []  # type: List[Tuple[Optional[str], Value]]
         star_arg_values = []
+        has_star2_args = False
         for value, kind, name in zip(arg_values, arg_kinds, arg_names):
             if kind == ARG_POS:
                 pos_arg_values.append(value)
             elif kind == ARG_NAMED:
                 assert name is not None
-                key = self.load_static_unicode(name)
-                kw_arg_key_value_pairs.append((key, value))
+                kw_arg_key_value_pairs.append((name, value))
             elif kind == ARG_STAR:
                 star_arg_values.append(value)
             elif kind == ARG_STAR2:
                 # NOTE: mypy currently only supports a single ** arg, but python supports multiple.
                 # This code supports multiple primarily to make the logic easier to follow.
                 kw_arg_key_value_pairs.append((None, value))
+                has_star2_args = True
             else:
                 assert False, ("Argument kind should not be possible:", kind)
 
-        if len(star_arg_values) == 0:
-            # We can directly construct a tuple if there are no star args.
-            pos_args_tuple = self.primitive_op(new_tuple_op, pos_arg_values, line)
+        if len(star_arg_values) == 0 and not has_star2_args:
+            kw_names_tuple = self.load_static_tuple(tuple(key for key, value in kw_arg_key_value_pairs if key is not None))
+            kw_arg_values = [value for key, value in kw_arg_key_value_pairs]
+
+            return self.primitive_op(
+                py_fastcall_with_kwnames_op, [function] + pos_arg_values + kw_arg_values + [kw_names_tuple], line)
+        elif len(star_arg_values) == 0:
+            kw_arg_key_value_pairs2 = [(self.load_static_unicode(name) if name is not None else None, value) for name, value in kw_arg_key_value_pairs]
+            kw_args_dict = self.make_dict(kw_arg_key_value_pairs2, line)
+
+            return self.primitive_op(
+                py_fastcall_with_kwargs_op, [function] + pos_arg_values + [kw_args_dict], line)
         else:
             # Otherwise we construct a list and call extend it with the star args, since tuples
             # don't have an extend method.
@@ -2408,11 +2423,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             for star_arg_value in star_arg_values:
                 self.primitive_op(list_extend_op, [pos_args_list, star_arg_value], line)
             pos_args_tuple = self.primitive_op(list_tuple_op, [pos_args_list], line)
+            kw_arg_key_value_pairs2 = [(self.load_static_unicode(name) if name is not None else None, value) for name, value in kw_arg_key_value_pairs]
+            kw_args_dict = self.make_dict(kw_arg_key_value_pairs2, line)
 
-        kw_args_dict = self.make_dict(kw_arg_key_value_pairs, line)
-
-        return self.primitive_op(
-            py_call_with_kwargs_op, [function, pos_args_tuple, kw_args_dict], line)
+            return self.primitive_op(
+                py_call_with_kwargs_op, [function, pos_args_tuple, kw_args_dict], line)
 
     def py_method_call(self,
                        obj: Value,
@@ -4583,6 +4598,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         """
         static_symbol = self.mapper.literal_static_name(value)
         return self.add(LoadStatic(str_rprimitive, static_symbol, ann=value))
+
+    def load_static_tuple(self, value: Tuple[str, ...]) -> Value:
+        """Loads a static tuple object into a register."""
+        static_symbol = self.mapper.literal_static_name(value)
+        return self.add(LoadStatic(object_rprimitive, static_symbol, ann=value))
 
     def load_module(self, name: str) -> Value:
         return self.add(LoadStatic(object_rprimitive, 'module', name))

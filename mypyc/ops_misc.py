@@ -309,6 +309,70 @@ py_call_with_kwargs_op = custom_op(
     emit=call_emit('PyObject_Call'))
 
 
+def fastcall_emit(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+    fastcall_kwargs_emit(emitter, args+[''], dest)
+
+def fastcall_kwargs_emit(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+    callable, *posargs, kwargs = args
+    if not posargs:
+        emitter.emit_line('{dest} = _PyObject_FastCallDict({callable}, NULL, 0, NULL);'.format(
+            dest=dest,
+            callable=callable
+        ))
+        return
+
+    stack_name = emitter.temp_name()
+    emitter.emit_line('PyObject *{stack_name}[{nargs}] = {{{args}}};'.format(
+        stack_name=stack_name,
+        nargs = len(posargs),
+        args=', '.join(posargs)))
+    emitter.emit_line('{dest} = _PyObject_FastCallDict({callable}, {stack}, {nargs}, {kwargs});'.format(
+        dest=dest,
+        callable=callable,
+        stack=stack_name,
+        nargs=len(posargs),
+        kwargs=kwargs or 'NULL'
+        ))
+
+def fastcall_kwnames_emit(emitter: EmitterInterface, args: List[str], dest: str) -> None:
+    callable, *posnkwargs, kwnames = args
+    stack_name = emitter.temp_name()
+    emitter.emit_line('PyObject *{stack_name}[{nargs}] = {{{args}}};'.format(
+        stack_name=stack_name,
+        nargs = len(posnkwargs),
+        args=', '.join(posnkwargs)))
+    emitter.emit_line('{dest} = _PyObject_FastCallKeywords({callable}, {stack}, {nargs} - PyTuple_GET_SIZE({kwnames}), {kwnames});'.format(
+        dest=dest,
+        callable=callable,
+        stack=stack_name,
+        nargs=len(posnkwargs),
+        kwnames=kwnames
+        ))
+
+py_fastcall_op = custom_op(
+    arg_types=[object_rprimitive],
+    result_type=object_rprimitive,
+    is_var_arg=True,
+    error_kind=ERR_MAGIC,
+    format_str='{dest} = py_fastcall({comma_args})',
+    emit=fastcall_emit)
+
+py_fastcall_with_kwargs_op = custom_op(
+    arg_types=[object_rprimitive],
+    result_type=object_rprimitive,
+    is_var_arg=True,
+    error_kind=ERR_MAGIC,
+    format_str='{dest} = py_fastcall_with_kwargs({comma_args})',
+    emit=fastcall_kwargs_emit)
+
+py_fastcall_with_kwnames_op = custom_op(
+    arg_types=[object_rprimitive],
+    result_type=object_rprimitive,
+    is_var_arg=True,
+    error_kind=ERR_MAGIC,
+    format_str='{dest} = py_fastcall_with_kwnames({comma_args})',
+    emit=fastcall_kwnames_emit)
+
 py_method_call_op = custom_op(
     arg_types=[object_rprimitive],
     result_type=object_rprimitive,
