@@ -108,7 +108,9 @@ PyMODINIT_FUNC
 PyInit_{modname}(void)
 {{
     void *init_func = PyCapsule_Import("{libname}.{full_modname}", 0);
-    if (!init_func) return NULL;
+    if (!init_func) {
+        return NULL;
+    }
     return ((PyObject *(*)(void))init_func)();
 }}
 

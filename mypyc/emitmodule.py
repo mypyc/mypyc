@@ -219,7 +219,9 @@ class ModuleGenerator:
             'int res;',
             'PyObject *capsule;',
             'PyObject *module = PyModule_Create(&def);',
-            'if (!module) goto fail;',
+            'if (!module) {',
+            'goto fail;',
+            '}',
             '',
         )
 
@@ -229,10 +231,14 @@ class ModuleGenerator:
                 'extern PyObject *CPyInit_{}(void);'.format(name),
                 'capsule = PyCapsule_New((void *)CPyInit_{}, "{}.{}", NULL);'.format(
                     name, self.shared_lib_name, name),
-                'if (!capsule) goto fail;',
+                'if (!capsule) {',
+                'goto fail;',
+                '}',
                 'res = PyObject_SetAttrString(module, "{}", capsule);'.format(name),
                 'Py_DECREF(capsule);',
-                'if (res < 0) goto fail;',
+                'if (res < 0) {',
+                'goto fail;',
+                '}',
                 '',
             )
 
