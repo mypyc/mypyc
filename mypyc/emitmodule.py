@@ -206,6 +206,8 @@ class ModuleGenerator:
     def generate_shared_lib_init(self, emitter: Emitter) -> None:
         """Generate the init function for a shared library.
 
+        A shared library contains all of the actual code for a set of modules.
+
         The init function is responsible for creating Capsules that wrap
         pointers to the initialization function of all the real init functions
         for modules in this shared library.

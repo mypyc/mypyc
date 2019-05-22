@@ -15,7 +15,7 @@ See the mypycify docs for additional arguments.
 
 mypycify can integrate with either distutils or setuptools, but needs
 to know at import-time whether it is using distutils or setuputils. We
-hackily decide based on whether setuptools has been imported already..
+hackily decide based on whether setuptools has been imported already.
 """
 
 import glob
@@ -122,7 +122,14 @@ PyMODINIT_FUNC PyInit___init__(void) {{ return PyInit_{modname}(); }}
 
 def generate_c_extension_shim(
         full_module_name: str, module_name: str, dirname: str, libname: str) -> str:
-    """Create a C extension shim with a passthrough PyInit function."""
+    """Create a C extension shim with a passthrough PyInit function.
+
+    Arguments:
+      * full_module_name: the dotted full module name
+      * module_name: the final component of the module name
+      * dirname: the directory to place source code
+      * libname: the name of the module where the code actually lives
+    """
     cname = '%s.c' % full_module_name.replace('.', '___')  # XXX
     cpath = os.path.join(dirname, cname)
 
@@ -190,13 +197,13 @@ def build_using_shared_lib(sources: List[BuildSource],
     """Produce the list of extension modules when a shared library is needed.
 
     This creates one shared library extension module that all of the
-    others link against and then one shim extension module for each
+    others import and then one shim extension module for each
     module in the build, that simply calls an initialization function
     in the shared library.
 
-    The shared library is a python extension module that exports the
-    real initialization functions in Capsules stored in module
-    attributes.
+    The shared library (which lib_name is the name of) is a python
+    extension module that exports the real initialization functions in
+    Capsules stored in module attributes.
     """
     extensions = [Extension(
         lib_name,
