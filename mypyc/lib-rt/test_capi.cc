@@ -88,7 +88,7 @@ protected:
         }
 
         c_max_short = CPY_TAGGED_MAX; // 2**62-1
-        c_min_pos_long = c_max_short + 1; // 2**62-1
+        c_min_pos_long = c_max_short + 1; // 2**62
         c_min_short = CPY_TAGGED_MIN; // -2**62
         c_max_neg_long = c_min_short - 1; // -(2**62+1)
         max_short = PyLong_FromSsize_t(c_max_short);

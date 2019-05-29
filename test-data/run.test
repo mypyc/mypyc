@@ -1587,7 +1587,7 @@ assert d['y'] == 6
 [case testIntMathOps]
 # This tests integer math things that are either easier to test in Python than
 # in our C tests or are tested here because (for annoying reasons) we don't run
-# 32-bit runtime tests in CI.
+# the C unit tests in our 32-bit CI.
 def multiply(x: int, y: int) -> int:
     return x * y
 
