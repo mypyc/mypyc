@@ -128,6 +128,7 @@ class ModuleGenerator:
 
         base_emitter = Emitter(self.context)
         base_emitter.emit_line('#include "__native.h"')
+        base_emitter.emit_line('#include "__native_internal.h"')
         emitter = base_emitter
 
         for (_, literal), identifier in self.literals.items():
@@ -141,6 +142,7 @@ class ModuleGenerator:
             if multi_file:
                 emitter = Emitter(self.context)
                 emitter.emit_line('#include "__native.h"')
+                emitter.emit_line('#include "__native_internal.h"')
 
             self.declare_module(module_name, emitter)
             self.declare_internal_globals(module_name, emitter)
@@ -176,6 +178,10 @@ class ModuleGenerator:
 
         emitter.emit_line()
 
+        ext_declarations = Emitter(self.context)
+        ext_declarations.emit_line('#include <Python.h>')
+        ext_declarations.emit_line('#include <CPy.h>')
+
         declarations = Emitter(self.context)
         declarations.emit_line('#include <Python.h>')
         declarations.emit_line('#include <CPy.h>')
@@ -184,17 +190,18 @@ class ModuleGenerator:
         declarations.emit_line()
 
         for declaration in sorted_decls:
+            decls = ext_declarations if declaration.external else declarations
             if declaration.needs_extern:
-                declarations.emit_lines(
+                decls.emit_lines(
                     'extern {}'.format(declaration.decl[0]), *declaration.decl[1:])
                 emitter.emit_lines(*declaration.decl)
             else:
-                declarations.emit_lines(*declaration.decl)
+                decls.emit_lines(*declaration.decl)
 
         for module_name, module in self.modules:
             self.declare_finals(module.final_names, declarations)
             for cl in module.classes:
-                generate_class_type_decl(cl, emitter, declarations)
+                generate_class_type_decl(cl, emitter, ext_declarations)
             for fn in module.functions:
                 generate_function_declaration(fn, declarations)
 
@@ -202,7 +209,9 @@ class ModuleGenerator:
             self.generate_shared_lib_init(emitter)
 
         return file_contents + [('__native.c', ''.join(emitter.fragments)),
-                                ('__native.h', ''.join(declarations.fragments))]
+                                ('__native_internal.h', ''.join(declarations.fragments)),
+                                ('__native.h', ''.join(ext_declarations.fragments)),
+                               ]
 
     def generate_shared_lib_init(self, emitter: Emitter) -> None:
         """Generate the init function for a shared library.
@@ -438,6 +447,8 @@ class ModuleGenerator:
         return result
 
     def declare_global(self, type_spaced: str, name: str,
+                       *,
+                       external: bool = False,
                        initializer: Optional[str] = None) -> None:
         if not initializer:
             defn = None
