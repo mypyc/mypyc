@@ -27,12 +27,14 @@ class HeaderDeclaration:
                  dependencies: Optional[Set[str]] = None,
                  external: bool = False,
                  needs_extern: bool = False,
+                 needs_export: bool = False,
                  ) -> None:
         self.dependencies = dependencies or set()
         self.decl = [decl] if isinstance(decl, str) else decl
         self.defn = defn
         self.needs_extern = needs_extern
         self.external = external
+        self.needs_export = needs_export
 
 
 class EmitterContext:
