@@ -86,13 +86,12 @@ def generate_class_type_decl(cl: ClassIR, c_emitter: Emitter,
         'PyTypeObject *{};'.format(emitter.type_struct_name(cl)),
         needs_extern=True)
 
-    emitter.emit_line()
     generate_object_struct(cl, external_emitter)
-    emitter.emit_line()
     declare_native_getters_and_setters(cl, emitter)
     generate_full = not cl.is_trait and not cl.builtin_base
     if generate_full:
-        emitter.emit_line('{};'.format(native_function_header(cl.ctor, emitter)))
+        context.declarations[emitter.native_function_name(cl.ctor)] = HeaderDeclaration(
+            '{};'.format(native_function_header(cl.ctor, emitter)))
 
 
 def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
@@ -269,14 +268,20 @@ def generate_object_struct(cl: ClassIR, emitter: Emitter) -> None:
 
 def declare_native_getters_and_setters(cl: ClassIR,
                                        emitter: Emitter) -> None:
+    decls = emitter.context.declarations
     for attr, rtype in cl.attributes.items():
-        emitter.emit_line('{}{}({} *self);'.format(emitter.ctype_spaced(rtype),
-                                                   native_getter_name(cl, attr, emitter.names),
-                                                   cl.struct_name(emitter.names)))
-        emitter.emit_line(
+        getter_name = native_getter_name(cl, attr, emitter.names)
+        setter_name = native_setter_name(cl, attr, emitter.names)
+        decls[getter_name] = HeaderDeclaration(
+            '{}{}({} *self);'.format(emitter.ctype_spaced(rtype),
+                                     getter_name,
+                                     cl.struct_name(emitter.names))
+        )
+        decls[setter_name] = HeaderDeclaration(
             'bool {}({} *self, {}value);'.format(native_setter_name(cl, attr, emitter.names),
                                                  cl.struct_name(emitter.names),
-                                                 emitter.ctype_spaced(rtype)))
+                                                 emitter.ctype_spaced(rtype))
+        )
 
 
 def generate_native_getters_and_setters(cl: ClassIR,

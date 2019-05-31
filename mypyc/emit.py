@@ -161,7 +161,7 @@ class Emitter:
         result = [
             '#ifndef MYPYC_DECLARED_{}'.format(rtuple.struct_name),
             '#define MYPYC_DECLARED_{}'.format(rtuple.struct_name),
-            'struct {} {{'.format(rtuple.struct_name),
+            'typedef struct {} {{'.format(rtuple.struct_name),
         ]
         if len(rtuple.types) == 0:  # empty tuple
             # Empty tuples contain a flag so that they can still indicate
@@ -172,10 +172,10 @@ class Emitter:
             for typ in rtuple.types:
                 result.append('{}f{};'.format(self.ctype_spaced(typ), i))
                 i += 1
-        result.append('};')
+        result.append('}} {};'.format(rtuple.struct_name))
         values = self.tuple_undefined_value_helper(rtuple)
-        result.append('static struct {} {} = {{ {} }};'.format(
-            rtuple.struct_name, self.tuple_undefined_value(rtuple), ''.join(values)))
+        result.append('static {} {} = {{ {} }};'.format(
+            self.ctype(rtuple), self.tuple_undefined_value(rtuple), ''.join(values)))
         result.append('#endif')
         result.append('')
 

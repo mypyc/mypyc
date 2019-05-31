@@ -83,9 +83,11 @@ def compile_modules_to_c(result: BuildResult, module_names: List[str],
 
 
 def generate_function_declaration(fn: FuncIR, emitter: Emitter) -> None:
-    emitter.emit_line('{};'.format(native_function_header(fn.decl, emitter)))
+    emitter.context.declarations[emitter.native_function_name(fn.decl)] = HeaderDeclaration(
+        '{};'.format(native_function_header(fn.decl, emitter)))
     if fn.name != TOP_LEVEL_NAME:
-        emitter.emit_line('{};'.format(wrapper_function_header(fn, emitter.names)))
+        emitter.context.declarations[PREFIX+fn.cname(emitter.names)] = HeaderDeclaration(
+            '{};'.format(wrapper_function_header(fn, emitter.names)))
 
 
 def encode_as_c_string(s: str) -> Tuple[str, int]:
@@ -169,12 +171,17 @@ class ModuleGenerator:
                 file_contents.append((name, ''.join(emitter.fragments)))
 
         ext_declarations = Emitter(self.context)
+        ext_declarations.emit_line('#ifndef MYPYC_NATIVE_H')
+        ext_declarations.emit_line('#define MYPYC_NATIVE_H')
         ext_declarations.emit_line('#include <Python.h>')
         ext_declarations.emit_line('#include <CPy.h>')
 
         declarations = Emitter(self.context)
+        declarations.emit_line('#ifndef MYPYC_NATIVE_EXTERNAL_H')
+        declarations.emit_line('#define MYPYC_NATIVE_EXTERNAL_H')
         declarations.emit_line('#include <Python.h>')
         declarations.emit_line('#include <CPy.h>')
+        declarations.emit_line('#include "__native.h"')
         declarations.emit_line()
         declarations.emit_line('int CPyGlobalsInit(void);')
         declarations.emit_line()
@@ -207,6 +214,9 @@ class ModuleGenerator:
 
         if self.shared_lib_name:
             self.generate_shared_lib_init(emitter)
+
+        ext_declarations.emit_line('#endif')
+        declarations.emit_line('#endif')
 
         return file_contents + [('__native.c', ''.join(emitter.fragments)),
                                 ('__native_internal.h', ''.join(declarations.fragments)),
