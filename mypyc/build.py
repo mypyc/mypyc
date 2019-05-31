@@ -111,6 +111,13 @@ shim_template = """\
 PyMODINIT_FUNC
 PyInit_{modname}(void)
 {{
+    /* We import the module manually to get a good error message if it fails
+     * before using the convenient PyCapsule_Import... */
+    PyObject *module = PyImport_ImportModule("{libname}");
+    if (!module) {{
+        return NULL;
+    }}
+    Py_DECREF(module);
     void *init_func = PyCapsule_Import("{libname}.init_{full_modname}", 0);
     if (!init_func) {{
         return NULL;
