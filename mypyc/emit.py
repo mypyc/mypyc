@@ -21,12 +21,18 @@ from mypyc.sametype import is_same_type
 
 class HeaderDeclaration:
     def __init__(self,
-                 dependencies: Set[str], decl: List[str], defn: Optional[List[str]],
-                 needs_extern: bool = False) -> None:
-        self.dependencies = dependencies
-        self.decl = decl
+                 decl: Union[str, List[str]],
+                 defn: Optional[List[str]] = None,
+                 *,
+                 dependencies: Optional[Set[str]] = None,
+                 external: bool = False,
+                 needs_extern: bool = False,
+                 ) -> None:
+        self.dependencies = dependencies or set()
+        self.decl = [decl] if isinstance(decl, str) else decl
         self.defn = defn
         self.needs_extern = needs_extern
+        self.external = external
 
 
 class EmitterContext:
@@ -152,7 +158,11 @@ class Emitter:
         return '{}{}'.format(NATIVE_PREFIX, fn.cname(self.names))
 
     def tuple_c_declaration(self, rtuple: RTuple) -> List[str]:
-        result = ['struct {} {{'.format(rtuple.struct_name)]
+        result = [
+            '#ifndef MYPYC_DECLARED_{}'.format(rtuple.struct_name),
+            '#define MYPYC_DECLARED_{}'.format(rtuple.struct_name),
+            'struct {} {{'.format(rtuple.struct_name),
+        ]
         if len(rtuple.types) == 0:  # empty tuple
             # Empty tuples contain a flag so that they can still indicate
             # error values.
@@ -163,6 +173,10 @@ class Emitter:
                 result.append('{}f{};'.format(self.ctype_spaced(typ), i))
                 i += 1
         result.append('};')
+        values = self.tuple_undefined_value_helper(rtuple)
+        result.append('static struct {} {} = {{ {} }};'.format(
+            rtuple.struct_name, self.tuple_undefined_value(rtuple), ''.join(values)))
+        result.append('#endif')
         result.append('')
 
         return result
@@ -183,17 +197,7 @@ class Emitter:
                 tuple_expr_in_c, compare, c_type_compare_val(item_type))
 
     def tuple_undefined_value(self, rtuple: RTuple) -> str:
-        context = self.context
-        id = rtuple.unique_id
-        name = 'tuple_undefined_' + id
-        if name not in context.declarations:
-            values = self.tuple_undefined_value_helper(rtuple)
-            var = 'struct {} {}'.format(rtuple.struct_name, name)
-            decl = '{};'.format(var)
-            init = '{} = {{ {} }};'.format(var, ''.join(values))
-            context.declarations[name] = HeaderDeclaration(
-                set([rtuple.struct_name]), [decl], [init])
-        return name
+        return 'tuple_undefined_' + rtuple.unique_id
 
     def tuple_undefined_value_helper(self, rtuple: RTuple) -> List[str]:
         res = []
@@ -222,9 +226,9 @@ class Emitter:
                     dependencies.add(typ.struct_name)
 
             self.context.declarations[tuple_type.struct_name] = HeaderDeclaration(
-                dependencies,
                 self.tuple_c_declaration(tuple_type),
-                None,
+                dependencies=dependencies,
+                external=True,
             )
 
     def emit_inc_ref(self, dest: str, rtype: RType) -> None:
