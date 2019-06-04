@@ -246,7 +246,6 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
                 self.ctype(rtype.attr_type(op.attr)),
                 op.attr))
         else:
-            print("hello")
             typ, decl_cl = cl.attr_details(op.attr)
             self.emit_line('%s = %s((%s *)%s, %s); /* %s */' % (
                 dest,
