@@ -5,6 +5,7 @@ REG_PREFIX = 'cpy_r_'  # Registers
 STATIC_PREFIX = 'CPyStatic_'  # Static variables (for literals etc.)
 TYPE_PREFIX = 'CPyType_'  # Type object struct
 ATTR_PREFIX = '_'  # Attributes
+PROPSET_PREFIX = 'CPyPropSet_'
 
 ENV_ATTR_NAME = '__mypyc_env__'
 NEXT_LABEL_ATTR_NAME = '__mypyc_next_label__'
