@@ -18,6 +18,8 @@ from typing import (
 )
 from collections import OrderedDict
 
+from mypyc.common import PROPSET_PREFIX
+
 from mypy.nodes import Block, SymbolNode, Var, FuncDef, ARG_POS, ARG_OPT, ARG_NAMED_OPT
 
 from mypyc.namegen import NameGenerator
@@ -1475,8 +1477,9 @@ class ClassIR:
         # Properties are accessed like attributes, but have behaivor like method calls.
         # They don't belong in the methods dictionary, since we don't want to expose them to
         # Python's method API. But we want to put them into our own vtable as methods, so that
-        # they are properly handled and overridden.
-        self.properties = OrderedDict()  # type: OrderedDict[str, FuncIR]
+        # they are properly handled and overridden. The property dictionary values are a tuple
+        # contianing a property getter and an optional property setter.
+        self.properties = OrderedDict()  # type: OrderedDict[str, Tuple[FuncIR, Optional[FuncIR]]]
         # We generate these in prepare_class_def so that we have access to them when generating
         # other methods and properties that rely on these types.
         self.property_types = OrderedDict()  # type: OrderedDict[str, RType]
@@ -1576,8 +1579,17 @@ class ClassIR:
         for ir in self.mro:
             if name in ir.methods:
                 return ir.methods[name], ir
+
             if name in ir.properties:
-                return ir.properties[name], ir
+                return ir.properties[name][0], ir
+
+            if name.startswith(PROPSET_PREFIX):
+                prop_name = name.split(PROPSET_PREFIX)[1]
+                if prop_name in ir.properties:
+                    setter = ir.properties[prop_name][1]
+                    if setter:
+                        return (setter, ir)
+
         return None
 
     def get_method(self, name: str) -> Optional[FuncIR]:

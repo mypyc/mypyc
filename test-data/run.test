@@ -2832,6 +2832,159 @@ Represents a sequence of values. Updates itself by next, which is a new value.
 3
 3
 
+[case testPropertySetters]
+
+from mypy_extensions import trait
+
+class Foo():
+    def __init__(self) -> None:
+        self.attr = "unmodified"
+
+class A:
+    def __init__(self) -> None:
+        self._x = 0
+        self._foo = Foo()
+
+    @property
+    def x(self) -> int:
+        return self._x
+
+    @x.setter
+    def x(self, val : int) -> None:
+        self._x = val
+
+    @property
+    def foo(self) -> Foo:
+        return self._foo
+
+    @foo.setter
+    def foo(self, val : Foo) -> None:
+        self._foo = val
+
+a = A()
+print(a.x)
+a.x = 3
+print(a.x)
+print(a.foo.attr)
+a.foo.attr = "modified"
+print(a.foo.attr)
+
+#Overrides base property setters and getters
+class B(A):
+    def __init__(self) -> None:
+        self._x = 10
+
+    @property
+    def x(self) -> int:
+        return self._x + 1
+
+    @x.setter
+    def x(self, val : int) -> None:
+        self._x = val + 1
+
+#Inerits base property setters and getters
+class C(A):
+    def __init__(self) -> None:
+        A.__init__(self)
+
+@trait
+class D():
+    def __init__(self) -> None:
+        self._x = 0
+
+    @property
+    def x(self) -> int:
+        return self._x
+
+    @x.setter
+    def x(self, val : int) -> None:
+        self._x = val
+
+#Inherits trait property setters and getters
+class E(D):
+    def __init__(self) -> None:
+        D.__init__(self)
+
+#Overrides trait property setters and getters
+class F(D):
+    def __init__(self) -> None:
+        self._x = 10
+
+    @property
+    def x(self) -> int:
+        return self._x + 10
+
+    @x.setter
+    def x(self, val : int) -> None:
+        self._x = val + 10
+    
+# # Property setter and getter are subtypes of base property setters and getters
+# class G(A):
+#   def __init__(self) -> None:
+#       A.__init__(self)
+
+#   @property
+#   def y(self) -> int:
+#       return self._y
+
+#   @y.setter
+#   def y(self, val : object) -> None:
+#       self._y = val
+
+[file driver.py]
+from native import A, B, C, D, E, F
+
+a = A()
+print(a.x)
+print(a._x)
+a.x = 1
+print(a.x)
+print(a._x)
+a._x = 0
+print(a.x)
+print(a._x)
+b = B()
+print(b.x)
+print(b._x)
+b.x = 11
+print(b.x)
+b._x = 11
+print(b.x)
+c = C()
+print(c.x)
+c.x = 1000
+print(c.x)
+e = E()
+print(e.x)
+e.x = 1000
+print(e.x)
+f = F()
+print(f.x)
+f.x = 30
+print(f.x)
+
+[out]
+0
+3
+unmodified
+modified
+0
+0
+1
+1
+0
+0
+11
+10
+13
+12
+0
+1000
+0
+1000
+20
+50
+
 [case testDunders]
 from typing import Any
 class Item:
