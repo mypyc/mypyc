@@ -284,8 +284,9 @@ def compute_vtable(cls: ClassIR) -> None:
     all_traits = [t for t in cls.mro if t.is_trait]
 
     for t in [cls] + cls.traits:
-        prop_defs = list(itertools.chain(*t.properties.values()))
-        for fn in itertools.chain(prop_defs, t.methods.values()):
+        # prop_defs = list(itertools.chain(*t.properties.values()))
+        # for fn in itertools.chain(prop_defs, t.methods.values()):
+        for fn in itertools.chain(t.methods.values()):
             # The function may be None in the case of an undefined property setter
             # TODO: don't generate a new entry when we overload without changing the type
             if fn and fn == cls.get_method(fn.name):
@@ -442,6 +443,7 @@ def prepare_method_def(ir: ClassIR, module_name: str, cdef: ClassDef, mapper: Ma
             # name clashes when generating C code, and property lookup at the IR level
             # works correctly.
             decl.name = PROPSET_PREFIX + decl.name
+            decl.is_prop_setter = True
             ir.method_decls[PROPSET_PREFIX + node.name()] = decl
 
         if node.func.is_property:
@@ -449,18 +451,17 @@ def prepare_method_def(ir: ClassIR, module_name: str, cdef: ClassDef, mapper: Ma
             ir.property_types[node.name()] = decl.sig.ret_type
 
 
-def check_multipart_property_def(prop: OverloadedFuncDef) -> None:
+def is_valid_multipart_property_def(prop: OverloadedFuncDef) -> bool:
     # Checks to ensure supported property decorator semantics
-    prop_err_msg = "Unsupported property decorator semantics"
-    assert len(prop.items) == 2, prop_err_msg
-    getter = prop.items[0]
-    setter = prop.items[1]
-    assert isinstance(getter, Decorator)
-    assert getter.func.is_property, prop_err_msg
-    assert isinstance(setter, Decorator), prop_err_msg
-    assert len(setter.decorators) == 1, prop_err_msg
-    assert isinstance(setter.decorators[0], MemberExpr), prop_err_msg
-    assert setter.decorators[0].name == "setter", prop_err_msg
+    if len(prop.items) == 2:
+        getter = prop.items[0]
+        setter = prop.items[1]
+        if isinstance(getter, Decorator) and isinstance(setter, Decorator):
+            if getter.func.is_property and len(setter.decorators) == 1:
+                if isinstance(setter.decorators[0], MemberExpr):
+                    if setter.decorators[0].name == "setter":
+                        return True
+    return False
 
 
 def prepare_class_def(path: str, module_name: str, cdef: ClassDef,
@@ -485,9 +486,12 @@ def prepare_class_def(path: str, module_name: str, cdef: ClassDef,
         elif isinstance(node.node, OverloadedFuncDef):
             # Handle case for property with both a getter and a setter
             if node.node.is_property:
-                check_multipart_property_def(node.node)
-                for item in node.node.items:
-                    prepare_method_def(ir, module_name, cdef, mapper, item)
+                if is_valid_multipart_property_def(node.node):
+                    for item in node.node.items:
+                        prepare_method_def(ir, module_name, cdef, mapper, item)
+                else:
+                    errors.error("Unsupported property decorator semantics", path, cdef.line)
+
             # Handle case for regular function overload
             else:
                 assert node.node.impl
@@ -943,7 +947,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             getter_ir, _ = class_ir.properties[name]
             class_ir.properties[name] = (getter_ir, func_ir)
 
+        if func_ir.decl.is_prop_setter:
+            print("name setter", name)
+            class_ir.methods[PROPSET_PREFIX + name] = func_ir
         else:
+            print("name non-setter", name)
             class_ir.methods[name] = func_ir
 
         # If this overrides a parent class method with a different type, we need
@@ -1048,17 +1056,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.allocate_class(cdef)
 
         for stmt in cdef.defs.body:
-            if isinstance(stmt, (FuncDef, Decorator)):
+            if isinstance(stmt, OverloadedFuncDef) and stmt.is_property:
+                for item in stmt.items:
+                    with self.catch_errors(stmt.line):
+                        self.visit_method(cdef, get_func_def(item))
+            elif isinstance(stmt, (FuncDef, Decorator, OverloadedFuncDef)):
                 with self.catch_errors(stmt.line):
                     self.visit_method(cdef, get_func_def(stmt))
-            elif isinstance(stmt, (OverloadedFuncDef)):
-                if stmt.is_property:
-                    for item in stmt.items:
-                        with self.catch_errors(stmt.line):
-                            self.visit_method(cdef, get_func_def(item))
-                else:
-                    with self.catch_errors(stmt.line):
-                        self.visit_method(cdef, get_func_def(stmt))
             elif isinstance(stmt, PassStmt):
                 continue
             elif isinstance(stmt, AssignmentStmt):
