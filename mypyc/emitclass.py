@@ -529,6 +529,8 @@ def generate_methods_table(cl: ClassIR,
                            emitter: Emitter) -> None:
     emitter.emit_line('static PyMethodDef {}[] = {{'.format(name))
     for fn in cl.methods.values():
+        if fn.name in cl.properties:
+            continue
         emitter.emit_line('{{"{}",'.format(fn.name))
         emitter.emit_line(' (PyCFunction){}{},'.format(PREFIX, fn.cname(emitter.names)))
         flags = ['METH_VARARGS', 'METH_KEYWORDS']
@@ -574,11 +576,12 @@ def generate_getseter_declarations(cl: ClassIR, emitter: Emitter) -> None:
             getter_name(cl, prop, emitter.names),
             cl.struct_name(emitter.names)))
 
-        # Generate setter declaration
-        emitter.emit_line('static int')
-        emitter.emit_line('{}({} *self, PyObject *value, void *closure);'.format(
-            setter_name(cl, prop, emitter.names),
-            cl.struct_name(emitter.names)))
+        # Generate property setter declaration if a setter exists
+        if cl.properties[prop][1]:
+            emitter.emit_line('static int')
+            emitter.emit_line('{}({} *self, PyObject *value, void *closure);'.format(
+                setter_name(cl, prop, emitter.names),
+                cl.struct_name(emitter.names)))
 
 
 def generate_getseters_table(cl: ClassIR,

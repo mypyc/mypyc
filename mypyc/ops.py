@@ -1332,12 +1332,14 @@ class FuncDecl:
                  class_name: Optional[str],
                  module_name: str,
                  sig: FuncSignature,
-                 kind: int = FUNC_NORMAL) -> None:
+                 kind: int = FUNC_NORMAL,
+                 is_prop_setter: bool = False) -> None:
         self.name = name
         self.class_name = class_name
         self.module_name = module_name
         self.sig = sig
         self.kind = kind
+        self.is_prop_setter = is_prop_setter
         if class_name is None:
             self.bound_sig = None  # type: Optional[FuncSignature]
         else:
@@ -1580,15 +1582,15 @@ class ClassIR:
             if name in ir.methods:
                 return ir.methods[name], ir
 
-            if name in ir.properties:
-                return ir.properties[name][0], ir
+            # if name in ir.properties:
+            #     return ir.properties[name][0], ir
 
-            if name.startswith(PROPSET_PREFIX):
-                prop_name = name.split(PROPSET_PREFIX)[1]
-                if prop_name in ir.properties:
-                    setter = ir.properties[prop_name][1]
-                    if setter:
-                        return (setter, ir)
+            # if name.startswith(PROPSET_PREFIX):
+            #     prop_name = name.split(PROPSET_PREFIX)[1]
+            #     if prop_name in ir.properties:
+            #         setter = ir.properties[prop_name][1]
+            #         if setter:
+            #             return (setter, ir)
 
         return None
 

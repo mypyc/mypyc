@@ -2861,15 +2861,16 @@ class A:
     def foo(self, val : Foo) -> None:
         self._foo = val
 
-a = A()
-print(a.x)
-a.x = 3
-print(a.x)
-print(a.foo.attr)
-a.foo.attr = "modified"
-print(a.foo.attr)
+def test():
+    a = A()
+    assert a.x == 0
+    a.x = 3
+    assert a.x == 3
+    assert a.foo.attr == "unmodified"
+    a.foo.attr = "modified"
+    assert a.foo.attr == "modified"
 
-#Overrides base property setters and getters
+# Overrides base property setters and getters
 class B(A):
     def __init__(self) -> None:
         self._x = 10
@@ -2919,71 +2920,52 @@ class F(D):
         self._x = val + 10
     
 # # Property setter and getter are subtypes of base property setters and getters
-# class G(A):
-#   def __init__(self) -> None:
-#       A.__init__(self)
+# # class G(A):
+# #   def __init__(self) -> None:
+# #       A.__init__(self)
 
-#   @property
-#   def y(self) -> int:
-#       return self._y
+# #   @property
+# #   def y(self) -> int:
+# #       return self._y
 
-#   @y.setter
-#   def y(self, val : object) -> None:
-#       self._y = val
+# #   @y.setter
+# #   def y(self, val : object) -> None:
+# #       self._y = val
 
 [file driver.py]
-from native import A, B, C, D, E, F
-
+from native import A, B, C, D, E, F, test
+# from native import A
+test()
 a = A()
-print(a.x)
-print(a._x)
+assert a.x == 0
+assert a._x == 0
 a.x = 1
-print(a.x)
-print(a._x)
+assert a.x == 1
+assert a._x == 1
 a._x = 0
-print(a.x)
-print(a._x)
+assert a.x == 0
+assert a._x == 0
 b = B()
-print(b.x)
-print(b._x)
+assert b.x == 11
+assert b._x == 10
 b.x = 11
-print(b.x)
+assert b.x == 13
 b._x = 11
-print(b.x)
+assert b.x == 12
 c = C()
-print(c.x)
+assert c.x == 0
 c.x = 1000
-print(c.x)
+assert c.x == 1000
 e = E()
-print(e.x)
+assert e.x == 0
 e.x = 1000
-print(e.x)
+assert e.x == 1000
 f = F()
-print(f.x)
+assert f.x == 20
 f.x = 30
-print(f.x)
+assert f.x == 50
 
 [out]
-0
-3
-unmodified
-modified
-0
-0
-1
-1
-0
-0
-11
-10
-13
-12
-0
-1000
-0
-1000
-20
-50
 
 [case testDunders]
 from typing import Any
