@@ -41,7 +41,6 @@ new_list_op = custom_op(arg_types=[object_rprimitive],
                         result_type=list_rprimitive,
                         is_var_arg=True,
                         error_kind=ERR_MAGIC,
-                        steals=True,
                         format_str='{dest} = [{comma_args}]',
                         emit=emit_new)
 
