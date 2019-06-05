@@ -4230,7 +4230,7 @@ assert varargs4(-1, 2, 3, y=2, z=20) == ((-1, 2, 3), {'x': 1, 'y': 2, 'z': 20})
 assert varargs4(-1, 2, 3, x=10, y=2, z=20) == ((-1, 2, 3), {'x': 10, 'y': 2, 'z': 20})
 assert varargs4(-1, x=10, y=2, z=20) == ((-1, 0), {'x': 10, 'y': 2, 'z': 20})
 
-x: A = B()
+x = B()  # type: A
 assert x.f(1) == (1,)
 assert x.g(1) == ((1,), {})
 # This one is really funny! When we make native calls we lose
