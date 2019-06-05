@@ -609,6 +609,8 @@ L0:
     r2 = box(short_int, r0)
     r3 = box(short_int, r1)
     r4 = [r2, r3]
+    dec_ref r2
+    dec_ref r3
     a = r4
     dec_ref a
     r5 = 0
@@ -691,6 +693,7 @@ def f():
 L0:
     r0 = C()
     r1 = [r0]
+    dec_ref r0
     a = r1
     r2 = 0
     r3 = a[r2] :: list
