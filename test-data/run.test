@@ -2352,6 +2352,67 @@ def f(x: List[Tuple[int, int]]) -> int:
 from native import f
 assert f([(5, 6)]) == 11
 
+[case testUnpack]
+a, *b = [1, 2, 3, 4, 5]
+
+*c, d = [1, 2, 3, 4, 5]
+
+e, *f = [1,2]
+
+j, *k, l = [1, 2, 3]
+
+m, *n, o = [1, 2, 3, 4, 5, 6]
+
+p, q, r, *s, t = [1,2,3,4,5,6,7,8,9,10]
+
+def tests():
+    assert a == 1
+    assert b == [2,3,4,5]
+    assert e == 1
+    assert f == [2]
+    assert p == 1
+    assert q == 2
+    assert r == 3
+    assert s == [4,5,6,7,8,9]
+    assert t == 10
+
+[file driver.py]
+from native import a, b, tests
+
+tests()
+
+assert a == 1
+assert b == [2,3,4,5]
+
+from native import c, d
+
+assert c == [1,2,3,4]
+assert d == 5
+
+from native import e, f
+
+assert e == 1
+assert f == [2]
+
+from native import j, k, l
+
+assert j == 1
+assert k == [2]
+assert l == 3
+
+from native import m, n, o
+
+assert m == 1
+assert n == [2,3,4,5]
+assert o == 6
+
+from native import p, q, r, s, t
+assert p == 1
+assert q == 2
+assert r == 3
+assert s == [4,5,6,7,8,9]
+assert t == 10
+
 [case testModuleTopLevel]
 x = 1
 print(x)
