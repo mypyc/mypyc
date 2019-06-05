@@ -4,7 +4,6 @@
 #include <Python.h>
 #include "CPy.h"
 
-static bool is_initialized = false;
 static PyObject *moduleDict;
 
 static PyObject *int_from_str(const char *str) {
@@ -84,30 +83,18 @@ protected:
     Py_ssize_t c_max_neg_long;
 
     virtual void SetUp() {
-        if (!is_initialized) {
-            wchar_t *program = Py_DecodeLocale("test_capi", 0);
-            Py_SetProgramName(program);
-            Py_Initialize();
-            PyObject *module = PyModule_New("test");
-            if (module == 0) {
-                fail("Could not create module 'test'");
-            }
-            moduleDict = PyModule_GetDict(module);
-            if (module == 0) {
-                fail("Could not fine module dictionary");
-            }
-            is_initialized = true;
+        if (!moduleDict) {
+            fail("Could not find module dictionary");
         }
-        // TODO: Call Py_Finalize() and PyMem_RawFree(program) at the end somehow.
 
-        max_short = int_from_str("4611686018427387903"); // 2**62-1
-        min_pos_long = int_from_str("4611686018427387904"); // 2**62
-        min_short = int_from_str("-4611686018427387904"); // -2**62
-        max_neg_long = int_from_str("-4611686018427387905"); // -(2**62+1)
-        c_max_short = 4611686018427387903LL;
-        c_min_pos_long = 4611686018427387904LL;
-        c_min_short = -4611686018427387904LL;
-        c_max_neg_long = -4611686018427387905LL;
+        c_max_short = CPY_TAGGED_MAX; // 2**62-1
+        c_min_pos_long = c_max_short + 1; // 2**62
+        c_min_short = CPY_TAGGED_MIN; // -2**62
+        c_max_neg_long = c_min_short - 1; // -(2**62+1)
+        max_short = PyLong_FromSsize_t(c_max_short);
+        min_pos_long = PyLong_FromSsize_t(c_min_pos_long);
+        min_short = PyLong_FromSsize_t(c_min_short);
+        max_neg_long = PyLong_FromSsize_t(c_max_neg_long);
     }
 
     virtual void TearDown() {
@@ -295,6 +282,8 @@ TEST_F(CAPITest, test_multiply_int) {
     ASSERT_MULTIPLY("2**30-1", "2**30-1", "(2**30-1)**2");
     ASSERT_MULTIPLY("2**30", "2**30-1", "2**30 * (2**30-1)");
     ASSERT_MULTIPLY("2**30-1", "2**30", "2**30 * (2**30-1)");
+    ASSERT_MULTIPLY("2**15", "2**15-1", "2**15 * (2**15-1)");
+    ASSERT_MULTIPLY("2**15-1", "2**15", "2**15 * (2**15-1)");
     ASSERT_MULTIPLY("3", "-5", "-15");
     ASSERT_MULTIPLY("-3", "5", "-15");
     ASSERT_MULTIPLY("-3", "-5", "15");
@@ -325,6 +314,11 @@ TEST_F(CAPITest, test_floor_divide_short_int) {
     ASSERT_FLOOR_DIV("-2**62", "1", "-2**62");
     ASSERT_FLOOR_DIV("2**62 - 1", "1", "2**62 - 1");
     ASSERT_FLOOR_DIV("2**62 - 1", "-1", "-2**62 + 1");
+    ASSERT_FLOOR_DIV("2**60", "3", "2**60 // 3");
+    ASSERT_FLOOR_DIV("-2**30", "-1", "2**30");
+    ASSERT_FLOOR_DIV("-2**30", "1", "-2**30");
+    ASSERT_FLOOR_DIV("2**30 - 1", "1", "2**30 - 1");
+    ASSERT_FLOOR_DIV("2**30 - 1", "-1", "-2**30 + 1");
 }
 
 TEST_F(CAPITest, test_floor_divide_long_int) {
@@ -540,9 +534,52 @@ TEST_F(CAPITest, test_tagged_as_long_long) {
     EXPECT_FALSE(PyErr_Occurred());
     EXPECT_TRUE(CPyTagged_AsSsize_t(l) == -1);
     EXPECT_TRUE(PyErr_Occurred());
+    PyErr_Clear();
 }
 
-int main(int argc, char **argv) {
+
+////
+// Python module glue to drive the C-API tests.
+//
+// The reason we have this as an extension module instead of a
+// standalone binary is because building an extension module is pretty
+// well behaved (just specify it with distutils/setuptools and it will
+// get compiled and linked against the running python) while linking a
+// library against libpython is a huge non-standard
+// PITA: python-config locations are janky and it behaves in weird
+// ways that I don't understand, while this works very cleanly.
+
+static PyObject *run_tests(PyObject *dummy, PyObject *should_be_null) {
+    // Fake command line arguments. We could arrange to actually pass
+    // in command line arguments (either real ones or ones given as
+    // arguments) but have not bothered.
+    int argc = 1;
+    char asdf[] = "test_capi"; // InitGoogleTest wants char** which means it can't be const...
+    char *argv[] = {asdf, NULL};
     ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+    return PyLong_FromLong(RUN_ALL_TESTS());
+}
+
+
+static PyMethodDef test_methods[] = {
+    {"run_tests",  run_tests, METH_NOARGS, "Run the C API tests"},
+    {NULL, NULL, 0, NULL}
+};
+
+static struct PyModuleDef test_module = {
+    PyModuleDef_HEAD_INIT,
+    "test_capi",
+    NULL,
+    -1,
+    test_methods
+};
+
+PyMODINIT_FUNC
+PyInit_test_capi(void)
+{
+    PyObject *module = PyModule_Create(&test_module);
+    if (module) {
+        moduleDict = PyModule_GetDict(module);
+    }
+    return module;
 }

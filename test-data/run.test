@@ -885,6 +885,10 @@ def make_dict1(x: Any) -> Dict[Any, Any]:
 def make_dict2(x: Dict[Any, Any]) -> Dict[Any, Any]:
     return dict(x)
 
+def u(x: int) -> int:
+    d = {} # type: Dict[str, int]
+    d.update(x=x)
+    return d['x']
 
 [file defaultdictwrap.py]
 from typing import Dict
@@ -893,7 +897,7 @@ def make_dict() -> Dict[str, int]:
     return defaultdict(int)
 
 [file driver.py]
-from native import f, g, h, make_dict1, make_dict2, update_dict
+from native import f, g, h, u, make_dict1, make_dict2, update_dict
 assert f(1) == 2
 assert f(2) == 1
 assert g() == 30
@@ -913,6 +917,8 @@ assert make_dict1(object.__dict__) == dict(object.__dict__)
 d = {}
 update_dict(d, object.__dict__)
 assert d == dict(object.__dict__)
+
+assert u(10) == 10
 
 [case testPyMethodCall]
 from typing import List
@@ -1577,6 +1583,55 @@ d = {'x': 5}
 assert get_item(d, 'x') == 5
 set_item(d, 'y', 6)
 assert d['y'] == 6
+
+[case testIntMathOps]
+# This tests integer math things that are either easier to test in Python than
+# in our C tests or are tested here because (for annoying reasons) we don't run
+# the C unit tests in our 32-bit CI.
+def multiply(x: int, y: int) -> int:
+    return x * y
+
+# these stringify their outputs because that will catch if exceptions are mishandled
+def floor_div(x: int, y: int) -> str:
+    return str(x // y)
+def remainder(x: int, y: int) -> str:
+    return str(x % y)
+
+[file driver.py]
+from native import multiply, floor_div, remainder
+
+def test_multiply(x, y):
+    assert multiply(x, y) == x * y
+def test_floor_div(x, y):
+    assert floor_div(x, y) == str(x // y)
+def test_remainder(x, y):
+    assert remainder(x, y) == str(x % y)
+
+test_multiply(10**6, 10**6)
+test_multiply(2**15, 2**15-1)
+test_multiply(2**14, 2**14)
+
+test_multiply(10**12, 10**12)
+test_multiply(2**30, 2**30-1)
+test_multiply(2**29, 2**29)
+
+test_floor_div(-2**62, -1)
+test_floor_div(-2**30, -1)
+try:
+    floor_div(10, 0)
+except ZeroDivisionError:
+    pass
+else:
+    assert False, "Expected ZeroDivisionError"
+
+test_remainder(-2**62, -1)
+test_remainder(-2**30, -1)
+try:
+    remainder(10, 0)
+except ZeroDivisionError:
+    pass
+else:
+    assert False, "Expected ZeroDivisionError"
 
 [case testAnyAttributeAndMethodAccess]
 from typing import Any, List
@@ -2892,8 +2947,11 @@ def take_literal(x: Literal[1, 2, 3]) -> None:
     print(x)
 
 [file driver.py]
+import sys
 from native import *
-print(T, U, Z, D)
+
+if sys.version_info[:3] > (3, 5, 2):
+    assert "%s %s %s %s" % (T, U, Z, D) == "typing.List[native.A] typing.List[typing.Tuple[int, str]] typing.List[typing.List[int]] typing.Dict[int, typing.List[int]]"
 print(x)
 print(z)
 print(take_lol(x))
@@ -2913,7 +2971,6 @@ except Exception as e:
 # ... but not that it is a valid literal value
 take_literal(10)
 [out]
-typing.List[native.A] typing.List[typing.Tuple[int, str]] typing.List[typing.List[int]] typing.Dict[int, typing.List[int]]
 Lol(a=1, b=[])
 10
 1
@@ -3950,6 +4007,202 @@ def test():
     assert x == y
 
 test()
+
+[case testIterTypeTrickiness]
+# Test inferring the type of a for loop body doesn't cause us grief
+# Extracted from something that broke in mypy
+
+def foo(x: object) -> None:
+    if isinstance(x, dict):
+        for a in x:
+            pass
+
+[file driver.py]
+# really I only care it builds
+
+[case testComplicatedArgs]
+from typing import Tuple, Dict
+
+def kwonly1(x: int = 0, *, y: int) -> Tuple[int, int]:
+    return x, y
+
+def kwonly2(*, x: int = 0, y: int) -> Tuple[int, int]:
+    return x, y
+
+def kwonly3(a: int, b: int = 0, *, y: int, x: int = 1) -> Tuple[int, int, int, int]:
+    return a, b, x, y
+
+def kwonly4(*, x: int, y: int) -> Tuple[int, int]:
+    return x, y
+
+def varargs1(*args: int) -> Tuple[int, ...]:
+    return args
+
+def varargs2(*args: int, **kwargs: int) -> Tuple[Tuple[int, ...], Dict[str, int]]:
+    return args, kwargs
+
+def varargs3(**kwargs: int) -> Dict[str, int]:
+    return kwargs
+
+def varargs4(a: int, b: int = 0,
+             *args: int, y: int, x: int = 1,
+             **kwargs: int) -> Tuple[Tuple[int, ...], Dict[str, int]]:
+    return (a, b, *args), {'x': x, 'y': y, **kwargs}
+
+def varargs_tests() -> None:
+    assert varargs1() == ()
+    assert varargs1(1, 2, 3) == (1, 2, 3)
+    assert varargs2(1, 2, 3) == ((1, 2, 3), {})
+    assert varargs2(1, 2, 3, x=4) == ((1, 2, 3), {'x': 4})
+    assert varargs2(x=4) == ((), {'x': 4})
+    assert varargs3() == {}
+    assert varargs3(x=4) == {'x': 4}
+    assert varargs3(x=4, y=5) == {'x': 4, 'y': 5}
+
+    assert varargs4(-1, y=2) == ((-1, 0), {'x': 1, 'y': 2})
+    assert varargs4(-1, 2, y=2) == ((-1, 2), {'x': 1, 'y': 2})
+    assert varargs4(-1, 2, 3, y=2) == ((-1, 2, 3), {'x': 1, 'y': 2})
+    assert varargs4(-1, 2, 3, x=10, y=2) == ((-1, 2, 3), {'x': 10, 'y': 2})
+    assert varargs4(-1, x=10, y=2) == ((-1, 0), {'x': 10, 'y': 2})
+    assert varargs4(-1, y=2, z=20) == ((-1, 0), {'x': 1, 'y': 2, 'z': 20})
+    assert varargs4(-1, 2, y=2, z=20) == ((-1, 2), {'x': 1, 'y': 2, 'z': 20})
+    assert varargs4(-1, 2, 3, y=2, z=20) == ((-1, 2, 3), {'x': 1, 'y': 2, 'z': 20})
+    assert varargs4(-1, 2, 3, x=10, y=2, z=20) == ((-1, 2, 3), {'x': 10, 'y': 2, 'z': 20})
+    assert varargs4(-1, x=10, y=2, z=20) == ((-1, 0), {'x': 10, 'y': 2, 'z': 20})
+
+    x: A = B()
+    assert x.f(1) == (1,)
+    assert x.g(1) == ((1,), {})
+    # This one is really funny! When we make native calls we lose
+    # track of which arguments are positional or keyword, so the glue
+    # calls them all positional unless they are keyword only...
+    # It would be possible to fix this by dynamically tracking which
+    # arguments were passed by keyword (for example, by passing a bitmask
+    # to functions indicating this), but paying a speed, size, and complexity
+    # cost for something so deeply marginal seems like a bad choice.
+    # assert x.g(x=1) == ((), {'x': 1})
+
+class A:
+    def f(self, x: int) -> Tuple[int, ...]:
+        return (x,)
+    def g(self, x: int) -> Tuple[Tuple[int, ...], Dict[str, int]]:
+        return (x,), {}
+
+class B(A):
+    def f(self, *args: int) -> Tuple[int, ...]:
+        return args
+    def g(self, *args: int, **kwargs: int) -> Tuple[Tuple[int, ...], Dict[str, int]]:
+        return args, kwargs
+
+[file testutil.py]
+# TODO: This should go into some general mypyc test support lib (along
+# with other things)
+from contextlib import contextmanager
+from typing import Iterator
+
+@contextmanager
+def assertRaises(typ: type, msg: str = '') -> Iterator[None]:
+    try:
+        yield
+    except Exception as e:
+        assert isinstance(e, typ), "{} is not a {}".format(e, typ.__name__)
+        assert msg in str(e), 'Message "{}" does not match "{}"'.format(e, msg)
+    else:
+        assert False, "Expected {} but got no exception".format(typ.__name__)
+
+[file driver.py]
+from native import (
+    kwonly1, kwonly2, kwonly3, kwonly4,
+    varargs1, varargs2, varargs3, varargs4, varargs_tests,
+)
+
+from testutil import assertRaises
+
+# kwonly arg tests
+assert kwonly1(10, y=20) == (10, 20)
+assert kwonly1(y=20) == (0, 20)
+with assertRaises(TypeError, "missing required keyword-only argument 'y'"):
+    kwonly1()
+with assertRaises(TypeError, "takes at most 1 positional argument (2 given)"):
+    kwonly1(10, 20)
+
+assert kwonly2(x=10, y=20) == (10, 20)
+assert kwonly2(y=20) == (0, 20)
+
+with assertRaises(TypeError, "missing required keyword-only argument 'y'"):
+    kwonly2()
+with assertRaises(TypeError, "takes no positional arguments"):
+    kwonly2(10, 20)
+
+assert kwonly3(10, y=20) == (10, 0, 1, 20)
+assert kwonly3(a=10, y=20) == (10, 0, 1, 20)
+assert kwonly3(10, 30, y=20) == (10, 30, 1, 20)
+assert kwonly3(10, b=30, y=20) == (10, 30, 1, 20)
+assert kwonly3(a=10, b=30, y=20) == (10, 30, 1, 20)
+
+assert kwonly3(10, x=40, y=20) == (10, 0, 40, 20)
+assert kwonly3(a=10, x=40, y=20) == (10, 0, 40, 20)
+assert kwonly3(10, 30, x=40, y=20) == (10, 30, 40, 20)
+assert kwonly3(10, b=30, x=40, y=20) == (10, 30, 40, 20)
+assert kwonly3(a=10, b=30, x=40, y=20) == (10, 30, 40, 20)
+
+with assertRaises(TypeError, "missing required argument 'a'"):
+    kwonly3(b=30, x=40, y=20)
+with assertRaises(TypeError, "missing required keyword-only argument 'y'"):
+    kwonly3(10)
+
+assert kwonly4(x=1, y=2) == (1, 2)
+assert kwonly4(y=2, x=1) == (1, 2)
+
+with assertRaises(TypeError, "missing required keyword-only argument 'y'"):
+    kwonly4(x=1)
+with assertRaises(TypeError, "missing required keyword-only argument 'x'"):
+    kwonly4(y=1)
+with assertRaises(TypeError, "missing required keyword-only argument 'x'"):
+    kwonly4()
+
+# varargs tests
+assert varargs1() == ()
+assert varargs1(1, 2, 3) == (1, 2, 3)
+assert varargs2(1, 2, 3) == ((1, 2, 3), {})
+assert varargs2(1, 2, 3, x=4) == ((1, 2, 3), {'x': 4})
+assert varargs2(x=4) == ((), {'x': 4})
+assert varargs3() == {}
+assert varargs3(x=4) == {'x': 4}
+assert varargs3(x=4, y=5) == {'x': 4, 'y': 5}
+
+with assertRaises(TypeError, "'x' is an invalid keyword argument for varargs1()"):
+    varargs1(x=10)
+with assertRaises(TypeError, "'x' is an invalid keyword argument for varargs1()"):
+    varargs1(1, x=10)
+with assertRaises(TypeError, "varargs3() takes no positional arguments"):
+    varargs3(10)
+with assertRaises(TypeError, "varargs3() takes no positional arguments"):
+    varargs3(10, x=10)
+
+assert varargs4(-1, y=2) == ((-1, 0), {'x': 1, 'y': 2})
+assert varargs4(-1, 2, y=2) == ((-1, 2), {'x': 1, 'y': 2})
+assert varargs4(-1, 2, 3, y=2) == ((-1, 2, 3), {'x': 1, 'y': 2})
+assert varargs4(-1, 2, 3, x=10, y=2) == ((-1, 2, 3), {'x': 10, 'y': 2})
+assert varargs4(-1, x=10, y=2) == ((-1, 0), {'x': 10, 'y': 2})
+assert varargs4(-1, y=2, z=20) == ((-1, 0), {'x': 1, 'y': 2, 'z': 20})
+assert varargs4(-1, 2, y=2, z=20) == ((-1, 2), {'x': 1, 'y': 2, 'z': 20})
+assert varargs4(-1, 2, 3, y=2, z=20) == ((-1, 2, 3), {'x': 1, 'y': 2, 'z': 20})
+assert varargs4(-1, 2, 3, x=10, y=2, z=20) == ((-1, 2, 3), {'x': 10, 'y': 2, 'z': 20})
+assert varargs4(-1, x=10, y=2, z=20) == ((-1, 0), {'x': 10, 'y': 2, 'z': 20})
+
+with assertRaises(TypeError, "varargs4() missing required argument 'a' (pos 1)"):
+    varargs4()
+with assertRaises(TypeError, "varargs4() missing required keyword-only argument 'y'"):
+    varargs4(1, 2)
+with assertRaises(TypeError, "varargs4() missing required keyword-only argument 'y'"):
+    varargs4(1, 2, x=1)
+with assertRaises(TypeError, "varargs4() missing required keyword-only argument 'y'"):
+    varargs4(1, 2, 3)
+with assertRaises(TypeError, "varargs4() missing required argument 'a' (pos 1)"):
+    varargs4(y=20)
+
+varargs_tests()
 
 [case testIterTypeTrickiness]
 # Test inferring the type of a for loop body doesn't cause us grief

@@ -21,7 +21,6 @@ static struct PyModuleDef module = {
     module_methods
 };
 
-CPy_dllexport
 PyMODINIT_FUNC PyInit_prog(void)
 {
     if (CPyStatic_module_internal) {
@@ -112,7 +111,7 @@ int CPyGlobalsInit(void)
 {
     static int is_initialized = 0;
     if (is_initialized) return 0;
-
+    
     CPy_Init();
     CPyStatic_module = Py_None;
     CPyStatic_builtins_module = Py_None;
@@ -151,3 +150,5 @@ char CPyDef___top_level__(void);
 def f(x: List[int]) -> None: pass
 [out]
 prog.py:1: error: Name 'List' is not defined
+prog.py:1: note: Did you forget to import it from "typing"? (Suggestion: "from typing import List")
+

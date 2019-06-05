@@ -383,15 +383,14 @@ def __top_level__():
     r60 :: dict
     r61 :: str
     r62, r63 :: object
-    r64 :: tuple[object, object, object]
-    r65 :: object
-    r66 :: str
-    r67, r68 :: object
-    r69 :: bool
-    r70 :: dict
-    r71 :: str
-    r72 :: bool
-    r73 :: None
+    r64 :: tuple
+    r65 :: str
+    r66, r67 :: object
+    r68 :: bool
+    r69 :: dict
+    r70 :: str
+    r71 :: bool
+    r72 :: None
 L0:
     r0 = builtins.module :: static
     r1 = builtins.None :: object
@@ -471,18 +470,17 @@ L6:
     r61 = unicode_6 :: static  ('T')
     r62 = r60[r61] :: dict
     r63 = r59[r62] :: object
-    r64 = (r55, r56, r63)
-    r65 = box(tuple[object, object, object], r64)
-    r66 = unicode_7 :: static  ('__main__')
-    r67 = __main__.D_template :: type
-    r68 = pytype_from_template(r67, r65, r66)
-    r69 = D_trait_vtable_setup()
-    __main__.D = r68 :: type
-    r70 = __main__.globals :: static
-    r71 = unicode_10 :: static  ('D')
-    r72 = r70.__setitem__(r71, r68) :: dict
-    r73 = None
-    return r73
+    r64 = (r55, r56, r63) :: tuple
+    r65 = unicode_7 :: static  ('__main__')
+    r66 = __main__.D_template :: type
+    r67 = pytype_from_template(r66, r64, r65)
+    r68 = D_trait_vtable_setup()
+    __main__.D = r67 :: type
+    r69 = __main__.globals :: static
+    r70 = unicode_10 :: static  ('D')
+    r71 = r69.__setitem__(r70, r67) :: dict
+    r72 = None
+    return r72
 
 [case testIsInstance]
 class A: pass
@@ -798,6 +796,181 @@ L0:
     r2 = getattr r0, r1
     r3 = unbox(int, r2)
     return r3
+
+
+[case testNoEqDefined]
+class A:
+    pass
+
+def f(a: A, b: A) -> bool:
+    return a == b
+
+def f2(a: A, b: A) -> bool:
+    return a != b
+
+[out]
+def f(a, b):
+    a, b :: A
+    r0 :: bool
+L0:
+    r0 = a is b
+    return r0
+def f2(a, b):
+    a, b :: A
+    r0 :: bool
+L0:
+    r0 = a is not b
+    return r0
+
+[case testEqDefined]
+class Base:
+    def __eq__(self, other: object) -> bool:
+        return False
+class Derived(Base):
+    def __eq__(self, other: object) -> bool:
+        return True
+
+def f(a: Base, b: Base) -> bool:
+    return a == b
+
+def f2(a: Base, b: Base) -> bool:
+    return a != b
+
+def fOpt(a: Derived, b: Derived) -> bool:
+    return a == b
+
+def fOpt2(a: Derived, b: Derived) -> bool:
+    return a != b
+
+[out]
+def Base.__eq__(self, other):
+    self :: Base
+    other :: object
+    r0 :: bool
+    r1 :: object
+L0:
+    r0 = False
+    r1 = box(bool, r0)
+    return r1
+def Base.__ne__(self, rhs):
+    self :: Base
+    rhs, r0 :: object
+    r1 :: bool
+L0:
+    r0 = self.__eq__(rhs)
+    r1 = not r0
+    return r1
+def Derived.__eq__(self, other):
+    self :: Derived
+    other :: object
+    r0 :: bool
+    r1 :: object
+L0:
+    r0 = True
+    r1 = box(bool, r0)
+    return r1
+def f(a, b):
+    a, b :: Base
+    r0 :: object
+    r1 :: bool
+L0:
+    r0 = a == b
+    r1 = unbox(bool, r0)
+    return r1
+def f2(a, b):
+    a, b :: Base
+    r0 :: object
+    r1 :: bool
+L0:
+    r0 = a != b
+    r1 = unbox(bool, r0)
+    return r1
+def fOpt(a, b):
+    a, b :: Derived
+    r0 :: object
+    r1 :: bool
+L0:
+    r0 = a.__eq__(b)
+    r1 = unbox(bool, r0)
+    return r1
+def fOpt2(a, b):
+    a, b :: Derived
+    r0 :: bool
+L0:
+    r0 = a.__ne__(b)
+    return r0
+
+[case testEqDefinedLater]
+def f(a: 'Base', b: 'Base') -> bool:
+    return a == b
+
+def f2(a: 'Base', b: 'Base') -> bool:
+    return a != b
+
+def fOpt(a: 'Derived', b: 'Derived') -> bool:
+    return a == b
+
+def fOpt2(a: 'Derived', b: 'Derived') -> bool:
+    return a != b
+
+class Base:
+    pass
+class Derived(Base):
+    def __eq__(self, other: object) -> bool:
+        return True
+
+[out]
+def f(a, b):
+    a, b :: Base
+    r0 :: object
+    r1 :: bool
+L0:
+    r0 = a == b
+    r1 = unbox(bool, r0)
+    return r1
+def f2(a, b):
+    a, b :: Base
+    r0 :: object
+    r1 :: bool
+L0:
+    r0 = a != b
+    r1 = unbox(bool, r0)
+    return r1
+def fOpt(a, b):
+    a, b :: Derived
+    r0 :: object
+    r1 :: bool
+L0:
+    r0 = a.__eq__(b)
+    r1 = unbox(bool, r0)
+    return r1
+def fOpt2(a, b):
+    a, b :: Derived
+    r0 :: str
+    r1 :: object
+    r2 :: bool
+L0:
+    r0 = unicode_1 :: static  ('__ne__')
+    r1 = py_method_call(a, r0, b)
+    r2 = unbox(bool, r1)
+    return r2
+def Derived.__eq__(self, other):
+    self :: Derived
+    other :: object
+    r0 :: bool
+    r1 :: object
+L0:
+    r0 = True
+    r1 = box(bool, r0)
+    return r1
+def Derived.__ne__(self, rhs):
+    self :: Derived
+    rhs, r0 :: object
+    r1 :: bool
+L0:
+    r0 = self.__eq__(rhs)
+    r1 = not r0
+    return r1
 
 [case testDefaultVars]
 from typing import ClassVar, Optional

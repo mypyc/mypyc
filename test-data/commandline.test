@@ -95,18 +95,12 @@ def f(x: int) -> int:
     return x*x
 
 [case testErrorOutput]
-# cmd: test.py foo/__init__.py foo/bar.py
+# cmd: test.py
 
 [file test.py]
 from typing import List, Any
 from typing_extensions import Final
 from mypy_extensions import trait
-
-def args(*x: int) -> int:  # E: Accepting *args or **kwargs is unimplemented
-    return sum(x)
-
-def kwargs(**x: int) -> None:  # E: Accepting *args or **kwargs is unimplemented
-    pass
 
 def busted(b: bool) -> None:
     for i in range(1, 10, 0):  # E: range() step can't be zero
@@ -140,8 +134,9 @@ def decorator(x: Any) -> Any:
 class NeverMetaclass(type):  # E: Inheriting from most builtin types is unimplemented
     pass
 
-@decorator  # E: Metaclasses are not supported  # E: Class decorators are not supported
-class Wrong(metaclass=NeverMetaclass):
+@decorator
+class Wrong(metaclass=NeverMetaclass):  # E: Metaclasses are not supported  \
+                                        # E: Class decorators are not supported
     pass
 
 class Concrete1:
@@ -176,13 +171,4 @@ d1 = {1: 2}
 async def aio(x: Any) -> Any:  # E: async functions are unimplemented
     await x  # E: await is unimplemented
 
-def kwonly1(x: int = 0, *, y: int) -> None: pass  # E: Required keyword-only args that appear after optional args are unimplemented
-def kwonly2(*, x: int = 0, y: int) -> None: pass  # E: Required keyword-only args that appear after optional args are unimplemented
-
 a, *b, c = [1, 2, 3, 4]  # E: Unpacking with * is unimplemented
-
-[file foo/__init__.py]
-x = 20
-
-[file foo/bar.py]
-from . import x  # E: Relative imports are unimplemented
