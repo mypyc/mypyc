@@ -529,7 +529,7 @@ def generate_methods_table(cl: ClassIR,
                            emitter: Emitter) -> None:
     emitter.emit_line('static PyMethodDef {}[] = {{'.format(name))
     for fn in cl.methods.values():
-        if fn.name in cl.properties:
+        if fn.decl.is_prop_setter or fn.decl.is_prop_getter:
             continue
         emitter.emit_line('{{"{}",'.format(fn.name))
         emitter.emit_line(' (PyCFunction){}{},'.format(PREFIX, fn.cname(emitter.names)))
