@@ -284,12 +284,9 @@ def compute_vtable(cls: ClassIR) -> None:
     all_traits = [t for t in cls.mro if t.is_trait]
 
     for t in [cls] + cls.traits:
-        # prop_defs = list(itertools.chain(*t.properties.values()))
-        # for fn in itertools.chain(prop_defs, t.methods.values()):
         for fn in itertools.chain(t.methods.values()):
-            # The function may be None in the case of an undefined property setter
             # TODO: don't generate a new entry when we overload without changing the type
-            if fn and fn == cls.get_method(fn.name):
+            if fn == cls.get_method(fn.name):
                 cls.vtable[fn.name] = len(entries)
                 entries.append(VTableMethod(t, fn.name, fn))
 
@@ -448,6 +445,7 @@ def prepare_method_def(ir: ClassIR, module_name: str, cdef: ClassDef, mapper: Ma
 
         if node.func.is_property:
             assert node.func.type
+            decl.is_prop_getter = True
             ir.property_types[node.name()] = decl.sig.ret_type
 
 
@@ -948,10 +946,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             class_ir.properties[name] = (getter_ir, func_ir)
 
         if func_ir.decl.is_prop_setter:
-            print("name setter", name)
             class_ir.methods[PROPSET_PREFIX + name] = func_ir
         else:
-            print("name non-setter", name)
             class_ir.methods[name] = func_ir
 
         # If this overrides a parent class method with a different type, we need
