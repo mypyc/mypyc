@@ -2353,7 +2353,6 @@ from native import f
 assert f([(5, 6)]) == 11
 
 [case testUnpack]
-
 from typing import List
 
 a, *b = [1, 2, 3, 4, 5]

@@ -1710,6 +1710,20 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         else:
             assert False, 'Unsupported assignment target'
 
+    def process_iterator_tuple_assignment_helper(self,
+                                                 litem: AssignmentTarget,
+                                                 ritem: Value, line: int) -> None:
+        error_block, ok_block = BasicBlock(), BasicBlock()
+        self.add(Branch(ritem, error_block, ok_block, Branch.IS_ERROR))
+
+        self.activate_block(error_block)
+        self.add(RaiseStandardError(RaiseStandardError.VALUE_ERROR,
+                                    'not enough values to unpack', line))
+        self.add(Unreachable())
+
+        self.activate_block(ok_block)
+        self.assign(litem, ritem, line)
+
     def process_iterator_tuple_assignment(self,
                                           target: AssignmentTargetTuple,
                                           rvalue_reg: Value,
@@ -1732,6 +1746,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.add(Unreachable())
 
             self.activate_block(ok_block)
+
             self.assign(litem, ritem, line)
 
         # Assign the starred value and all values after it
