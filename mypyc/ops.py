@@ -336,9 +336,9 @@ class AssignmentTargetTuple(AssignmentTarget):
     """x, ..., y as assignment target"""
 
     def __init__(self, items: List[AssignmentTarget],
-                 starred: Optional[AssignmentTarget] = None) -> None:
+                 star_idx: Optional[int] = None) -> None:
         self.items = items
-        self.starred = starred
+        self.star_idx = star_idx
         # The shouldn't be relevant, but provide it just in case.
         self.type = object_rprimitive
 
