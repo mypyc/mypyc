@@ -1659,7 +1659,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             symbol = lvalue.node
             if isinstance(symbol, Decorator):
                 symbol = symbol.func
-            assert isinstance(symbol, SymbolNode)  # TODO: Can this fail?
+            if symbol is None:
+                # New semantic analyzer doesn't create ad-hoc Vars for special forms.
+                assert lvalue.is_special_form
+                symbol = Var(lvalue.name)
             if lvalue.kind == LDEF:
                 if symbol not in self.environment.symtable:
                     # If the function contains a nested function and the symbol is a free symbol,
