@@ -2355,7 +2355,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # If the expression is locally defined, then read the result from the corresponding
         # assignment target and return it. Otherwise if the expression is a global, load it from
         # the globals dictionary.
-        # Except for imports, that currently always happen in the global namespace.
+        # Except for imports, that currently always happens in the global namespace.
         if expr.kind == LDEF and not (isinstance(expr.node, Var)
                                       and expr.node.is_suppressed_import):
             # TODO: Behavior currently only defined for Var and FuncDef node types.
