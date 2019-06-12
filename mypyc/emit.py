@@ -37,9 +37,6 @@ class EmitterContext:
         self.temp_counter = 0
         self.names = NameGenerator(module_names)
 
-        # Cache from tuple types to unique ids for them
-        self.tuple_ids = {}  # type: Dict[RTuple, str]
-
         # The map below is used for generating declarations and
         # definitions at the top of the C file. The main idea is that they can
         # be generated at any time during the emit phase.
@@ -130,8 +127,6 @@ class Emitter:
         return self.static_name(cl.name, cl.module_name, prefix=TYPE_PREFIX)
 
     def ctype(self, rtype: RType) -> str:
-        if isinstance(rtype, RTuple):
-            return 'struct {}'.format(self.tuple_struct_name(rtype))
         return rtype._ctype
 
     def ctype_spaced(self, rtype: RType) -> str:
@@ -157,25 +152,8 @@ class Emitter:
     def native_function_name(self, fn: FuncDecl) -> str:
         return '{}{}'.format(NATIVE_PREFIX, fn.cname(self.names))
 
-    def tuple_ctype(self, rtuple: RTuple) -> str:
-        return 'struct {}'.format(self.tuple_struct_name(rtuple))
-
-    def tuple_unique_id(self, rtuple: RTuple) -> str:
-        """Generate a unique id which is used in naming corresponding C identifiers.
-
-        This is necessary since C does not have anonymous structural type equivalence
-        in the same way python can just assign a Tuple[int, bool] to a Tuple[int, bool].
-        """
-        if rtuple not in self.context.tuple_ids:
-            self.context.tuple_ids[rtuple] = rtuple.accept(TupleNameVisitor())
-        return self.context.tuple_ids[rtuple]
-
-    def tuple_struct_name(self, rtuple: RTuple) -> str:
-        # Nominally the max c length is 31 chars, but I'm not honestly worried about this.
-        return 'tuple_' + self.tuple_unique_id(rtuple)
-
     def tuple_c_declaration(self, rtuple: RTuple) -> List[str]:
-        result = ['struct {} {{'.format(self.tuple_struct_name(rtuple))]
+        result = ['struct {} {{'.format(self.ctype(rtuple))]
         if len(rtuple.types) == 0:  # empty tuple
             # Empty tuples contain a flag so that they can still indicate
             # error values.
@@ -207,10 +185,10 @@ class Emitter:
 
     def tuple_undefined_value(self, rtuple: RTuple) -> str:
         context = self.context
-        id = self.tuple_unique_id(rtuple)
+        id = rtuple.unique_id
         name = 'tuple_undefined_' + id
         if name not in context.declarations:
-            struct_name = self.tuple_struct_name(rtuple)
+            struct_name = self.ctype(rtuple)
             values = self.tuple_undefined_value_helper(rtuple)
             var = 'struct {} {}'.format(struct_name, name)
             decl = '{};'.format(var)
@@ -237,13 +215,13 @@ class Emitter:
     # Higher-level operations
 
     def declare_tuple_struct(self, tuple_type: RTuple) -> None:
-        struct_name = self.tuple_struct_name(tuple_type)
+        struct_name = self.ctype(tuple_type)
         if struct_name not in self.context.declarations:
             dependencies = set()
             for typ in tuple_type.types:
                 # XXX other types might eventually need similar behavior
                 if isinstance(typ, RTuple):
-                    dependencies.add(self.tuple_struct_name(typ))
+                    dependencies.add(self.ctype(typ))
 
             self.context.declarations[struct_name] = HeaderDeclaration(
                 dependencies,
@@ -713,28 +691,3 @@ class Emitter:
             self.emit_line('Py_CLEAR({});'.format(target))
         else:
             assert False, 'emit_gc_clear() not implemented for %s' % repr(rtype)
-
-
-class TupleNameVisitor(RTypeVisitor[str]):
-    """Produce a tuple name based on the concrete representations of types."""
-
-    def visit_rinstance(self, t: RInstance) -> str:
-        return "O"
-
-    def visit_runion(self, t: RUnion) -> str:
-        return "O"
-
-    def visit_rprimitive(self, t: RPrimitive) -> str:
-        if t._ctype == 'CPyTagged':
-            return 'I'
-        elif t._ctype == 'char':
-            return 'C'
-        assert not t.is_unboxed, "{} unexpected unboxed type".format(t)
-        return 'O'
-
-    def visit_rtuple(self, t: RTuple) -> str:
-        parts = [elem.accept(self) for elem in t.types]
-        return 'T{}{}'.format(len(parts), ''.join(parts))
-
-    def visit_rvoid(self, t: RVoid) -> str:
-        assert False, "rvoid in tuple?"
