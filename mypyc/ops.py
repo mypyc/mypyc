@@ -241,7 +241,8 @@ class RTuple(RType):
         # in the same way python can just assign a Tuple[int, bool] to a Tuple[int, bool].
         self.unique_id = self.accept(TupleNameVisitor())
         # Nominally the max c length is 31 chars, but I'm not honestly worried about this.
-        self._ctype = 'tuple_' + self.unique_id
+        self.struct_name = 'tuple_{}'.format(self.unique_id)
+        self._ctype = 'struct {}'.format(self.struct_name)
 
     def accept(self, visitor: 'RTypeVisitor[T]') -> T:
         return visitor.visit_rtuple(self)

@@ -153,7 +153,7 @@ class Emitter:
         return '{}{}'.format(NATIVE_PREFIX, fn.cname(self.names))
 
     def tuple_c_declaration(self, rtuple: RTuple) -> List[str]:
-        result = ['struct {} {{'.format(self.ctype(rtuple))]
+        result = ['struct {} {{'.format(rtuple.struct_name)]
         if len(rtuple.types) == 0:  # empty tuple
             # Empty tuples contain a flag so that they can still indicate
             # error values.
@@ -188,12 +188,12 @@ class Emitter:
         id = rtuple.unique_id
         name = 'tuple_undefined_' + id
         if name not in context.declarations:
-            struct_name = self.ctype(rtuple)
             values = self.tuple_undefined_value_helper(rtuple)
-            var = 'struct {} {}'.format(struct_name, name)
+            var = 'struct {} {}'.format(rtuple.struct_name, name)
             decl = '{};'.format(var)
             init = '{} = {{ {} }};'.format(var, ''.join(values))
-            context.declarations[name] = HeaderDeclaration(set([struct_name]), [decl], [init])
+            context.declarations[name] = HeaderDeclaration(
+                set([rtuple.struct_name]), [decl], [init])
         return name
 
     def tuple_undefined_value_helper(self, rtuple: RTuple) -> List[str]:
@@ -215,15 +215,14 @@ class Emitter:
     # Higher-level operations
 
     def declare_tuple_struct(self, tuple_type: RTuple) -> None:
-        struct_name = self.ctype(tuple_type)
-        if struct_name not in self.context.declarations:
+        if tuple_type.struct_name not in self.context.declarations:
             dependencies = set()
             for typ in tuple_type.types:
                 # XXX other types might eventually need similar behavior
                 if isinstance(typ, RTuple):
-                    dependencies.add(self.ctype(typ))
+                    dependencies.add(typ.struct_name)
 
-            self.context.declarations[struct_name] = HeaderDeclaration(
+            self.context.declarations[tuple_type.struct_name] = HeaderDeclaration(
                 dependencies,
                 self.tuple_c_declaration(tuple_type),
                 None,

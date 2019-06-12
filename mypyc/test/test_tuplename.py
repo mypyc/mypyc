@@ -6,6 +6,7 @@ from mypyc.ops import (
     ClassIR,
 )
 
+
 class TestTupleNames(unittest.TestCase):
     def setUp(self) -> None:
         self.inst_a = RInstance(ClassIR('A', '__main__'))
