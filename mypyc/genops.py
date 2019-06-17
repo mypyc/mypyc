@@ -1510,14 +1510,16 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.ret_types[-1] = sig.ret_type
 
         # Add all variables and functions that are declared/defined within this
-        # function are referenced in functions nested within this one to this
+        # function and are referenced in functions nested within this one to this
         # function's environment class so the nested functions can reference
-        # them, even if they are declared after the nested function's definition.
+        # them even if they are declared after the nested function's definition.
         # Note that this is done before visiting the body of this function.
 
-        env_for_func = (self.fn_info.callable_class
-                        if self.fn_info.is_nested
-                        else self.fn_info)  # type: Union[FuncInfo, ImplicitClass]
+        env_for_func = self.fn_info  # type: Union[FuncInfo, ImplicitClass]
+        if self.fn_info.is_generator:
+            env_for_func = self.fn_info.generator_class
+        elif self.fn_info.is_nested:
+            env_for_func = self.fn_info.callable_class
 
         if self.fn_info.fitem in self.free_variables:
             for var in self.free_variables[self.fn_info.fitem]:
@@ -1528,6 +1530,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         if self.fn_info.fitem in self.encapsulating_funcs:
             for nested_fn in self.encapsulating_funcs[self.fn_info.fitem]:
                 if isinstance(nested_fn, FuncDef):
+                    # The return type is 'object' instead of an RInstance of the
+                    # callable class because differently defined functions with
+                    # the same name and signature across conditional blocks
+                    # will generate different callable classes, so the callable
+                    # class that gets instantiated must be generic.
                     self.add_var_to_env_class(nested_fn, object_rprimitive,
                                               env_for_func, reassign=False)
 
@@ -1765,8 +1772,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 symbol = Var(lvalue.name)
             if lvalue.kind == LDEF:
                 if symbol not in self.environment.symtable:
-                    # If the function contains a nested function and the symbol is a free symbol,
-                    # or if the function is a generator function, then first define a new variable
+                    # If the function is a generator function, then first define a new variable
                     # in the current function's environment class. Next, define a target that
                     # refers to the newly defined variable in that environment class. Add the
                     # target to the table containing class environment variables, as well as the
@@ -4485,8 +4491,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def instantiate_env_class(self) -> Value:
         """Assigns an environment class to a register named after the given function definition."""
-        print("Here")
-        print(self.fn_info.env_class.ctor.name)
         curr_env_reg = self.add(Call(self.fn_info.env_class.ctor, [], self.fn_info.fitem.line))
 
         if self.fn_info.is_nested:
@@ -4855,19 +4859,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # Get the target associated with the previously defined FuncDef.
             return self.environment.lookup(fdef.original_def)
 
-        # The return type is 'object' instead of an RInstance of the callable class because
-        # differently defined functions with the same name and signature across conditional blocks
-        # will generate different callable classes, so the callable class that gets instantiated
-        # must be generic.
-        if self.fn_info.is_generator:
-            return self.add_var_to_env_class(fdef, object_rprimitive, self.fn_info.generator_class,
-                                             reassign=False)
-
-        if self.fn_info.contains_nested:
-            # If this function is nested, then we have already added it to it's parent function's
-            # environment, so just perform an environment lookup.
+        if self.fn_info.is_generator or self.fn_info.contains_nested:
             return self.environment.lookup(fdef)
-
 
         return self.environment.add_local_reg(fdef, object_rprimitive)
 
