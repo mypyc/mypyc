@@ -1535,6 +1535,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     # the same name and signature across conditional blocks
                     # will generate different callable classes, so the callable
                     # class that gets instantiated must be generic.
+
                     self.add_var_to_env_class(nested_fn, object_rprimitive,
                                               env_for_func, reassign=False)
 
@@ -4491,6 +4492,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def instantiate_env_class(self) -> Value:
         """Assigns an environment class to a register named after the given function definition."""
+        print("Here")
+        print(self.fn_info.env_class.ctor.name)
         curr_env_reg = self.add(Call(self.fn_info.env_class.ctor, [], self.fn_info.fitem.line))
 
         if self.fn_info.is_nested:
