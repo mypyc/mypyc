@@ -2218,7 +2218,6 @@ def mutual_recursion(start : int) -> int:
             return 0
         k -= 1
         return f1(k)
-
     return f1(start)
 
 def topLayer() -> int:
