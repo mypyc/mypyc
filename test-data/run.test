@@ -2228,7 +2228,6 @@ def topLayer() -> int:
         return bottomLayer()
 
     x = 1
-
     return middleLayer()
 
 def nest1() -> str:
