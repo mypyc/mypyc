@@ -25,8 +25,8 @@ class PreBuildVisitor(TraverserVisitor):
         self.funcs = []  # type: List[FuncItem]
         # The set of property setters
         self.prop_setters = set()  # type: Set[FuncDef]
-        # A map from any function that contains nested functions to a tuple consisting
-        # of a set of all the functions that are nested within it.
+        # A map from any function that contains nested functions to
+        # a set of all the functions that are nested within it.
         self.encapsulating_funcs = dict()  # type: Dict[FuncItem, Set[FuncItem]]
         # A map from a nested func to it's parent/encapsulating func.
         self.nested_funcs = dict()  # type: Dict[FuncItem, FuncItem]
