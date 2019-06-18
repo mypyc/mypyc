@@ -2200,6 +2200,28 @@ def f1() -> int:
                 return f3()
         return f2()
 
+def outer_func() -> int:
+    def inner_func() -> int:
+        return x
+    x = 1
+    return inner_func()
+
+def mutual_recursion(start : int) -> int:
+    def f1(k : int) -> int:
+        if k <= 0:
+            return 0
+        k -= 1
+        return f2(k)
+
+    def f2(k : int) -> int:
+        if k <= 0:
+            return 0
+        k -= 1
+        return f1(k)
+
+    return f1(start) 
+
+
 def uno(num: float) -> Callable[[str], str]:
     def dos(s: str) -> str:
         return s + '!'
@@ -2236,7 +2258,7 @@ def third() -> str:
     return 'third: normal function'
 
 [file driver.py]
-from native import outer, inner, first, uno, eins, call_other_inner_func, second, third, f1
+from native import outer, inner, first, uno, eins, call_other_inner_func, second, third, f1, outer_func, mutual_recursion
 
 assert outer()() == None
 assert inner() == 'inner: normal function'
@@ -2247,6 +2269,8 @@ assert call_other_inner_func(5) == 21
 assert second() == 'second: normal function'
 assert third() == 'third: normal function'
 assert f1() == 2
+assert outer_func() == 1
+assert mutual_recursion(5) == 0
 
 [case testOverloads]
 from typing import overload, Union, Tuple
