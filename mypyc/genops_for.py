@@ -9,8 +9,8 @@ from typing import Union, List
 
 from mypy.nodes import Lvalue, Expression
 from mypyc.ops import (
-    Value, BasicBlock, is_short_int_rprimitive, LoadInt, RType, PrimitiveOp, Branch, Register,
-    AssignmentTarget
+    Value, BasicBlock, int_rprimitive, is_short_int_rprimitive, LoadInt, RType,
+    PrimitiveOp, Branch, Register, AssignmentTarget
 )
 from mypyc.ops_int import unsafe_short_add
 from mypyc.ops_list import list_len_op, list_get_item_unsafe_op
@@ -203,10 +203,11 @@ class ForRange(ForGenerator):
         self.end_reg = end_reg
         self.step = step
         self.end_target = builder.maybe_spill(end_reg)
+        self.index_reg = builder.maybe_spill_assignable(start_reg)
         # Initialize loop index to 0. Assert that the index target is assignable.
         self.index_target = builder.get_assignment_target(
             self.index)  # type: Union[Register, AssignmentTarget]
-        builder.assign(self.index_target, start_reg, self.line)
+        builder.assign(self.index_target, builder.read(self.index_reg, self.line), self.line)
 
     def gen_condition(self) -> None:
         builder = self.builder
@@ -226,12 +227,14 @@ class ForRange(ForGenerator):
         if (is_short_int_rprimitive(self.start_reg.type)
                 and is_short_int_rprimitive(self.end_reg.type)):
             new_val = builder.primitive_op(
-                unsafe_short_add, [builder.read(self.index_target, line),
+                unsafe_short_add, [builder.read(self.index_reg, line),
                                    builder.add(LoadInt(self.step))], line)
+
         else:
             new_val = builder.binary_op(
-                builder.read(self.index_target, line), builder.add(LoadInt(self.step)), '+', line)
-        builder.assign(self.index_target, new_val, line)
+                builder.read(self.index_reg, line), builder.add(LoadInt(self.step)), '+', line)
+        builder.assign(self.index_reg, new_val, line)
+        builder.assign(self.index_target, builder.read(self.index_reg, line), line)
 
 
 class ForInfiniteCounter(ForGenerator):
@@ -239,10 +242,17 @@ class ForInfiniteCounter(ForGenerator):
 
     def init(self) -> None:
         builder = self.builder
+        # Create a register for keeping track of the value of the loop index.
+        # This register's name is unique, so if there are nested loops which share the same
+        # loop index, when the inner loop finishes all of it's iterations, the outer loop
+        # will be able to retrieve the state of it's own loop index via it's uniquely named
+        # index register.
+
         # Initialize loop index to 0.
+        self.index_reg = builder.maybe_spill_assignable(builder.add(LoadInt(0)))
         self.index_target = builder.get_assignment_target(
             self.index)  # type: Union[Register, AssignmentTarget]
-        builder.assign(self.index_target, builder.add(LoadInt(0)), self.line)
+        builder.assign(self.index_target, builder.read(self.index_reg, self.line), self.line)
 
     def gen_step(self) -> None:
         builder = self.builder
@@ -251,9 +261,10 @@ class ForInfiniteCounter(ForGenerator):
         # around a 63-bit integer.
         # NOTE: This would be questionable if short ints could be 32 bits.
         new_val = builder.primitive_op(
-            unsafe_short_add, [builder.read(self.index_target, line),
+            unsafe_short_add, [builder.read(self.index_reg, line),
                                builder.add(LoadInt(1))], line)
-        builder.assign(self.index_target, new_val, line)
+        builder.assign(self.index_reg, new_val, line)
+        builder.assign(self.index_target, builder.read(self.index_reg, line), line)
 
 
 class ForEnumerate(ForGenerator):

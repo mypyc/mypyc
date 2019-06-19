@@ -477,38 +477,41 @@ def yield_for_loop_dict_gen.__mypyc_generator_helper__(__mypyc_self__, type, val
     r5 :: dict
     r6, r7 :: short_int
     r8, r9 :: bool
-    r10 :: int
-    r11 :: short_int
-    r12 :: bool
-    r13 :: int
-    r14 :: None
-    r15, r16 :: object
-    r17 :: bool
-    r18 :: int
-    r19, r20 :: short_int
-    r21, r22 :: bool
-    r23 :: dict
-    r24 :: object
+    r10 :: short_int
+    r11 :: bool
+    r12 :: int
+    r13 :: short_int
+    r14 :: bool
+    r15 :: int
+    r16 :: None
+    r17, r18 :: object
+    r19 :: bool
+    r20, r21, r22 :: short_int
+    r23 :: bool
+    r24 :: short_int
     r25, r26 :: bool
-    r27, r28 :: object
-    r29 :: int
-    r30 :: bool
-    r31 :: int
-    r32 :: object
-    r33 :: short_int
+    r27 :: dict
+    r28 :: object
+    r29, r30 :: bool
+    r31, r32 :: object
+    r33 :: int
     r34 :: bool
-    r35 :: object
-    r36, r37 :: bool
-    r38 :: None
-    r39 :: bool
-    r40 :: None
-    r41 :: object
-    r42 :: short_int
-    r43, r44 :: bool
-    r45 :: short_int
-    r46 :: bool
-    r47 :: short_int
-    r48, r49 :: bool
+    r35 :: int
+    r36 :: object
+    r37 :: short_int
+    r38 :: bool
+    r39 :: object
+    r40, r41 :: bool
+    r42 :: None
+    r43 :: bool
+    r44 :: None
+    r45 :: object
+    r46 :: short_int
+    r47, r48 :: bool
+    r49 :: short_int
+    r50 :: bool
+    r51 :: short_int
+    r52, r53 :: bool
 L0:
     r0 = __mypyc_self__.__mypyc_env__
     r1 = r0.__mypyc_next_label__
@@ -525,71 +528,75 @@ L3:
     r6 = 0
     r7 = 5
     r0.__mypyc_temp__2 = r7; r8 = is_error
-    r0.i = r6; r9 = is_error
+    r0.__mypyc_temp__3 = r6; r9 = is_error
+    r10 = r0.__mypyc_temp__3
+    r0.i = r10; r11 = is_error
 L4:
-    r10 = r0.i
-    r11 = r0.__mypyc_temp__2
-    r12 = r10 < r11 :: int
-    if r12 goto L5 else goto L7 :: bool
+    r12 = r0.i
+    r13 = r0.__mypyc_temp__2
+    r14 = r12 < r13 :: int
+    if r14 goto L5 else goto L7 :: bool
 L5:
-    r13 = r0.i
-    r14 = None
-    r15 = box(int, r13)
-    r16 = box(None, r14)
-    r17 = r5.__setitem__(r15, r16) :: dict
+    r15 = r0.i
+    r16 = None
+    r17 = box(int, r15)
+    r18 = box(None, r16)
+    r19 = r5.__setitem__(r17, r18) :: dict
 L6:
-    r18 = r0.i
-    r19 = 1
-    r20 = r18 + r19 :: short_int
-    r0.i = r20; r21 = is_error
+    r20 = r0.__mypyc_temp__3
+    r21 = 1
+    r22 = r20 + r21 :: short_int
+    r0.__mypyc_temp__3 = r22; r23 = is_error
+    r24 = r0.__mypyc_temp__3
+    r0.i = r24; r25 = is_error
     goto L4
 L7:
-    r0.d = r5; r22 = is_error
-    r23 = r0.d
-    r24 = iter r23 :: object
-    r0.__mypyc_temp__3 = r23; r25 = is_error
-    r0.__mypyc_temp__4 = r24; r26 = is_error
+    r0.d = r5; r26 = is_error
+    r27 = r0.d
+    r28 = iter r27 :: object
+    r0.__mypyc_temp__4 = r27; r29 = is_error
+    r0.__mypyc_temp__5 = r28; r30 = is_error
 L8:
-    r27 = r0.__mypyc_temp__4
-    r28 = next r27 :: object
-    if is_error(r28) goto L14 else goto L9
+    r31 = r0.__mypyc_temp__5
+    r32 = next r31 :: object
+    if is_error(r32) goto L14 else goto L9
 L9:
-    r29 = unbox(int, r28)
-    r0.i = r29; r30 = is_error
-    r31 = r0.i
-    r32 = box(int, r31)
-    r33 = 1
-    r0.__mypyc_next_label__ = r33; r34 = is_error
-    return r32
+    r33 = unbox(int, r32)
+    r0.i = r33; r34 = is_error
+    r35 = r0.i
+    r36 = box(int, r35)
+    r37 = 1
+    r0.__mypyc_next_label__ = r37; r38 = is_error
+    return r36
 L10:
-    r35 = builtins.None :: object
-    r36 = type is not r35
-    if r36 goto L11 else goto L12 :: bool
+    r39 = builtins.None :: object
+    r40 = type is not r39
+    if r40 goto L11 else goto L12 :: bool
 L11:
-    raise_exception_with_tb(type, value, traceback); r37 = 0
+    raise_exception_with_tb(type, value, traceback); r41 = 0
     unreachable
 L12:
-    r38 = unbox(None, arg)
+    r42 = unbox(None, arg)
 L13:
     goto L8
 L14:
-    r39 = no_err_occurred
+    r43 = no_err_occurred
 L15:
-    r40 = None
-    r41 = box(None, r40)
-    r42 = -1
-    r0.__mypyc_next_label__ = r42; r43 = is_error
+    r44 = None
+    r45 = box(None, r44)
+    r46 = -1
+    r0.__mypyc_next_label__ = r46; r47 = is_error
 L16:
-    raise StopIteration(r41)
+    raise StopIteration(r45)
     unreachable
 L17:
-    r45 = 0
-    r46 = r1 == r45 :: int
-    if r46 goto L1 else goto L18 :: bool
+    r49 = 0
+    r50 = r1 == r49 :: int
+    if r50 goto L1 else goto L18 :: bool
 L18:
-    r47 = 1
-    r48 = r1 == r47 :: int
-    if r48 goto L10 else goto L19 :: bool
+    r51 = 1
+    r52 = r1 == r51 :: int
+    if r52 goto L10 else goto L19 :: bool
 L19:
     raise StopIteration
     unreachable
@@ -648,27 +655,30 @@ def yield_for_loop_range_gen.__mypyc_generator_helper__(__mypyc_self__, type, va
     r3, r4 :: bool
     r5, r6 :: short_int
     r7, r8 :: bool
-    r9 :: int
-    r10 :: short_int
-    r11 :: bool
-    r12 :: int
-    r13 :: object
-    r14 :: short_int
-    r15 :: bool
-    r16 :: object
-    r17, r18 :: bool
-    r19 :: None
-    r20 :: int
-    r21, r22 :: short_int
-    r23 :: bool
-    r24 :: None
-    r25 :: object
+    r9 :: short_int
+    r10 :: bool
+    r11 :: int
+    r12 :: short_int
+    r13 :: bool
+    r14 :: int
+    r15 :: object
+    r16 :: short_int
+    r17 :: bool
+    r18 :: object
+    r19, r20 :: bool
+    r21 :: None
+    r22, r23, r24 :: short_int
+    r25 :: bool
     r26 :: short_int
-    r27, r28 :: bool
-    r29 :: short_int
-    r30 :: bool
-    r31 :: short_int
-    r32, r33 :: bool
+    r27 :: bool
+    r28 :: None
+    r29 :: object
+    r30 :: short_int
+    r31, r32 :: bool
+    r33 :: short_int
+    r34 :: bool
+    r35 :: short_int
+    r36, r37 :: bool
 L0:
     r0 = __mypyc_self__.__mypyc_env__
     r1 = r0.__mypyc_next_label__
@@ -683,50 +693,54 @@ L2:
 L3:
     r5 = 0
     r6 = 5
-    r0.__mypyc_temp__5 = r6; r7 = is_error
-    r0.i = r5; r8 = is_error
+    r0.__mypyc_temp__6 = r6; r7 = is_error
+    r0.__mypyc_temp__7 = r5; r8 = is_error
+    r9 = r0.__mypyc_temp__7
+    r0.i = r9; r10 = is_error
 L4:
-    r9 = r0.i
-    r10 = r0.__mypyc_temp__5
-    r11 = r9 < r10 :: int
-    if r11 goto L5 else goto L10 :: bool
+    r11 = r0.i
+    r12 = r0.__mypyc_temp__6
+    r13 = r11 < r12 :: int
+    if r13 goto L5 else goto L10 :: bool
 L5:
-    r12 = r0.i
-    r13 = box(int, r12)
-    r14 = 1
-    r0.__mypyc_next_label__ = r14; r15 = is_error
-    return r13
+    r14 = r0.i
+    r15 = box(int, r14)
+    r16 = 1
+    r0.__mypyc_next_label__ = r16; r17 = is_error
+    return r15
 L6:
-    r16 = builtins.None :: object
-    r17 = type is not r16
-    if r17 goto L7 else goto L8 :: bool
+    r18 = builtins.None :: object
+    r19 = type is not r18
+    if r19 goto L7 else goto L8 :: bool
 L7:
-    raise_exception_with_tb(type, value, traceback); r18 = 0
+    raise_exception_with_tb(type, value, traceback); r20 = 0
     unreachable
 L8:
-    r19 = unbox(None, arg)
+    r21 = unbox(None, arg)
 L9:
-    r20 = r0.i
-    r21 = 1
-    r22 = r20 + r21 :: short_int
-    r0.i = r22; r23 = is_error
+    r22 = r0.__mypyc_temp__7
+    r23 = 1
+    r24 = r22 + r23 :: short_int
+    r0.__mypyc_temp__7 = r24; r25 = is_error
+    r26 = r0.__mypyc_temp__7
+    r0.i = r26; r27 = is_error
     goto L4
 L10:
-    r24 = None
-    r25 = box(None, r24)
-    r26 = -1
-    r0.__mypyc_next_label__ = r26; r27 = is_error
+    r28 = None
+    r29 = box(None, r28)
+    r30 = -1
+    r0.__mypyc_next_label__ = r30; r31 = is_error
 L11:
-    raise StopIteration(r25)
+    raise StopIteration(r29)
     unreachable
 L12:
-    r29 = 0
-    r30 = r1 == r29 :: int
-    if r30 goto L1 else goto L13 :: bool
+    r33 = 0
+    r34 = r1 == r33 :: int
+    if r34 goto L1 else goto L13 :: bool
 L13:
-    r31 = 1
-    r32 = r1 == r31 :: int
-    if r32 goto L6 else goto L14 :: bool
+    r35 = 1
+    r36 = r1 == r35 :: int
+    if r36 goto L6 else goto L14 :: bool
 L14:
     raise StopIteration
     unreachable
@@ -1790,44 +1804,49 @@ def recursive_outer_gen.__mypyc_generator_helper__(__mypyc_self__, type, value, 
     r11 :: short_int
     r12 :: int
     r13, r14 :: bool
-    r15, r16 :: int
-    r17 :: bool
-    r18 :: int
-    r19 :: object
-    r20 :: short_int
-    r21 :: bool
-    r22 :: object
-    r23, r24 :: bool
-    r25 :: int
-    r26 :: short_int
-    r27 :: int
-    r28 :: bool
-    r29 :: None
+    r15 :: short_int
+    r16 :: bool
+    r17, r18 :: int
+    r19 :: bool
+    r20 :: int
+    r21 :: object
+    r22 :: short_int
+    r23 :: bool
+    r24 :: object
+    r25, r26 :: bool
+    r27, r28 :: short_int
+    r29 :: int
     r30 :: object
     r31 :: short_int
-    r32, r33 :: bool
-    r34 :: short_int
-    r35, r36, r37 :: object
+    r32 :: bool
+    r33 :: short_int
+    r34 :: bool
+    r35 :: None
+    r36 :: object
+    r37 :: short_int
     r38, r39 :: bool
-    r40, r41, r42 :: object
-    r43 :: int
-    r44 :: bool
-    r45 :: int
-    r46 :: object
-    r47 :: short_int
-    r48 :: bool
-    r49 :: object
-    r50, r51, r52 :: bool
-    r53 :: None
-    r54 :: object
-    r55 :: short_int
-    r56, r57 :: bool
-    r58 :: short_int
-    r59 :: bool
-    r60 :: short_int
-    r61 :: bool
-    r62 :: short_int
-    r63, r64 :: bool
+    r40 :: short_int
+    r41, r42, r43 :: object
+    r44, r45 :: bool
+    r46, r47, r48 :: object
+    r49 :: int
+    r50 :: bool
+    r51 :: int
+    r52 :: object
+    r53 :: short_int
+    r54 :: bool
+    r55 :: object
+    r56, r57, r58 :: bool
+    r59 :: None
+    r60 :: object
+    r61 :: short_int
+    r62, r63 :: bool
+    r64 :: short_int
+    r65 :: bool
+    r66 :: short_int
+    r67 :: bool
+    r68 :: short_int
+    r69, r70 :: bool
 L0:
     r0 = __mypyc_self__.__mypyc_env__
     r1 = r0.__mypyc_next_label__
@@ -1852,92 +1871,98 @@ L4:
     r11 = 0
     r12 = r0.n
     r0.__mypyc_temp__0 = r12; r13 = is_error
-    r0.i = r11; r14 = is_error
+    r0.__mypyc_temp__1 = r11; r14 = is_error
+    r15 = r0.__mypyc_temp__1
+    r0.i = r15; r16 = is_error
 L5:
-    r15 = r0.i
-    r16 = r0.__mypyc_temp__0
-    r17 = r15 < r16 :: int
-    if r17 goto L6 else goto L11 :: bool
+    r17 = r0.i
+    r18 = r0.__mypyc_temp__0
+    r19 = r17 < r18 :: int
+    if r19 goto L6 else goto L11 :: bool
 L6:
-    r18 = r0.i
-    r19 = box(int, r18)
-    r20 = 1
-    r0.__mypyc_next_label__ = r20; r21 = is_error
-    return r19
+    r20 = r0.i
+    r21 = box(int, r20)
+    r22 = 1
+    r0.__mypyc_next_label__ = r22; r23 = is_error
+    return r21
 L7:
-    r22 = builtins.None :: object
-    r23 = type is not r22
-    if r23 goto L8 else goto L9 :: bool
+    r24 = builtins.None :: object
+    r25 = type is not r24
+    if r25 goto L8 else goto L9 :: bool
 L8:
-    raise_exception_with_tb(type, value, traceback); r24 = 0
+    raise_exception_with_tb(type, value, traceback); r26 = 0
     unreachable
 L9:
 L10:
-    r25 = r0.i
-    r26 = 1
-    r27 = r25 + r26 :: int
-    r0.i = r27; r28 = is_error
+    r27 = r0.__mypyc_temp__1
+    r28 = 1
+    r29 = r27 + r28 :: int
+    r30 = box(int, r29)
+    r31 = unbox(short_int, r30)
+    r0.__mypyc_temp__1 = r31; r32 = is_error
+    r33 = r0.__mypyc_temp__1
+    r0.i = r33; r34 = is_error
     goto L5
 L11:
-    r29 = None
-    r30 = box(None, r29)
-    r31 = -1
-    r0.__mypyc_next_label__ = r31; r32 = is_error
+    r35 = None
+    r36 = box(None, r35)
+    r37 = -1
+    r0.__mypyc_next_label__ = r37; r38 = is_error
 L12:
-    raise StopIteration(r30)
+    raise StopIteration(r36)
     unreachable
 L13:
-    r34 = 5
-    r35 = box(short_int, r34)
-    r36 = py_call(recursive, r35)
-    r37 = iter r36 :: object
-    r0.__mypyc_temp__1 = r36; r38 = is_error
-    r0.__mypyc_temp__2 = r37; r39 = is_error
+    r40 = 5
+    r41 = box(short_int, r40)
+    r42 = py_call(recursive, r41)
+    r43 = iter r42 :: object
+    r0.__mypyc_temp__2 = r42; r44 = is_error
+    r0.__mypyc_temp__3 = r43; r45 = is_error
 L14:
-    r40 = r0.__mypyc_temp__2
-    r41 = next r40 :: object
-    if is_error(r41) goto L20 else goto L15
+    r46 = r0.__mypyc_temp__3
+    r47 = next r46 :: object
+    if is_error(r47) goto L20 else goto L15
 L15:
-    r42 = cast(object, r41)
-    r43 = unbox(int, r42)
-    r0.i = r43; r44 = is_error
-    r45 = r0.i
-    r46 = box(int, r45)
-    r47 = 2
-    r0.__mypyc_next_label__ = r47; r48 = is_error
-    return r46
+    r48 = cast(object, r47)
+    r49 = unbox(int, r48)
+    r0.i = r49; r50 = is_error
+    r51 = r0.i
+    r52 = box(int, r51)
+    r53 = 2
+    r0.__mypyc_next_label__ = r53; r54 = is_error
+    return r52
 L16:
-    r49 = builtins.None :: object
-    r50 = type is not r49
-    if r50 goto L17 else goto L18 :: bool
+    r55 = builtins.None :: object
+    r56 = type is not r55
+    if r56 goto L17 else goto L18 :: bool
 L17:
-    raise_exception_with_tb(type, value, traceback); r51 = 0
+    raise_exception_with_tb(type, value, traceback); r57 = 0
     unreachable
 L18:
 L19:
     goto L14
 L20:
-    r52 = no_err_occurred
+    r58 = no_err_occurred
 L21:
-    r53 = None
-    r54 = box(None, r53)
-    r55 = -1
-    r0.__mypyc_next_label__ = r55; r56 = is_error
+    r59 = None
+    r60 = box(None, r59)
+    r61 = -1
+    r0.__mypyc_next_label__ = r61; r62 = is_error
 L22:
-    raise StopIteration(r54)
+    raise StopIteration(r60)
     unreachable
 L23:
-    r58 = 0
-    r59 = r1 == r58 :: int
-    if r59 goto L1 else goto L24 :: bool
+    r64 = 0
+    r65 = r1 == r64 :: int
+    if r65 goto L1 else goto L24 :: bool
 L24:
-    r60 = 1
-    r61 = r1 == r60 :: int
-    if r61 goto L7 else goto L25 :: bool
+    r66 = 1
+    r67 = r1 == r66 :: int
+    if r67 goto L7 else goto L25 :: bool
 L25:
-    r62 = 2
-    r63 = r1 == r62 :: int
-    if r63 goto L16 else goto L26 :: bool
+    r68 = 2
+    r69 = r1 == r68 :: int
+    if r69 goto L16 else goto L26 :: bool
 L26:
     raise StopIteration
     unreachable
