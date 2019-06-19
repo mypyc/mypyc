@@ -64,6 +64,42 @@ package_data += find_package_data(
 package_data += find_package_data(
     os.path.join('mypyc', 'lib-rt'), ['*.c', '*.h'])
 
+USE_MYPYC = False
+# To compile with mypyc, a mypyc checkout must be present on the PYTHONPATH
+if len(sys.argv) > 1 and sys.argv[1] == '--use-mypyc':
+    sys.argv.pop(1)
+    USE_MYPYC = True
+if os.getenv('MYPYC_USE_MYPYC', None) == '1':
+    USE_MYPYC = True
+
+if USE_MYPYC:
+  MYPYC_BLACKLIST = ('__init__.py')
+  # Start with all the .py files
+  everything = find_package_data('mypyc', ['*.py'])
+  # Strip out blacklist files
+  mypyc_targets = [x for x in everything if x not in MYPYC_BLACKLIST]
+  # Strip out any test code
+  mypyc_targets = [x for x in mypyc_targets if not x.startswith('test' + os.sep)]
+  # Strip out any mypy files
+  mypyc_targets = [x for x in mypyc_targets if not x.startswith('external' + os.sep)]
+  # Fix the paths to be full
+  mypyc_targets = [os.path.join('mypyc', x) for x in mypyc_targets]
+  # The targets come out of file system apis in an unspecified
+  # order. Sort them so that the mypyc output is deterministic.
+  mypyc_targets.sort()
+
+  opt_level = os.getenv('MYPYC_OPT_LEVEL', '3')
+
+  from mypyc.build import mypycify, MypycifyBuildExt
+
+  ext_modules = mypycify(mypyc_targets,
+                ['--config-file=mypyc_bootstrap.ini'],
+                opt_level=opt_level, 
+                multi_file=sys.platform == 'win32')
+  cmdclass['build_ext'] = MypycifyBuildExt
+else:
+  ext_modules = []
+
 classifiers = [
     'Development Status :: 3 - Alpha',
     'Environment :: Console',
@@ -84,6 +120,7 @@ setup(name='mypyc',
       author_email='jukka.lehtosalo@iki.fi',
       url='https://github.com/mypyc/mypyc',
       license='MIT License',
+      ext_modules= ext_modules,
       py_modules=[],
       packages=['mypyc', 'mypyc.test'],
       package_data={'mypyc': package_data},
