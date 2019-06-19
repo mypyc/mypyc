@@ -73,7 +73,7 @@ if os.getenv('MYPYC_USE_MYPYC', None) == '1':
     USE_MYPYC = True
 
 if USE_MYPYC:
-  MYPYC_BLACKLIST = ('__init__.py')
+  MYPYC_BLACKLIST = ('__init__.py',)
   # Start with all the .py files
   everything = find_package_data('mypyc', ['*.py'])
   # Strip out blacklist files
