@@ -234,7 +234,7 @@ class ForRange(ForGenerator):
             new_val = builder.binary_op(
                 builder.read(self.index_reg, line), builder.add(LoadInt(self.step)), '+', line)
         builder.assign(self.index_reg, new_val, line)
-        builder.assign(self.index_target, builder.read(self.index_reg, line), line)
+        builder.assign(self.index_target, new_val, line)
 
 
 class ForInfiniteCounter(ForGenerator):
@@ -242,17 +242,13 @@ class ForInfiniteCounter(ForGenerator):
 
     def init(self) -> None:
         builder = self.builder
-        # Create a register for keeping track of the value of the loop index.
-        # This register's name is unique, so if there are nested loops which share the same
-        # loop index, when the inner loop finishes all of it's iterations, the outer loop
-        # will be able to retrieve the state of it's own loop index via it's uniquely named
-        # index register.
-
-        # Initialize loop index to 0.
-        self.index_reg = builder.maybe_spill_assignable(builder.add(LoadInt(0)))
+        # Create a register to store the state of the loop index and
+        # initialize this register along with the loop index to 0.
+        zero = builder.add(LoadInt(0))
+        self.index_reg = builder.maybe_spill_assignable(zero)
         self.index_target = builder.get_assignment_target(
             self.index)  # type: Union[Register, AssignmentTarget]
-        builder.assign(self.index_target, builder.read(self.index_reg, self.line), self.line)
+        builder.assign(self.index_target, zero, self.line)
 
     def gen_step(self) -> None:
         builder = self.builder
@@ -264,7 +260,7 @@ class ForInfiniteCounter(ForGenerator):
             unsafe_short_add, [builder.read(self.index_reg, line),
                                builder.add(LoadInt(1))], line)
         builder.assign(self.index_reg, new_val, line)
-        builder.assign(self.index_target, builder.read(self.index_reg, line), line)
+        builder.assign(self.index_target, new_val, line)
 
 
 class ForEnumerate(ForGenerator):
@@ -277,7 +273,6 @@ class ForEnumerate(ForGenerator):
 
     def init(self, index1: Lvalue, index2: Lvalue, expr: Expression) -> None:
         # Count from 0 to infinity (for the index lvalue).
-        # TODO: If enumerating a list, we could perhaps share the index counter.
         self.index_gen = ForInfiniteCounter(
             self.builder,
             index1,

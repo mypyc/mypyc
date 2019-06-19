@@ -30,7 +30,7 @@ L3:
     r6 = 1
     r7 = r3 + r6 :: short_int
     r3 = r7
-    i = r3
+    i = r7
     goto L1
 L4:
     r8 = None
@@ -60,7 +60,7 @@ L3:
     r4 = -1
     r5 = r2 + r4 :: short_int
     r2 = r5
-    i = r2
+    i = r5
     goto L1
 L4:
     r6 = None
@@ -115,7 +115,7 @@ L3:
     r4 = 1
     r5 = r2 + r4 :: short_int
     r2 = r5
-    n = r2
+    n = r5
     goto L1
 L4:
     r6 = None
@@ -204,7 +204,7 @@ L3:
     r4 = 1
     r5 = r2 + r4 :: short_int
     r2 = r5
-    n = r2
+    n = r5
     goto L1
 L4:
     r6 = None
@@ -817,7 +817,7 @@ def f(a):
 L0:
     r0 = 0
     r1 = r0
-    i = r1
+    i = r0
     r2 = 0
     r3 = r2
 L1:
@@ -833,7 +833,7 @@ L3:
     r9 = 1
     r10 = r1 + r9 :: short_int
     r1 = r10
-    i = r1
+    i = r10
     r11 = 1
     r12 = r3 + r11 :: short_int
     r3 = r12
@@ -854,7 +854,7 @@ def g(x):
 L0:
     r0 = 0
     r1 = r0
-    i = r1
+    i = r0
     r2 = iter x :: object
 L1:
     r3 = next r2 :: object
@@ -866,7 +866,7 @@ L3:
     r5 = 1
     r6 = r1 + r5 :: short_int
     r1 = r6
-    i = r1
+    i = r6
     goto L1
 L4:
     r7 = no_err_occurred
@@ -980,7 +980,7 @@ L5:
     r16 = 1
     r17 = r5 + r16 :: short_int
     r5 = r17
-    z = r5
+    z = r17
     goto L1
 L6:
     r18 = no_err_occurred

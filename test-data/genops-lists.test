@@ -197,7 +197,7 @@ L3:
     r9 = 1
     r10 = r2 + r9 :: short_int
     r2 = r10
-    i = r2
+    i = r10
     goto L1
 L4:
     return l
