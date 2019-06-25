@@ -89,7 +89,7 @@ from mypyc.ops_misc import (
     py_call_op, py_call_with_kwargs_op, py_method_call_op,
     fast_isinstance_op, bool_op, new_slice_op,
     type_op, pytype_from_template_op, import_op, get_module_dict_op,
-    ellipsis_op, method_new_op, type_is_op,
+    ellipsis_op, method_new_op, type_is_op, type_object_op
 )
 from mypyc.ops_exc import (
     no_err_occurred_op, raise_exception_op, raise_exception_with_tb_op, reraise_exception_op,
@@ -192,7 +192,8 @@ def build_ir(modules: List[MypyFile],
 
     # Compute vtables.
     for cir in class_irs:
-        compute_vtable(cir)
+        if not cir.is_non_ext:
+            compute_vtable(cir)
 
     errors.flush_errors()
 
@@ -461,19 +462,24 @@ def is_valid_multipart_property_def(prop: OverloadedFuncDef) -> bool:
                         return True
     return False
 
-
 def prepare_class_def(path: str, module_name: str, cdef: ClassDef,
                       errors: Errors, mapper: Mapper) -> None:
     # The metaclass chain for GenericMeta all works, but in general they don't
     if (cdef.info.metaclass_type and cdef.info.metaclass_type.type.fullname() not in (
             'abc.ABCMeta', 'typing.TypingMeta', 'typing.GenericMeta')):
         errors.error("Metaclasses are not supported", path, cdef.line)
-    if any(not (isinstance(d, NameExpr) and d.fullname == 'mypy_extensions.trait')
-           for d in cdef.decorators):
-        errors.error("Class decorators are not supported", path, cdef.line)
 
     ir = mapper.type_to_ir[cdef.info]
     info = cdef.info
+
+    # We don't generate extension classes for decorated classes. Instead, we create a non extension
+    # class via the type() constructor.
+    ir.is_non_ext = any(not (isinstance(d, NameExpr) and d.fullname == 'mypy_extensions.trait')
+                        for d in cdef.decorators)
+
+    if ir.is_non_ext:
+        return
+
     for name, node in info.names.items():
         if isinstance(node.node, Var):
             assert node.node.type, "Class member missing type"
@@ -570,7 +576,8 @@ class FuncInfo(object):
                  namespace: str = '',
                  is_nested: bool = False,
                  contains_nested: bool = False,
-                 is_decorated: bool = False) -> None:
+                 is_decorated: bool = False,
+                 in_non_ext: bool = False) -> None:
         self.fitem = fitem
         self.name = name if not is_decorated else decorator_helper_name(name)
         self.class_name = class_name
@@ -590,10 +597,11 @@ class FuncInfo(object):
         # associated with the current environment.
         self._curr_env_reg = None  # type: Optional[Value]
         # These are flags denoting whether a given function is nested, contains a nested function,
-        # or is decorated.
+        # is decorated, or is within a non-extension class.
         self.is_nested = is_nested
         self.contains_nested = contains_nested
         self.is_decorated = is_decorated
+        self.in_non_ext = in_non_ext
 
         # TODO: add field for ret_type: RType = none_rprimitive
 
@@ -967,7 +975,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         classes = [node for node in mypyfile.defs if isinstance(node, ClassDef)]
 
-        # Collect all classes.
+        # Collect all undecorated classes.
         for cls in classes:
             ir = self.mapper.type_to_ir[cls.info]
             self.classes.append(ir)
@@ -991,7 +999,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def visit_method(self, cdef: ClassDef, fdef: FuncDef) -> None:
         name = fdef.name()
         class_ir = self.mapper.type_to_ir[cdef.info]
-        func_ir, _ = self.gen_func_item(fdef, name, self.mapper.fdef_to_sig(fdef), cdef.name)
+        func_ir, _ = self.gen_func_item(fdef, name, self.mapper.fdef_to_sig(fdef), cdef)
         self.functions.append(func_ir)
 
         if self.is_decorated(fdef):
@@ -1126,7 +1134,91 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.functions.append(ir)
         cls.methods[ir.name] = ir
 
+
+    def populate_class_dict(self, cdef) -> Value:
+        class_dict = self.primitive_op(new_dict_op, [], cdef.line)
+        #Populate the attr_dict with class attributes (ignoring methods for now: MYTODO: don't ignore methods..)
+        for stmt in cdef.defs.body:
+            if isinstance(stmt, FuncDef):
+                func_ir, func_reg = self.gen_func_item(stmt, stmt.name(), 
+                                                       self.mapper.fdef_to_sig(stmt),
+                                                       cdef)
+
+                self.functions.append(func_ir)
+
+                key = self.load_static_unicode(stmt.name())
+                value = func_reg
+                self.primitive_op(dict_set_item_op, [class_dict, key, value], stmt.line)
+                
+            elif isinstance(stmt, AssignmentStmt):
+                    # Variable declaration with no body
+                    if isinstance(stmt.rvalue, TempNode):
+                        continue
+                    if len(stmt.lvalues) != 1:
+                        self.error("Multiple assignment in class bodies not supported", stmt.line)
+                        continue
+                    lvalue = stmt.lvalues[0]
+                    if not isinstance(lvalue, NameExpr):
+                        self.error("Only assignment to variables is supported in class bodies",
+                                   stmt.line)
+                        continue
+
+                    key = self.load_static_unicode(lvalue.name)
+                    value = self.accept(stmt.rvalue)
+                    self.primitive_op(dict_set_item_op, [class_dict, key, value], stmt.line)
+        return class_dict
+
+
+    def load_non_ext_class(self, cdef: ClassDef) -> Value:
+        # Create a non-extension class using the type constructor, and call it with
+        # the class name, the base class information, and the class dict that we
+        # construct.
+        type_obj = self.primitive_op(type_object_op, [], cdef.line)
+        name = self.load_static_unicode(cdef.name)
+        class_dict = self.populate_class_dict(cdef)
+        #MYTODO: Fill in the bases list, putting off on first pass
+        bases = self.primitive_op(new_tuple_op, [], cdef.line)
+        class_type_obj = self.py_call(type_obj, [name, bases, class_dict], cdef.line)
+        return class_type_obj
+
+
+    def load_decorated_class(self, cdef: ClassDef, type_obj: Value) -> Value:
+        """
+        Given a decorated ClassDef and a register containing a non-extension representation of the 
+        ClassDef created via the type constructor, applies the corresponding decorator functions 
+        on that decorated ClassDef and returns a register containing the decorated ClassDef.
+        """
+        decorators = cdef.decorators
+        dec_class = type_obj
+        for d in reversed(decorators):
+            if d.name == 'dataclass':
+                continue
+            decorator = d.accept(self)
+            assert isinstance(decorator, Value)
+            dec_class = self.py_call(decorator, [dec_class], dec_class.line)
+        return dec_class
+
+
     def visit_class_def(self, cdef: ClassDef) -> None:
+        ir = self.mapper.type_to_ir[cdef.info]
+        # Currently, we only create non-extension classes for classes that are
+        # decorated. Classes decorated with @trait do not apply here, and are
+        # handled in a different way.
+        if ir.is_non_ext:
+            # Dynamically create the class via the type constructor if it is decorated.
+            class_type_obj = self.load_non_ext_class(cdef)
+            dec_class = self.load_decorated_class(cdef, class_type_obj)
+
+            # Save the decorated class
+            self.add(InitStatic(dec_class, cdef.name, self.module_name, NAMESPACE_TYPE))
+
+            # Add it to the dict
+            self.primitive_op(dict_set_item_op,
+                              [self.load_globals_dict(), self.load_static_unicode(cdef.name),
+                               dec_class], cdef.line)
+            return
+
+        # If the class is not decorated, generate an extension class for it.
         self.allocate_class(cdef)
 
         for stmt in cdef.defs.body:
@@ -1427,7 +1519,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                       fitem: FuncItem,
                       name: str,
                       sig: FuncSignature,
-                      class_name: Optional[str] = None) -> Tuple[FuncIR, Optional[Value]]:
+                      cdef: Optional[ClassDef] = None,
+                      ) -> Tuple[FuncIR, Optional[Value]]:
         # TODO: do something about abstract methods.
 
         """Generates and returns the FuncIR for a given FuncDef.
@@ -1470,13 +1563,19 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # a class for lambdas, no matter where they are. (It would probably also
         # work to special case toplevel lambdas and generate a non-class function.)
         is_nested = fitem in self.nested_fitems or isinstance(fitem, LambdaExpr)
-
         contains_nested = fitem in self.encapsulating_funcs.keys()
         is_decorated = fitem in self.fdefs_to_decorators
-        self.enter(FuncInfo(fitem, name, class_name, self.gen_func_ns(),
-                            is_nested, contains_nested, is_decorated))
+        in_non_ext = False
+        class_name = None
+        if cdef:
+            ir = self.mapper.type_to_ir[cdef.info]
+            in_non_ext = ir.is_non_ext
+            class_name = cdef.name
 
-        if self.fn_info.is_nested:
+        self.enter(FuncInfo(fitem, name, class_name, self.gen_func_ns(),
+                            is_nested, contains_nested, is_decorated, in_non_ext))
+
+        if self.fn_info.is_nested or self.fn_info.in_non_ext:
             self.setup_callable_class()
 
         # Functions that contain nested functions need an environment class to store variables that
@@ -1518,7 +1617,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         env_for_func = self.fn_info  # type: Union[FuncInfo, ImplicitClass]
         if self.fn_info.is_generator:
             env_for_func = self.fn_info.generator_class
-        elif self.fn_info.is_nested:
+        elif self.fn_info.is_nested or self.fn_info.in_non_ext:
             env_for_func = self.fn_info.callable_class
 
         if self.fn_info.fitem in self.free_variables:
@@ -1553,7 +1652,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.add_iter_to_generator_class(fn_info)
             self.add_throw_to_generator_class(fn_info, helper_fn_decl, sig)
         else:
-            func_ir, func_reg = self.gen_func_ir(blocks, sig, env, fn_info, class_name)
+            func_ir, func_reg = self.gen_func_ir(blocks, sig, env, fn_info, cdef)
 
         return (func_ir, func_reg)
 
@@ -1562,13 +1661,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     sig: FuncSignature,
                     env: Environment,
                     fn_info: FuncInfo,
-                    class_name: Optional[str]) -> Tuple[FuncIR, Optional[Value]]:
+                    cdef: Optional[ClassDef]) -> Tuple[FuncIR, Optional[Value]]:
         """Generates the FuncIR for a function given the blocks, environment, and function info of
         a particular function and returns it. If the function is nested, also returns the register
         containing the instance of the corresponding callable class.
         """
         func_reg = None  # type: Optional[Value]
-        if fn_info.is_nested:
+        if fn_info.is_nested or fn_info.in_non_ext:
             func_ir = self.add_call_to_callable_class(blocks, sig, env, fn_info)
             self.add_get_to_callable_class(fn_info)
             func_reg = self.instantiate_callable_class(fn_info)
@@ -4444,7 +4543,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         curr_env_reg = None
         if self.fn_info.is_generator:
             curr_env_reg = self.fn_info.generator_class.curr_env_reg
-        elif self.fn_info.is_nested:
+        elif self.fn_info.is_nested or self.fn_info.in_non_ext:
             curr_env_reg = self.fn_info.callable_class.curr_env_reg
         elif self.fn_info.contains_nested:
             curr_env_reg = self.fn_info.curr_env_reg

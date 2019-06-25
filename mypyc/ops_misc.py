@@ -379,6 +379,12 @@ type_op = func_op(
     error_kind=ERR_NEVER,
     emit=call_emit('PyObject_Type'))
 
+type_object_op = custom_op(result_type=object_rprimitive,
+                           arg_types=[],
+                           format_str='{dest} = builtins.type :: object',
+                           error_kind=ERR_NEVER,
+                           emit=name_emit('(PyObject*) &PyType_Type'))
+
 func_op(name='builtins.len',
         arg_types=[object_rprimitive],
         result_type=int_rprimitive,
