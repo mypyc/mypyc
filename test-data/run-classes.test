@@ -1,3 +1,57 @@
+[case testDataClass]
+from dataclasses import dataclass, field
+from typing import Set, List
+
+@dataclass
+class Person1:
+    age : int
+    name : str
+
+i4 = Person1(age = 5, name = 'robot')
+assert i4.age == 5
+assert i4.name == 'robot'
+
+@dataclass
+class Person2:
+    age : int
+    name : str = 'robot'
+
+i5 = Person2(age = 5)
+assert i5.age == 5
+assert i5.name == 'robot'
+i6 = Person2(age = 5, name = 'new_robot')
+assert i6.age == 5
+assert i6.name == 'new_robot'
+
+@dataclass
+class Person3:
+    age : int = 6
+    name : str = 'robot'
+
+i7 = Person3()
+assert i7.age == 6
+assert i7.name == 'robot'
+i8 = Person3(age = 5)
+assert i8.age == 5
+assert i8.name == 'robot'
+i9 = Person3(age = 5, name = 'new_robot')
+assert i9.age == 5
+assert i9.name == 'new_robot'
+
+#MYTODO: Get fields working
+# field(default = 'hello')
+
+# @dataclass
+# class Person4:
+#     friend_ids : List[int] = field(default_factory = list)
+
+# i10 = Person4(friend_ids = 1)
+# assert i10.friend_ids == 1
+
+
+[file driver.py]
+from native import Person1, Person2, Person3
+
 [case testEmptyClass]
 class Empty: pass
 

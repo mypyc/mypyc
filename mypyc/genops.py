@@ -1135,11 +1135,19 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         cls.methods[ir.name] = ir
 
 
-    def populate_class_dict(self, cdef) -> Value:
+    def populate_class_dict(self, cdef: ClassDef) -> Value:
         class_dict = self.primitive_op(new_dict_op, [], cdef.line)
-        #Populate the attr_dict with class attributes (ignoring methods for now: MYTODO: don't ignore methods..)
+        # MYTODO: We will eventually need precise types for annotations
+        annotations_dict = self.primitive_op(new_dict_op, [], cdef.line)
+        # MYTODO: Handle decorated methods/overloaded methods maybe?
+        # This code is very similar to the visit_class_def code. Probably
+        # should refactor this.
         for stmt in cdef.defs.body:
             if isinstance(stmt, FuncDef):
+                #MYTODO: Should probably ignore other plugin generated methods when creating
+                # non-extension classes
+                if stmt.name() == '__init__':
+                    continue
                 func_ir, func_reg = self.gen_func_item(stmt, stmt.name(), 
                                                        self.mapper.fdef_to_sig(stmt),
                                                        cdef)
@@ -1151,21 +1159,39 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 self.primitive_op(dict_set_item_op, [class_dict, key, value], stmt.line)
                 
             elif isinstance(stmt, AssignmentStmt):
-                    # Variable declaration with no body
-                    if isinstance(stmt.rvalue, TempNode):
-                        continue
-                    if len(stmt.lvalues) != 1:
-                        self.error("Multiple assignment in class bodies not supported", stmt.line)
-                        continue
-                    lvalue = stmt.lvalues[0]
-                    if not isinstance(lvalue, NameExpr):
-                        self.error("Only assignment to variables is supported in class bodies",
-                                   stmt.line)
-                        continue
+                if len(stmt.lvalues) != 1:
+                    self.error("Multiple assignment in class bodies not supported", stmt.line)
+                    continue
+                lvalue = stmt.lvalues[0]
+                if not isinstance(lvalue, NameExpr):
+                    self.error("Only assignment to variables is supported in class bodies",
+                               stmt.line)
+                    continue
 
-                    key = self.load_static_unicode(lvalue.name)
+                key = self.load_static_unicode(lvalue.name)
+                # desc = name_ref_ops['builtins.list']
+                # assert desc.result_type is not None
+                # typ = self.add(PrimitiveOp([], desc, stmt.line))
+                typ = self.primitive_op(type_object_op, [], stmt.line)
+                self.primitive_op(dict_set_item_op, [annotations_dict, key, typ], stmt.line)
+
+                # Only add the attribute to the __dict__ if the assignment is of the form:
+                # x : type = value (don't add attributes of the form x : type to the __dict__).
+                if not isinstance(stmt.rvalue, TempNode):
                     value = self.accept(stmt.rvalue)
                     self.primitive_op(dict_set_item_op, [class_dict, key, value], stmt.line)
+
+        # Add __annotations__ to the class dict.
+        self.primitive_op(dict_set_item_op, [class_dict, self.load_static_unicode('__annotations__'),
+                          annotations_dict], -1)
+
+        # We add a __doc__ attribute so if the non-extension class is decorated with the
+        # dataclass decorator, dataclass will not try to look for __text_signature__.
+        # https://github.com/python/cpython/blob/3.7/Lib/dataclasses.py#L957
+        filler_doc_str = 'filler docstring for classes decorated with dataclass'
+        self.primitive_op(dict_set_item_op, 
+                         [class_dict, self.load_static_unicode('__doc__'),
+                          self.load_static_unicode(filler_doc_str)], -1)
         return class_dict
 
 
@@ -1191,8 +1217,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         decorators = cdef.decorators
         dec_class = type_obj
         for d in reversed(decorators):
-            if d.name == 'dataclass':
-                continue
+            # if d.name == 'dataclass':
+            #     continue
             decorator = d.accept(self)
             assert isinstance(decorator, Value)
             dec_class = self.py_call(decorator, [dec_class], dec_class.line)
@@ -4428,8 +4454,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                         if info.name and info.name != '<top level>')
 
     def setup_callable_class(self) -> None:
-        """Generates a callable class representing a nested function and sets up the 'self'
-        variable for that class.
+        """Generates a callable class representing a nested function or a function within a
+        non-extension class and sets up the 'self' variable for that class.
 
         This takes the most recently visited function and returns a ClassIR to represent that
         function. Each callable class contains an environment attribute with points to another
