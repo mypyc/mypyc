@@ -47,7 +47,7 @@ assert i9.get_age() == 5
 i9.set_age(10)
 assert i9.get_age() == 10
 
-# MYTODO: Get fields working
+# TODO(sanjit): Get fields working
 # @dataclass
 # class Person4:
 #     friend_ids : List[int] = field(default_factory = list)

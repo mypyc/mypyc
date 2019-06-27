@@ -1137,14 +1137,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def populate_class_dict(self, cdef: ClassDef) -> Value:
         class_dict = self.primitive_op(new_dict_op, [], cdef.line)
-        # MYTODO: We will eventually need precise types for annotations
+        # TODO(sanjit): We will eventually need precise types for annotations
         annotations_dict = self.primitive_op(new_dict_op, [], cdef.line)
-        # MYTODO: Handle decorated methods/overloaded methods maybe?
+        # TODO(sanjit): Handle decorated methods/overloaded methods maybe?
         # This code is similar to the visit_class_def code. Maybe
         # could refactor this to reduce duplicated code?
         for stmt in cdef.defs.body:
             if isinstance(stmt, FuncDef):
-                # MYTODO: Should probably ignore other plugin generated methods when creating
+                # TODO(sanjit): Should probably ignore other plugin generated methods when creating
                 # non-extension classes
                 if stmt.name() == '__init__':
                     continue
@@ -1202,7 +1202,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         type_obj = self.primitive_op(type_object_op, [], cdef.line)
         name = self.load_static_unicode(cdef.name)
         class_dict = self.populate_class_dict(cdef)
-        # MYTODO: Fill in the bases list, putting off on first pass
+        # TODO(sanjit): Fill in the bases list, putting off on first pass
         bases = self.primitive_op(new_tuple_op, [], cdef.line)
         class_type_obj = self.py_call(type_obj, [name, bases, class_dict], cdef.line)
         return class_type_obj
