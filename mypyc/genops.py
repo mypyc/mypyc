@@ -462,6 +462,7 @@ def is_valid_multipart_property_def(prop: OverloadedFuncDef) -> bool:
                         return True
     return False
 
+
 def prepare_class_def(path: str, module_name: str, cdef: ClassDef,
                       errors: Errors, mapper: Mapper) -> None:
     # The metaclass chain for GenericMeta all works, but in general they don't
@@ -1134,7 +1135,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.functions.append(ir)
         cls.methods[ir.name] = ir
 
-
     def populate_class_dict(self, cdef: ClassDef) -> Value:
         class_dict = self.primitive_op(new_dict_op, [], cdef.line)
         # MYTODO: We will eventually need precise types for annotations
@@ -1144,20 +1144,23 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # should refactor this.
         for stmt in cdef.defs.body:
             if isinstance(stmt, FuncDef):
-                #MYTODO: Should probably ignore other plugin generated methods when creating
+                # MYTODO: Should probably ignore other plugin generated methods when creating
                 # non-extension classes
                 if stmt.name() == '__init__':
                     continue
-                func_ir, func_reg = self.gen_func_item(stmt, stmt.name(), 
+
+                func_ir, func_reg = self.gen_func_item(stmt, stmt.name(),
                                                        self.mapper.fdef_to_sig(stmt),
                                                        cdef)
+
+                assert func_reg is not None
 
                 self.functions.append(func_ir)
 
                 key = self.load_static_unicode(stmt.name())
                 value = func_reg
                 self.primitive_op(dict_set_item_op, [class_dict, key, value], stmt.line)
-                
+
             elif isinstance(stmt, AssignmentStmt):
                 if len(stmt.lvalues) != 1:
                     self.error("Multiple assignment in class bodies not supported", stmt.line)
@@ -1182,18 +1185,18 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     self.primitive_op(dict_set_item_op, [class_dict, key, value], stmt.line)
 
         # Add __annotations__ to the class dict.
-        self.primitive_op(dict_set_item_op, [class_dict, self.load_static_unicode('__annotations__'),
+        self.primitive_op(dict_set_item_op,
+                          [class_dict, self.load_static_unicode('__annotations__'),
                           annotations_dict], -1)
 
         # We add a __doc__ attribute so if the non-extension class is decorated with the
         # dataclass decorator, dataclass will not try to look for __text_signature__.
         # https://github.com/python/cpython/blob/3.7/Lib/dataclasses.py#L957
         filler_doc_str = 'filler docstring for classes decorated with dataclass'
-        self.primitive_op(dict_set_item_op, 
+        self.primitive_op(dict_set_item_op,
                          [class_dict, self.load_static_unicode('__doc__'),
                           self.load_static_unicode(filler_doc_str)], -1)
         return class_dict
-
 
     def load_non_ext_class(self, cdef: ClassDef) -> Value:
         # Create a non-extension class using the type constructor, and call it with
@@ -1202,16 +1205,15 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         type_obj = self.primitive_op(type_object_op, [], cdef.line)
         name = self.load_static_unicode(cdef.name)
         class_dict = self.populate_class_dict(cdef)
-        #MYTODO: Fill in the bases list, putting off on first pass
+        # MYTODO: Fill in the bases list, putting off on first pass
         bases = self.primitive_op(new_tuple_op, [], cdef.line)
         class_type_obj = self.py_call(type_obj, [name, bases, class_dict], cdef.line)
         return class_type_obj
 
-
     def load_decorated_class(self, cdef: ClassDef, type_obj: Value) -> Value:
         """
-        Given a decorated ClassDef and a register containing a non-extension representation of the 
-        ClassDef created via the type constructor, applies the corresponding decorator functions 
+        Given a decorated ClassDef and a register containing a non-extension representation of the
+        ClassDef created via the type constructor, applies the corresponding decorator functions
         on that decorated ClassDef and returns a register containing the decorated ClassDef.
         """
         decorators = cdef.decorators
@@ -1223,7 +1225,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             assert isinstance(decorator, Value)
             dec_class = self.py_call(decorator, [dec_class], dec_class.line)
         return dec_class
-
 
     def visit_class_def(self, cdef: ClassDef) -> None:
         ir = self.mapper.type_to_ir[cdef.info]
@@ -1615,7 +1616,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # Do a first-pass and generate a function that just returns a generator object.
             self.gen_generator_func()
             blocks, env, ret_type, fn_info = self.leave()
-            func_ir, func_reg = self.gen_func_ir(blocks, sig, env, fn_info, class_name)
+            func_ir, func_reg = self.gen_func_ir(blocks, sig, env, fn_info, cdef)
 
             # Re-enter the FuncItem and visit the body of the function this time.
             self.enter(fn_info)
@@ -1700,6 +1701,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         else:
             assert isinstance(fn_info.fitem, FuncDef)
             if fn_info.is_decorated:
+                class_name = None if cdef is None else cdef.name
                 func_decl = FuncDecl(fn_info.name, class_name, self.module_name, sig)
                 func_ir = FuncIR(func_decl, blocks, env)
             else:

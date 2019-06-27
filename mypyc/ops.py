@@ -1536,7 +1536,8 @@ class ClassIR:
     This also describes the runtime structure of native instances.
     """
     def __init__(self, name: str, module_name: str, is_trait: bool = False,
-                 is_generated: bool = False, is_abstract: bool = False, is_non_ext: bool = False) -> None:
+                 is_generated: bool = False, is_abstract: bool = False,
+                 is_non_ext: bool = False) -> None:
         self.name = name
         self.module_name = module_name
         self.is_trait = is_trait

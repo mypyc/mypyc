@@ -38,9 +38,7 @@ i9 = Person3(age = 5, name = 'new_robot')
 assert i9.age == 5
 assert i9.name == 'new_robot'
 
-#MYTODO: Get fields working
-# field(default = 'hello')
-
+# MYTODO: Get fields working
 # @dataclass
 # class Person4:
 #     friend_ids : List[int] = field(default_factory = list)
