@@ -1140,8 +1140,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # MYTODO: We will eventually need precise types for annotations
         annotations_dict = self.primitive_op(new_dict_op, [], cdef.line)
         # MYTODO: Handle decorated methods/overloaded methods maybe?
-        # This code is very similar to the visit_class_def code. Probably
-        # should refactor this.
+        # This code is similar to the visit_class_def code. Maybe
+        # could refactor this to reduce duplicated code?
         for stmt in cdef.defs.body:
             if isinstance(stmt, FuncDef):
                 # MYTODO: Should probably ignore other plugin generated methods when creating
@@ -1172,9 +1172,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     continue
 
                 key = self.load_static_unicode(lvalue.name)
-                # desc = name_ref_ops['builtins.list']
-                # assert desc.result_type is not None
-                # typ = self.add(PrimitiveOp([], desc, stmt.line))
                 typ = self.primitive_op(type_object_op, [], stmt.line)
                 self.primitive_op(dict_set_item_op, [annotations_dict, key, typ], stmt.line)
 
@@ -1219,8 +1216,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         decorators = cdef.decorators
         dec_class = type_obj
         for d in reversed(decorators):
-            # if d.name == 'dataclass':
-            #     continue
             decorator = d.accept(self)
             assert isinstance(decorator, Value)
             dec_class = self.py_call(decorator, [dec_class], dec_class.line)

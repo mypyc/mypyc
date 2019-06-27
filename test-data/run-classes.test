@@ -28,6 +28,12 @@ class Person3:
     age : int = 6
     name : str = 'robot'
 
+    def get_age(self) -> int:
+        return (self.age)
+
+    def set_age(self, new_age : int) -> None:
+        self.age = new_age
+
 i7 = Person3()
 assert i7.age == 6
 assert i7.name == 'robot'
@@ -37,6 +43,9 @@ assert i8.name == 'robot'
 i9 = Person3(age = 5, name = 'new_robot')
 assert i9.age == 5
 assert i9.name == 'new_robot'
+assert i9.get_age() == 5
+i9.set_age(10)
+assert i9.get_age() == 10
 
 # MYTODO: Get fields working
 # @dataclass
