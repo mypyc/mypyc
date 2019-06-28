@@ -1136,9 +1136,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def populate_class_dict(self, cdef: ClassDef) -> Value:
         class_dict = self.primitive_op(new_dict_op, [], cdef.line)
-        # TODO(sanjit): We will eventually need precise types for annotations
         annotations_dict = self.primitive_op(new_dict_op, [], cdef.line)
-        # TODO(sanjit): Handle decorated methods/overloaded methods maybe?
+        # TODO: Handle decorated/overloaded methods.
         # This code is similar to the visit_class_def code. Maybe
         # could refactor this to reduce duplicated code?
         for stmt in cdef.defs.body:
@@ -1170,6 +1169,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                stmt.line)
                     continue
 
+                # We populate __annotations__ because dataclasses uses it to determine
+                # which attributes to compute on.
+                # TODO: Maybe generate more precise types for annotations
                 key = self.load_static_unicode(lvalue.name)
                 typ = self.primitive_op(type_object_op, [], stmt.line)
                 self.primitive_op(dict_set_item_op, [annotations_dict, key, typ], stmt.line)
