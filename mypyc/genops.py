@@ -976,7 +976,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         classes = [node for node in mypyfile.defs if isinstance(node, ClassDef)]
 
-        # Collect all undecorated classes.
+        # Collect all classes.
         for cls in classes:
             ir = self.mapper.type_to_ir[cls.info]
             self.classes.append(ir)
