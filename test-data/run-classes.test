@@ -59,7 +59,7 @@ assert hasattr(c, 'x')
 
 [case testDataClass]
 from dataclasses import dataclass, field
-from typing import Set, List
+from typing import Set, List, Callable, Any
 
 @dataclass
 class Person1:
@@ -88,8 +88,21 @@ class Person3:
     def get_friendIDs(self) -> List[int]:
         return self.friendIDs
 
+def get_next_age(g: Callable[[Any], int]) -> Callable[[Any], int]:
+    def f(a: Any) -> int:
+        return g(a) + 1 
+    return f
+
+@dataclass
+class Person4:
+    age : int
+
+    @get_next_age
+    def get_age(self) -> int:
+        return self.age
+
 [file driver.py]
-from native import Person1, Person2, Person3
+from native import Person1, Person2, Person3, Person4
 i1 = Person1(age = 5, name = 'robot')
 assert i1.age == 5
 assert i1.name == 'robot'
@@ -113,6 +126,8 @@ i6.set_age(10)
 assert i6.get_age() == 10
 i6.add_friendID(4)
 assert i6.get_friendIDs() == [1,2,3,4]
+i7 = Person4(age = 5)
+assert i7.get_age() == 6
 
 [case testGetAttribute]
 class C:

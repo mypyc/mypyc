@@ -1000,7 +1000,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def visit_method(self, cdef: ClassDef, fdef: FuncDef) -> None:
         name = fdef.name()
         class_ir = self.mapper.type_to_ir[cdef.info]
-        func_ir, _ = self.gen_func_item(fdef, name, self.mapper.fdef_to_sig(fdef), cdef)
+        func_ir, func_reg = self.gen_func_item(fdef, name, self.mapper.fdef_to_sig(fdef), cdef)
         self.functions.append(func_ir)
 
         if self.is_decorated(fdef):
@@ -1008,17 +1008,33 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             _, _, name = fdef.fullname().rpartition('.')
             helper_name = decorator_helper_name(name)
 
-            # Read the PyTypeObject representing the class, get the callable object representing
-            # the non-decorated method, and decorate it.
-            typ = self.load_native_type_object(cdef.fullname)
-            orig_func = self.py_get_attr(typ, helper_name, fdef.line)
+            if class_ir.is_non_ext:
+                assert func_reg is not None
+                orig_func = func_reg
+            else:
+                # Read the PyTypeObject representing the class, get the callable object
+                # representing the non-decorated method
+                typ = self.load_native_type_object(cdef.fullname)
+                orig_func = self.py_get_attr(typ, helper_name, fdef.line)
+
+            # Decorate the non-decorated method
             decorated_func = self.load_decorated_func(fdef, orig_func)
 
-            # Set the callable object representing the decorated method as an attribute of the
-            # class.
-            class_ir.attributes[name] = decorated_func.type
-            self.primitive_op(py_setattr_op,
-                              [typ, self.load_static_unicode(name), decorated_func], fdef.line)
+            if class_ir.is_non_ext:
+                func_reg = decorated_func
+
+            else:
+                # Set the callable object representing the decorated method as an attribute of the
+                # extension class.
+                class_ir.attributes[name] = decorated_func.type
+                self.primitive_op(py_setattr_op,
+                                  [typ, self.load_static_unicode(name), decorated_func], fdef.line)
+
+        # TODO: Support property getters and setters for non-extension classes
+        if class_ir.is_non_ext:
+            assert func_reg is not None
+            self.add_to_type_dict(class_ir, name, func_reg, fdef.line)
+            return
 
         if fdef.is_property:
             # If there is a property setter, it will be processed after the getter,
@@ -1134,78 +1150,26 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.functions.append(ir)
         cls.methods[ir.name] = ir
 
-    def populate_class_dict(self, cdef: ClassDef) -> Value:
-        class_dict = self.primitive_op(new_dict_op, [], cdef.line)
-        annotations_dict = self.primitive_op(new_dict_op, [], cdef.line)
-        # TODO: Handle decorated/overloaded methods.
-        # This code is similar to the visit_class_def code. Maybe
-        # could refactor this to reduce duplicated code?
-        for stmt in cdef.defs.body:
-            if isinstance(stmt, FuncDef):
-                # Ignore plugin generated methods when creating non-extension classes
-                assert stmt.name() in cdef.info.names
-                if cdef.info.names[stmt.name()].plugin_generated:
-                    continue
-
-                func_ir, func_reg = self.gen_func_item(stmt, stmt.name(),
-                                                       self.mapper.fdef_to_sig(stmt),
-                                                       cdef)
-
-                assert func_reg is not None
-
-                self.functions.append(func_ir)
-
-                key = self.load_static_unicode(stmt.name())
-                value = func_reg
-                self.primitive_op(dict_set_item_op, [class_dict, key, value], stmt.line)
-
-            elif isinstance(stmt, AssignmentStmt):
-                if len(stmt.lvalues) != 1:
-                    self.error("Multiple assignment in class bodies not supported", stmt.line)
-                    continue
-                lvalue = stmt.lvalues[0]
-                if not isinstance(lvalue, NameExpr):
-                    self.error("Only assignment to variables is supported in class bodies",
-                               stmt.line)
-                    continue
-
-                # We populate __annotations__ because dataclasses uses it to determine
-                # which attributes to compute on.
-                # TODO: Maybe generate more precise types for annotations
-                key = self.load_static_unicode(lvalue.name)
-                typ = self.primitive_op(type_object_op, [], stmt.line)
-                self.primitive_op(dict_set_item_op, [annotations_dict, key, typ], stmt.line)
-
-                # Only add the attribute to the __dict__ if the assignment is of the form:
-                # x : type = value (don't add attributes of the form x : type to the __dict__).
-                if not isinstance(stmt.rvalue, TempNode):
-                    value = self.accept(stmt.rvalue)
-                    self.primitive_op(dict_set_item_op, [class_dict, key, value], stmt.line)
-
+    def load_non_ext_class(self, ir: ClassIR, line: int) -> Value:
+        assert ir.type_dict is not None
+        assert ir.type_anns is not None
+        assert ir.type_bases is not None
         # Add __annotations__ to the class dict.
         self.primitive_op(dict_set_item_op,
-                          [class_dict, self.load_static_unicode('__annotations__'),
-                          annotations_dict], -1)
+                          [ir.type_dict, self.load_static_unicode('__annotations__'),
+                           ir.type_anns], -1)
 
         # We add a __doc__ attribute so if the non-extension class is decorated with the
         # dataclass decorator, dataclass will not try to look for __text_signature__.
         # https://github.com/python/cpython/blob/3.7/Lib/dataclasses.py#L957
         filler_doc_str = 'filler docstring for classes decorated with dataclass'
         self.primitive_op(dict_set_item_op,
-                         [class_dict, self.load_static_unicode('__doc__'),
-                          self.load_static_unicode(filler_doc_str)], -1)
-        return class_dict
+                         [ir.type_dict, self.load_static_unicode('__doc__'),
+                          self.load_static_unicode(filler_doc_str)], line)
 
-    def load_non_ext_class(self, cdef: ClassDef) -> Value:
-        # Create a non-extension class using the type constructor, and call it with
-        # the class name, the base class information, and the class dict that we
-        # construct.
-        type_obj = self.primitive_op(type_object_op, [], cdef.line)
-        name = self.load_static_unicode(cdef.name)
-        class_dict = self.populate_class_dict(cdef)
-        # TODO(sanjit): Fill in the bases list, putting off on first pass
-        bases = self.primitive_op(new_tuple_op, [], cdef.line)
-        class_type_obj = self.py_call(type_obj, [name, bases, class_dict], cdef.line)
+        name = self.load_static_unicode(ir.name)
+        type_obj = self.primitive_op(type_object_op, [], line)
+        class_type_obj = self.py_call(type_obj, [name, ir.type_bases, ir.type_dict], line)
         return class_type_obj
 
     def load_decorated_class(self, cdef: ClassDef, type_obj: Value) -> Value:
@@ -1222,42 +1186,64 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             dec_class = self.py_call(decorator, [dec_class], dec_class.line)
         return dec_class
 
+    def add_to_type_dict(self, ir: ClassIR, key: str, val: Value, line: int) -> None:
+        # Add an attribute entry into the class dict of a non-extension class.
+        assert ir.type_dict is not None
+        key_unicode = self.load_static_unicode(key)
+        self.primitive_op(dict_set_item_op, [ir.type_dict, key_unicode, val], line)
+
+    def add_non_ext_class_attr(self, lvalue: NameExpr,
+                               stmt: AssignmentStmt, class_ir: ClassIR) -> None:
+        # We populate __annotations__ because dataclasses uses it to determine
+        # which attributes to compute on.
+        # TODO: Maybe generate more precise types for annotations
+        assert class_ir.type_anns is not None
+
+        key = self.load_static_unicode(lvalue.name)
+        typ = self.primitive_op(type_object_op, [], stmt.line)
+        self.primitive_op(dict_set_item_op, [class_ir.type_anns, key, typ], stmt.line)
+
+        # Only add the attribute to the __dict__ if the assignment is of the form:
+        # x : type = value (don't add attributes of the form 'x : type' to the __dict__).
+        if not isinstance(stmt.rvalue, TempNode):
+            self.add_to_type_dict(class_ir, lvalue.name, self.accept(stmt.rvalue), stmt.line)
+
     def visit_class_def(self, cdef: ClassDef) -> None:
         ir = self.mapper.type_to_ir[cdef.info]
         # Currently, we only create non-extension classes for classes that are
         # decorated. Classes decorated with @trait do not apply here, and are
         # handled in a different way.
         if ir.is_non_ext:
-            # Dynamically create the class via the type constructor if it is decorated.
-            class_type_obj = self.load_non_ext_class(cdef)
-            dec_class = self.load_decorated_class(cdef, class_type_obj)
+            ir.type_dict = self.primitive_op(new_dict_op, [], cdef.line)
+            # TODO(sanjit): Fill in the bases list, putting off on first pass
+            ir.type_bases = self.primitive_op(new_tuple_op, [], cdef.line)
+            # We populate __annotations__ for non-extension classes
+            # because dataclasses uses it to determine which attributes to compute on.
+            # TODO: Maybe generate more precise types for annotations
+            ir.type_anns = self.primitive_op(new_dict_op, [], cdef.line)
 
-            # Save the decorated class
-            self.add(InitStatic(dec_class, cdef.name, self.module_name, NAMESPACE_TYPE))
-
-            # Add it to the dict
-            self.primitive_op(dict_set_item_op,
-                              [self.load_globals_dict(), self.load_static_unicode(cdef.name),
-                               dec_class], cdef.line)
-            return
-
-        # If the class is not decorated, generate an extension class for it.
-        self.allocate_class(cdef)
+        else:
+            # If the class is not decorated, generate an extension class for it.
+            self.allocate_class(cdef)
 
         for stmt in cdef.defs.body:
             if isinstance(stmt, OverloadedFuncDef) and stmt.is_property:
+                if ir.is_non_ext:
+                    # properties in non_extension classes not supported
+                    continue
                 for item in stmt.items:
                     with self.catch_errors(stmt.line):
                         self.visit_method(cdef, get_func_def(item))
             elif isinstance(stmt, (FuncDef, Decorator, OverloadedFuncDef)):
+                if cdef.info.names[stmt.name()].plugin_generated and ir.is_non_ext:
+                    # Ignore plugin generated methods when creating non-extension classes
+                    continue
                 with self.catch_errors(stmt.line):
                     self.visit_method(cdef, get_func_def(stmt))
             elif isinstance(stmt, PassStmt):
                 continue
             elif isinstance(stmt, AssignmentStmt):
                 # Variable declaration with no body
-                if isinstance(stmt.rvalue, TempNode):
-                    continue
 
                 if len(stmt.lvalues) != 1:
                     self.error("Multiple assignment in class bodies not supported", stmt.line)
@@ -1267,10 +1253,15 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     self.error("Only assignment to variables is supported in class bodies",
                                stmt.line)
                     continue
+                if ir.is_non_ext:
+                    self.add_non_ext_class_attr(lvalue, stmt, ir)
+                    continue
+                # Variable declaration with no body
+                if isinstance(stmt.rvalue, TempNode):
+                    continue
                 # Only treat marked class variables as class variables.
                 if not (is_class_var(lvalue) or stmt.is_final_def):
                     continue
-
                 typ = self.load_native_type_object(cdef.fullname)
                 value = self.accept(stmt.rvalue)
                 self.primitive_op(
@@ -1283,8 +1274,23 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             else:
                 self.error("Unsupported statement in class body", stmt.line)
 
-        self.generate_attr_defaults(cdef)
-        self.create_ne_from_eq(cdef)
+        if ir.is_non_ext:
+            # Dynamically create the class via the type constructor
+            type_obj = self.load_non_ext_class(ir, cdef.line)
+            type_obj = self.load_decorated_class(cdef, type_obj)
+            ir.type_obj = type_obj
+
+            # Save the decorated class
+            self.add(InitStatic(type_obj, cdef.name, self.module_name, NAMESPACE_TYPE))
+
+            # Add the non-extension class to the dict
+            self.primitive_op(dict_set_item_op,
+                              [self.load_globals_dict(), self.load_static_unicode(cdef.name),
+                               type_obj], cdef.line)
+
+        else:
+            self.generate_attr_defaults(cdef)
+            self.create_ne_from_eq(cdef)
 
     def allocate_class(self, cdef: ClassDef) -> None:
         # OK AND NOW THE FUN PART
