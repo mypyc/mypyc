@@ -1,64 +1,3 @@
-[case testDataClass]
-from dataclasses import dataclass, field
-from typing import Set, List
-
-@dataclass
-class Person1:
-    age : int
-    name : str
-
-i4 = Person1(age = 5, name = 'robot')
-assert i4.age == 5
-assert i4.name == 'robot'
-
-@dataclass
-class Person2:
-    age : int
-    name : str = 'robot'
-
-i5 = Person2(age = 5)
-assert i5.age == 5
-assert i5.name == 'robot'
-i6 = Person2(age = 5, name = 'new_robot')
-assert i6.age == 5
-assert i6.name == 'new_robot'
-
-@dataclass
-class Person3:
-    age : int = 6
-    name : str = 'robot'
-
-    def get_age(self) -> int:
-        return (self.age)
-
-    def set_age(self, new_age : int) -> None:
-        self.age = new_age
-
-i7 = Person3()
-assert i7.age == 6
-assert i7.name == 'robot'
-i8 = Person3(age = 5)
-assert i8.age == 5
-assert i8.name == 'robot'
-i9 = Person3(age = 5, name = 'new_robot')
-assert i9.age == 5
-assert i9.name == 'new_robot'
-assert i9.get_age() == 5
-i9.set_age(10)
-assert i9.get_age() == 10
-
-# TODO(sanjit): Get fields working
-# @dataclass
-# class Person4:
-#     friend_ids : List[int] = field(default_factory = list)
-
-# i10 = Person4(friend_ids = 1)
-# assert i10.friend_ids == 1
-
-
-[file driver.py]
-from native import Person1, Person2, Person3
-
 [case testEmptyClass]
 class Empty: pass
 
@@ -117,6 +56,63 @@ assert hasattr(c, 'x')
 1000000000000000000000000000000
 1000000000000000000000000000001
 1000000000000000000000000000002
+
+[case testDataClass]
+from dataclasses import dataclass, field
+from typing import Set, List
+
+@dataclass
+class Person1:
+    age : int
+    name : str
+
+@dataclass
+class Person2:
+    age : int
+    name : str = 'robot'
+
+@dataclass
+class Person3:
+    age : int = field(default = 6)
+    friendIDs : List[int] = field(default_factory = list)
+
+    def get_age(self) -> int:
+        return (self.age)
+
+    def set_age(self, new_age : int) -> None:
+        self.age = new_age
+
+    def add_friendID(self, fid : int) -> None:
+        self.friendIDs.append(fid)
+
+    def get_friendIDs(self) -> List[int]:
+        return self.friendIDs
+
+[file driver.py]
+from native import Person1, Person2, Person3
+i1 = Person1(age = 5, name = 'robot')
+assert i1.age == 5
+assert i1.name == 'robot'
+i2 = Person2(age = 5)
+assert i2.age == 5
+assert i2.name == 'robot'
+i3 = Person2(age = 5, name = 'new_robot')
+assert i3.age == 5
+assert i3.name == 'new_robot'
+i4 = Person3()
+assert i4.age == 6
+assert i4.friendIDs == []
+i5 = Person3(age = 5)
+assert i5.age == 5
+assert i5.friendIDs == []
+i6 = Person3(age = 5, friendIDs = [1,2,3])
+assert i6.age == 5
+assert i6.friendIDs == [1,2,3]
+assert i6.get_age() == 5
+i6.set_age(10)
+assert i6.get_age() == 10
+i6.add_friendID(4)
+assert i6.get_friendIDs() == [1,2,3,4]
 
 [case testGetAttribute]
 class C:

@@ -1120,7 +1120,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 if (not is_optional_type(attr_type) and not is_object_rprimitive(attr_type)
                         and not is_none_rprimitive(attr_type)):
                     continue
-
             val = self.coerce(self.accept(stmt.rvalue), attr_type, stmt.line)
             self.add(SetAttr(self_var, lvalue.name, val, -1))
 
@@ -2784,6 +2783,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return self.add(Call(decl, args, line))
 
     def visit_call_expr(self, expr: CallExpr) -> Value:
+        # Annoying special case for the dataclasses field function calls because
+        # the mypy dataclass plugin typechecks such a call using the types
+        # of the parameters to the default and default_factory
+        # arguments, resulting in attempted coercions that throw a runtime error.
+        if isinstance(expr.callee, NameExpr) and expr.callee.fullname == 'dataclasses.field':
+            self.types[expr] = AnyType(TypeOfAny.from_error)
+
         if isinstance(expr.analyzed, CastExpr):
             return self.translate_cast_expr(expr.analyzed)
 
@@ -4966,7 +4972,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 output_arg = self.add(LoadErrorValue(arg.type, is_borrowed=True))
             else:
                 output_arg = args[lst[0]]
-
             output_args.append(self.coerce(output_arg, arg.type, line))
 
         return output_args
