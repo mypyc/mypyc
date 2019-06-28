@@ -1143,9 +1143,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # could refactor this to reduce duplicated code?
         for stmt in cdef.defs.body:
             if isinstance(stmt, FuncDef):
-                # TODO(sanjit): Should probably ignore other plugin generated methods when creating
-                # non-extension classes
-                if stmt.name() == '__init__':
+                # Ignore plugin generated methods when creating non-extension classes
+                assert stmt.name() in cdef.info.names
+                if cdef.info.names[stmt.name()].plugin_generated:
                     continue
 
                 func_ir, func_reg = self.gen_func_item(stmt, stmt.name(),
