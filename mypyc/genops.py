@@ -2783,7 +2783,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return self.add(Call(decl, args, line))
 
     def visit_call_expr(self, expr: CallExpr) -> Value:
-        # Annoying special case for the dataclasses field function calls because
+        # Annoying special case for dataclasses 'field' function calls because
         # the mypy dataclass plugin typechecks such a call using the types
         # of the parameters to the default and default_factory
         # arguments, resulting in attempted coercions that throw a runtime error.
