@@ -128,6 +128,8 @@ i6.add_friendID(4)
 assert i6.get_friendIDs() == [1,2,3,4]
 i7 = Person4(age = 5)
 assert i7.get_age() == 6
+i7.age += 3
+assert i7.age == 8
 
 [case testGetAttribute]
 class C:
