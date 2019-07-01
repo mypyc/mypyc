@@ -4580,7 +4580,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         curr_env_reg = None
         if self.fn_info.is_generator:
             curr_env_reg = self.fn_info.generator_class.curr_env_reg
-        elif self.fn_info.is_nested or self.fn_info.in_non_ext:
+        elif self.fn_info.is_nested:
             curr_env_reg = self.fn_info.callable_class.curr_env_reg
         elif self.fn_info.contains_nested:
             curr_env_reg = self.fn_info.curr_env_reg
