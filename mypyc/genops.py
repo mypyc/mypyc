@@ -1009,6 +1009,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             helper_name = decorator_helper_name(name)
 
             if class_ir.is_non_ext:
+                # If the class is a non-extension class, the undecorated method is the
+                # generated callable class
                 assert func_reg is not None
                 orig_func = func_reg
             else:
@@ -1030,25 +1032,32 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 self.primitive_op(py_setattr_op,
                                   [typ, self.load_static_unicode(name), decorated_func], fdef.line)
 
-        # TODO: Support property getters and setters for non-extension classes
-        if class_ir.is_non_ext:
-            assert func_reg is not None
-            self.add_to_type_dict(class_ir, name, func_reg, fdef.line)
-            return
-
         if fdef.is_property:
-            # If there is a property setter, it will be processed after the getter,
-            # We populate the optional setter field with none for now.
-            assert name not in class_ir.properties
-            class_ir.properties[name] = (func_ir, None)
+            if class_ir.is_non_ext:
+                # Wrap the method in a call to property if it is in a non-extension class
+                prop = self.load_module_attr_by_fullname('builtins.property', fdef.line)
+                assert func_reg is not None
+                func_reg = self.py_call(prop, [func_reg], fdef.line)
+            else:
+                # If there is a property setter, it will be processed after the getter,
+                # We populate the optional setter field with none for now.
+                assert name not in class_ir.properties
+                class_ir.properties[name] = (func_ir, None)
 
-        elif fdef in self.prop_setters:
+        # TODO: Support property setters in non-extension classes
+        elif fdef in self.prop_setters and not class_ir.is_non_ext:
             # The respective property getter must have been processed already
             assert name in class_ir.properties
             getter_ir, _ = class_ir.properties[name]
             class_ir.properties[name] = (getter_ir, func_ir)
 
-        if func_ir.decl.is_prop_setter:
+        # If the classs is a non-extension class, add the function to the classes dict.
+        if class_ir.is_non_ext:
+            assert func_reg is not None
+            self.add_to_type_dict(class_ir, name, func_reg, fdef.line)
+            return
+
+        elif func_ir.decl.is_prop_setter:
             class_ir.methods[PROPSET_PREFIX + name] = func_ir
         else:
             class_ir.methods[name] = func_ir
@@ -1229,7 +1238,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         for stmt in cdef.defs.body:
             if isinstance(stmt, OverloadedFuncDef) and stmt.is_property:
                 if ir.is_non_ext:
-                    # properties in non_extension classes not supported
+                    # properties with both getters and setters in non_extension
+                    # classes not supported
                     continue
                 for item in stmt.items:
                     with self.catch_errors(stmt.line):

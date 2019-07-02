@@ -96,10 +96,15 @@ def get_next_age(g: Callable[[Any], int]) -> Callable[[Any], int]:
 @dataclass
 class Person4:
     age : int
+    _name : str = 'Bot'
 
     @get_next_age
     def get_age(self) -> int:
         return self.age
+
+    @property
+    def name(self) -> str:
+        return self._name
 
 [file driver.py]
 from native import Person1, Person2, Person3, Person4
@@ -130,6 +135,7 @@ i7 = Person4(age = 5)
 assert i7.get_age() == 6
 i7.age += 3
 assert i7.age == 8
+assert i7.name == 'Bot'
 
 [case testGetAttribute]
 class C:
