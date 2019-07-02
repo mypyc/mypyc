@@ -107,6 +107,13 @@ class Person4:
         return self._name
 
 [file driver.py]
+from testutil import assertRaises
+import sys
+# Dataclasses introduced in 3.7
+version = sys.version_info[:2]
+if version[0] < 3 or version[1] < 7:
+    assertRaises(ValueError, "Dataclasses introduced in 3.7")
+
 from native import Person1, Person2, Person3, Person4
 i1 = Person1(age = 5, name = 'robot')
 assert i1.age == 5
