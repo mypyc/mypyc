@@ -290,7 +290,8 @@ py_calc_meta_op = custom_op(
     error_kind=ERR_MAGIC,
     format_str='{dest} = py_calc_metaclass({comma_args})',
     emit=simple_emit(
-        '{dest} = (PyObject*) _PyType_CalculateMetaclass((PyTypeObject *){args[0]}, {args[1]});')
+        '{dest} = (PyObject*) _PyType_CalculateMetaclass((PyTypeObject *){args[0]}, {args[1]});'),
+    is_borrowed = True
 )
 
 py_delattr_op = func_op(
