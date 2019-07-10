@@ -85,11 +85,11 @@ from mypyc.ops_set import new_set_op, set_add_op, set_update_op
 from mypyc.ops_misc import (
     none_op, none_object_op, true_op, false_op, iter_op, next_op, next_raw_op,
     check_stop_op, send_op, yield_from_except_op,
-    py_getattr_op, py_setattr_op, py_delattr_op,
+    py_getattr_op, py_setattr_op, py_delattr_op, py_hasattr_op,
     py_call_op, py_call_with_kwargs_op, py_method_call_op,
     fast_isinstance_op, bool_op, new_slice_op,
     type_op, pytype_from_template_op, import_op, get_module_dict_op,
-    ellipsis_op, method_new_op, type_is_op, type_object_op
+    ellipsis_op, method_new_op, type_is_op, type_object_op, py_calc_meta_op
 )
 from mypyc.ops_exc import (
     no_err_occurred_op, raise_exception_op, raise_exception_with_tb_op, reraise_exception_op,
@@ -151,10 +151,16 @@ def build_ir(modules: List[MypyFile],
                            is_abstract=cdef.info.is_abstract)
         mapper.type_to_ir[cdef.info] = class_ir
 
-    # Populate structural information in class IR.
+    # Figure out which classes need to be compiled as non-extension classes.
+    mark_non_ext_classes(mapper.type_to_ir)
+
+    # Populate structural information in class IR for extension classes.
     for module, cdef in classes:
         with catch_errors(module.path, cdef.line):
-            prepare_class_def(module.path, module.fullname(), cdef, errors, mapper)
+            if mapper.type_to_ir[cdef.info].is_non_ext:
+                prepare_non_ext_class_def(module.path, module.fullname(), cdef, errors, mapper)
+            else:
+                prepare_class_def(module.path, module.fullname(), cdef, errors, mapper)
 
     # Collect all the functions also. We collect from the symbol table
     # so that we can easily pick out the right copy of a function that
@@ -198,6 +204,32 @@ def build_ir(modules: List[MypyFile],
     errors.flush_errors()
 
     return mapper.literals, result, errors.num_errors
+
+
+def is_non_ext_class(cdef: ClassDef) -> bool:
+    if any(not (isinstance(d, NameExpr) and d.fullname == 'mypy_extensions.trait')
+           for d in cdef.decorators):
+        return True
+    elif cdef.info.metaclass_type and cdef.info.metaclass_type.type.fullname() == 'enum.EnumMeta':
+        return True
+    return False
+
+
+def mark_non_ext_classes(class_map: Dict[TypeInfo, ClassIR]) -> None:
+    seen = set()  # type: Set[TypeInfo]
+    to_check = list(class_map.keys())
+    to_mark = set()  # type: Set[TypeInfo]
+    while to_check:
+        typ = to_check.pop()
+        ir = class_map[typ]
+        seen.add(typ)
+        ir.is_non_ext = True if typ in to_mark else is_non_ext_class(typ.defn)
+        if ir.is_non_ext:
+            # Base class chains will be marked as non-extensions
+            for base_type in typ.bases:
+                if base_type.type not in seen and base_type.type in class_map:
+                    to_mark.add(base_type.type)
+                    to_check.append(base_type.type)
 
 
 def is_trait(cdef: ClassDef) -> bool:
@@ -465,21 +497,14 @@ def is_valid_multipart_property_def(prop: OverloadedFuncDef) -> bool:
 
 def prepare_class_def(path: str, module_name: str, cdef: ClassDef,
                       errors: Errors, mapper: Mapper) -> None:
-    # The metaclass chain for GenericMeta all works, but in general they don't
-    if (cdef.info.metaclass_type and cdef.info.metaclass_type.type.fullname() not in (
-            'abc.ABCMeta', 'typing.TypingMeta', 'typing.GenericMeta')):
-        errors.error("Metaclasses are not supported", path, cdef.line)
 
     ir = mapper.type_to_ir[cdef.info]
     info = cdef.info
 
-    # We don't generate extension classes for decorated classes. Instead, we create a non extension
-    # class via the type() constructor.
-    ir.is_non_ext = any(not (isinstance(d, NameExpr) and d.fullname == 'mypy_extensions.trait')
-                        for d in cdef.decorators)
-
-    if ir.is_non_ext:
-        return
+    # The metaclass chain for GenericMeta all works, but in general they don't
+    if (cdef.info.metaclass_type and cdef.info.metaclass_type.type.fullname() not in (
+            'abc.ABCMeta', 'typing.TypingMeta', 'typing.GenericMeta')):
+        errors.error("Metaclasses are not supported", path, cdef.line)
 
     for name, node in info.names.items():
         if isinstance(node.node, Var):
@@ -566,6 +591,26 @@ def prepare_class_def(path: str, module_name: str, cdef: ClassDef,
 
     for base in bases:
         base.children.append(ir)
+
+
+def prepare_non_ext_class_def(path: str, module_name: str, cdef: ClassDef,
+                      errors: Errors, mapper: Mapper) -> None:
+
+    ir = mapper.type_to_ir[cdef.info]
+    info = cdef.info
+
+    for name, node in info.names.items():
+        if isinstance(node.node, (FuncDef, Decorator)):
+            prepare_method_def(ir, module_name, cdef, mapper, node.node)
+        elif isinstance(node.node, OverloadedFuncDef):
+            # Handle case for property with both a getter and a setter
+            if node.node.is_property:
+                errors.error("Non-extension classes do not support property setters",
+                             path, cdef.line)
+            # Handle case for regular function overload
+            else:
+                errors.error("Non-extension classes do not support overlaoded functions",
+                             path, cdef.line)
 
 
 class FuncInfo(object):
@@ -934,6 +979,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.callable_class_names = set()  # type: Set[str]
         self.options = options
 
+        # These variables keep track of values that are needed only when constructing a
+        # non-extension class. This includes a tuple of base classes, and a class dictionary.
+        # and an annotations dictionary
+        self.non_ext_dict = None  # type: Optional[Value]
+        self.non_ext_bases = None  # type: Optional[Value]
+        self.non_ext_anns = None  # type: Optional[Value]
+
         # These variables keep track of the number of lambdas, implicit indices, and implicit
         # iterators instantiated so we avoid name conflicts. The indices and iterators are
         # instantiated from for-loops.
@@ -1054,7 +1106,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # If the classs is a non-extension class, add the function to the classes dict.
         if class_ir.is_non_ext:
             assert func_reg is not None
-            self.add_to_type_dict(class_ir, name, func_reg, fdef.line)
+            self.add_to_non_ext_dict(name, func_reg, fdef.line)
             return
 
         elif func_ir.decl.is_prop_setter:
@@ -1160,25 +1212,30 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         cls.methods[ir.name] = ir
 
     def load_non_ext_class(self, ir: ClassIR, line: int) -> Value:
-        assert ir.type_dict is not None
-        assert ir.type_anns is not None
-        assert ir.type_bases is not None
+        assert self.non_ext_dict is not None
+        assert self.non_ext_anns is not None
+        assert self.non_ext_bases is not None
+
+        cls_name = self.load_static_unicode(ir.name)
+
         # Add __annotations__ to the class dict.
         self.primitive_op(dict_set_item_op,
-                          [ir.type_dict, self.load_static_unicode('__annotations__'),
-                           ir.type_anns], -1)
+                          [self.non_ext_dict, self.load_static_unicode('__annotations__'),
+                           self.non_ext_anns], -1)
 
         # We add a __doc__ attribute so if the non-extension class is decorated with the
         # dataclass decorator, dataclass will not try to look for __text_signature__.
         # https://github.com/python/cpython/blob/3.7/Lib/dataclasses.py#L957
         filler_doc_str = 'filler docstring for classes decorated with dataclass'
         self.primitive_op(dict_set_item_op,
-                         [ir.type_dict, self.load_static_unicode('__doc__'),
+                         [self.non_ext_dict, self.load_static_unicode('__doc__'),
                           self.load_static_unicode(filler_doc_str)], line)
 
-        name = self.load_static_unicode(ir.name)
-        type_obj = self.primitive_op(type_object_op, [], line)
-        class_type_obj = self.py_call(type_obj, [name, ir.type_bases, ir.type_dict], line)
+        metaclass = self.primitive_op(type_object_op, [], line)
+        metaclass = self.primitive_op(py_calc_meta_op, [metaclass, self.non_ext_bases], line)
+
+        class_type_obj = self.py_call(metaclass, [cls_name, self.non_ext_bases, self.non_ext_dict],
+                                      line)
         return class_type_obj
 
     def load_decorated_class(self, cdef: ClassDef, type_obj: Value) -> Value:
@@ -1195,27 +1252,74 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             dec_class = self.py_call(decorator, [dec_class], dec_class.line)
         return dec_class
 
-    def add_to_type_dict(self, ir: ClassIR, key: str, val: Value, line: int) -> None:
+    def populate_non_ext_bases(self, cdef: ClassDef) -> Value:
+        # Populate the base-class tuple passed to the metaclass constructor
+        # for non-extension classes.
+        ir = self.mapper.type_to_ir[cdef.info]
+        bases = []
+        for cls in cdef.info.mro[1:]:
+            if cls.fullname() == 'builtins.object':
+                continue
+            # Add the current class to the base classes list of concrete subclasses
+            if cls in self.mapper.type_to_ir:
+                self.mapper.type_to_ir[cls].children.append(ir)
+
+            base = self.load_global_str(cls.name(), cdef.line)
+            bases.append(base)
+        return self.primitive_op(new_tuple_op, bases, cdef.line)
+
+    def add_to_non_ext_dict(self, key: str, val: Value, line: int) -> None:
         # Add an attribute entry into the class dict of a non-extension class.
-        assert ir.type_dict is not None
+        assert self.non_ext_dict is not None
         key_unicode = self.load_static_unicode(key)
-        self.primitive_op(dict_set_item_op, [ir.type_dict, key_unicode, val], line)
+        self.primitive_op(dict_set_item_op, [self.non_ext_dict, key_unicode, val], line)
 
     def add_non_ext_class_attr(self, lvalue: NameExpr,
                                stmt: AssignmentStmt, class_ir: ClassIR) -> None:
         # We populate __annotations__ because dataclasses uses it to determine
         # which attributes to compute on.
         # TODO: Maybe generate more precise types for annotations
-        assert class_ir.type_anns is not None
+        assert self.non_ext_anns is not None
 
         key = self.load_static_unicode(lvalue.name)
         typ = self.primitive_op(type_object_op, [], stmt.line)
-        self.primitive_op(dict_set_item_op, [class_ir.type_anns, key, typ], stmt.line)
+        self.primitive_op(dict_set_item_op, [self.non_ext_anns, key, typ], stmt.line)
 
         # Only add the attribute to the __dict__ if the assignment is of the form:
         # x : type = value (don't add attributes of the form 'x : type' to the __dict__).
         if not isinstance(stmt.rvalue, TempNode):
-            self.add_to_type_dict(class_ir, lvalue.name, self.accept(stmt.rvalue), stmt.line)
+            self.add_to_non_ext_dict(lvalue.name, self.accept(stmt.rvalue), stmt.line)
+
+    def setup_non_ext_dict(self, cdef: ClassDef) -> Value:
+        # Initialize the class dictionary for a non-extension class. This class dictionary
+        # is passed to the metaclass constructor.
+        assert self.non_ext_bases is not None
+
+        # Check if the metaclass defines a __prepare__ method, and if so, call it.
+        metaclass = self.primitive_op(type_object_op, [], cdef.line)
+        metaclass = self.primitive_op(py_calc_meta_op, [metaclass, self.non_ext_bases], cdef.line)
+        has_prepare = self.primitive_op(py_hasattr_op,
+                                        [metaclass,
+                                        self.load_static_unicode('__prepare__')], cdef.line)
+
+        non_ext_dict = self.alloc_temp(dict_rprimitive)
+
+        true_block, false_block, exit_block, = BasicBlock(), BasicBlock(), BasicBlock()
+        self.add_bool_branch(has_prepare, true_block, false_block)
+
+        self.activate_block(true_block)
+        cls_name = self.load_static_unicode(cdef.name)
+        prepare_meth = self.py_get_attr(metaclass, '__prepare__', cdef.line)
+        prepare_dict = self.py_call(prepare_meth, [cls_name, self.non_ext_bases], cdef.line)
+        self.assign(non_ext_dict, prepare_dict, cdef.line)
+        self.goto(exit_block)
+
+        self.activate_block(false_block)
+        self.assign(non_ext_dict, self.primitive_op(new_dict_op, [], cdef.line), cdef.line)
+        self.goto(exit_block)
+        self.activate_block(exit_block)
+
+        return non_ext_dict
 
     def visit_class_def(self, cdef: ClassDef) -> None:
         ir = self.mapper.type_to_ir[cdef.info]
@@ -1223,13 +1327,12 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # decorated. Classes decorated with @trait do not apply here, and are
         # handled in a different way.
         if ir.is_non_ext:
-            ir.type_dict = self.primitive_op(new_dict_op, [], cdef.line)
-            # TODO(sanjit): Fill in the bases list, putting off on first pass
-            ir.type_bases = self.primitive_op(new_tuple_op, [], cdef.line)
+            self.non_ext_bases = self.populate_non_ext_bases(cdef)
+            self.non_ext_dict = self.setup_non_ext_dict(cdef)
             # We populate __annotations__ for non-extension classes
             # because dataclasses uses it to determine which attributes to compute on.
             # TODO: Maybe generate more precise types for annotations
-            ir.type_anns = self.primitive_op(new_dict_op, [], cdef.line)
+            self.non_ext_anns = self.primitive_op(new_dict_op, [], cdef.line)
 
         else:
             # If the class is not decorated, generate an extension class for it.
@@ -1240,7 +1343,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 if ir.is_non_ext:
                     # properties with both getters and setters in non_extension
                     # classes not supported
-                    continue
+                    self.error("Property setters not supported in non-exstension classes",
+                               stmt.line)
                 for item in stmt.items:
                     with self.catch_errors(stmt.line):
                         self.visit_method(cdef, get_func_def(item))
@@ -1286,17 +1390,16 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         if ir.is_non_ext:
             # Dynamically create the class via the type constructor
-            type_obj = self.load_non_ext_class(ir, cdef.line)
-            type_obj = self.load_decorated_class(cdef, type_obj)
-            ir.type_obj = type_obj
+            non_ext_class = self.load_non_ext_class(ir, cdef.line)
+            non_ext_class = self.load_decorated_class(cdef, non_ext_class)
 
             # Save the decorated class
-            self.add(InitStatic(type_obj, cdef.name, self.module_name, NAMESPACE_TYPE))
+            self.add(InitStatic(non_ext_class, cdef.name, self.module_name, NAMESPACE_TYPE))
 
             # Add the non-extension class to the dict
             self.primitive_op(dict_set_item_op,
                               [self.load_globals_dict(), self.load_static_unicode(cdef.name),
-                               type_obj], cdef.line)
+                               non_ext_class], cdef.line)
 
         else:
             self.generate_attr_defaults(cdef)
@@ -2895,7 +2998,17 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                 arg_names.insert(0, None)
             args += [self.accept(arg) for arg in expr.args]
 
-            return self.call(decl, args, arg_kinds, arg_names, expr.line)
+            if ir.is_non_ext:
+                obj = self.accept(callee.expr)
+                return self.gen_method_call(obj,
+                                            callee.name,
+                                            args,
+                                            self.node_type(expr),
+                                            expr.line,
+                                            expr.arg_kinds,
+                                            expr.arg_names)
+            else:
+                return self.call(decl, args, arg_kinds, arg_names, expr.line)
 
         elif self.is_module_member_expr(callee):
             # Fall back to a PyCall for non-native module calls
@@ -3801,7 +3914,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         else:
             assert o.info is not None
             typ = self.load_native_type_object(o.info.fullname())
-            vself = next(iter(self.environment.indexes))  # grab first argument
+            ir = self.mapper.type_to_ir[o.info]
+            iter_env = iter(self.environment.indexes)
+            vself = next(iter_env)  # grab first argument
+            if ir.is_non_ext:
+                vself = next(iter_env)  # second argument is self if non_extension class
             args = [typ, vself]
         res = self.py_call(sup_val, args, o.line)
         return self.py_get_attr(res, o.name, o.line)

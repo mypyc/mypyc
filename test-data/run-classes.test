@@ -57,6 +57,70 @@ assert hasattr(c, 'x')
 1000000000000000000000000000001
 1000000000000000000000000000002
 
+[case testNonExtInheritance]
+from typing import Any
+
+def decorator(cls) -> Any:
+    return cls
+
+class C:
+    def __init__(self) -> None:
+        self.c = 3
+
+    def get_c(self) -> int:
+        return self.c
+
+class B(C):
+    def __init__(self) -> None:
+        super().__init__()
+        self.b = 2
+
+    def get_b(self) -> int:
+        return self.b
+
+@decorator
+class A(B):
+    def __init__(self) -> None:
+        super().__init__()
+        self.a = 1
+
+    @classmethod
+    def constant(self) -> int:
+        return 4
+
+    def get_a(self) -> int:
+        return self.a
+
+[file driver.py]
+from native import A
+a = A()
+assert a.a == 1
+assert a.b == 2
+assert a.c == 3
+assert a.get_a() == 1
+assert a.get_b() == 2
+assert a.get_c() == 3
+
+[case testEnum]
+from enum import Enum
+
+class TestEnum(Enum):
+    a : int = 1
+    b : int = 2
+
+    @classmethod
+    def test(cls) -> int:
+        return 3
+
+assert TestEnum.test() == 3
+
+[file driver.py]
+from native import TestEnum
+assert TestEnum.a.name == 'a'
+assert TestEnum.a.value == 1
+assert TestEnum.b.name == 'b'
+assert TestEnum.b.value == 2
+
 [case testDataClass]
 from dataclasses import dataclass, field
 from typing import Set, List, Callable, Any

@@ -1586,15 +1586,6 @@ class ClassIR:
         # in a few ad-hoc cases.
         self.builtin_base = None  # type: Optional[str]
 
-        # If the class is to be treated as a non-extension class, typ_obj represents
-        # the dynamically created class created using the type() constructor. We need to
-        # feed in a dict of class attributes, and TODO: a tuple of base classes in MRO order
-        # to the type() constuctor.
-        self.type_obj = None  # type: Optional[Value]
-        self.type_dict = None  # type: Optional[Value]
-        self.type_bases = None  # type: Optional[Value]
-        self.type_anns = None  # type: Optional[Value]
-
     def real_base(self) -> Optional['ClassIR']:
         """Return the actual concrete base class, if there is one."""
         if len(self.mro) > 1 and not self.mro[1].is_trait:
