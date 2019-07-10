@@ -2904,13 +2904,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return self.add(Call(decl, args, line))
 
     def visit_call_expr(self, expr: CallExpr) -> Value:
-        # Annoying special case for dataclasses 'field' function calls because
-        # the mypy dataclass plugin typechecks such a call using the types
-        # of the parameters to the default and default_factory
-        # arguments, resulting in attempted coercions that throw a runtime error.
-        if isinstance(expr.callee, NameExpr) and expr.callee.fullname == 'dataclasses.field':
-            self.types[expr] = AnyType(TypeOfAny.from_error)
-
         if isinstance(expr.analyzed, CastExpr):
             return self.translate_cast_expr(expr.analyzed)
 
@@ -4099,6 +4092,16 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                        true_op,
                                        lambda x: self.unary_op(x, 'not', expr.line),
                                        false_op)
+        return None
+
+    @specialize_function('dataclasses.field')
+    def translate_dataclasses_field_call(self, expr: CallExpr, callee: RefExpr) -> Optional[Value]:
+        # Annoying special case for dataclasses 'field' function calls because
+        # the mypy dataclass plugin typechecks such a call using the types
+        # of the parameters to the default and default_factory
+        # arguments, resulting in attempted coercions that throw a runtime error.
+        if isinstance(expr.callee, NameExpr) and expr.callee.fullname == 'dataclasses.field':
+            self.types[expr] = AnyType(TypeOfAny.from_error)
         return None
 
     def any_all_helper(self,
