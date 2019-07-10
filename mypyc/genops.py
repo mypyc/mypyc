@@ -217,19 +217,21 @@ def is_non_ext_class(cdef: ClassDef) -> bool:
 
 def mark_non_ext_classes(class_map: Dict[TypeInfo, ClassIR]) -> None:
     seen = set()  # type: Set[TypeInfo]
-    to_check = list(class_map.keys())
+    stack = list(class_map.keys())
     to_mark = set()  # type: Set[TypeInfo]
-    while to_check:
-        typ = to_check.pop()
+    while stack:
+        typ = stack.pop()
+        if typ in seen and typ not in to_mark:
+            continue
         ir = class_map[typ]
         seen.add(typ)
         ir.is_non_ext = True if typ in to_mark else is_non_ext_class(typ.defn)
         if ir.is_non_ext:
             # Base class chains will be marked as non-extensions
             for base_type in typ.bases:
-                if base_type.type not in seen and base_type.type in class_map:
+                if base_type.type not in to_mark and base_type.type in class_map:
                     to_mark.add(base_type.type)
-                    to_check.append(base_type.type)
+                    stack.append(base_type.type)
 
 
 def is_trait(cdef: ClassDef) -> bool:
