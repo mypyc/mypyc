@@ -115,6 +115,12 @@ class TestEnum(Enum):
 assert TestEnum.test() == 3
 
 [file driver.py]
+
+# enum introduced in 3.4
+version = sys.version_info[:2]
+if version[0] < 3 or version[1] < 4:
+    exit()
+
 from native import TestEnum
 assert TestEnum.a.name == 'a'
 assert TestEnum.a.value == 1
