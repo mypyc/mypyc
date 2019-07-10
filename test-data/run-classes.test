@@ -115,6 +115,7 @@ class TestEnum(Enum):
 assert TestEnum.test() == 3
 
 [file driver.py]
+import sys
 
 # enum introduced in 3.4
 version = sys.version_info[:2]
@@ -177,7 +178,6 @@ class Person4:
         return self._name
 
 [file driver.py]
-from testutil import assertRaises
 import sys
 
 # Dataclasses introduced in 3.7
