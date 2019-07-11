@@ -1615,7 +1615,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         rt_arg = RuntimeArg(SELF_NAME, RInstance(cls))
         arg = self.read(self.add_self_to_env(cls), line)
         self.ret_types[-1] = sig.ret_type
-
         retval = self.add(GetAttr(arg, target.name, line))
         retbox = self.coerce(retval, sig.ret_type, line)
         self.add(Return(retbox))
@@ -2736,7 +2735,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.get_attr(obj, expr.name, self.node_type(expr), expr.line)
 
     def get_attr(self, obj: Value, attr: str, result_type: RType, line: int) -> Value:
-        if isinstance(obj.type, RInstance) and obj.type.class_ir.has_attr(attr):
+        if (isinstance(obj.type, RInstance) and obj.type.class_ir.is_ext_class
+                and obj.type.class_ir.has_attr(attr)):
             return self.add(GetAttr(obj, attr, line))
         elif isinstance(obj.type, RUnion):
             return self.union_get_attr(obj, obj.type, attr, result_type, line)
