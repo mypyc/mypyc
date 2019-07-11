@@ -85,7 +85,7 @@ class A(B):
         self.a = 1
 
     @classmethod
-    def constant(self) -> int:
+    def constant(cls) -> int:
         return 4
 
     def get_a(self) -> int:
@@ -135,7 +135,7 @@ class Person2:
     age : int
     name : str = 'robot'
 
-@dataclass
+@dataclass(order = True)
 class Person3:
     age : int = field(default = 6)
     friendIDs : List[int] = field(default_factory = list)
@@ -207,6 +207,11 @@ assert i7.get_age() == 6
 i7.age += 3
 assert i7.age == 8
 assert i7.name == 'Bot'
+i8 = Person3(age = 1, friendIDs = [1,2])
+i9 = Person3(age = 1, friendIDs = [1,2])
+assert i8 == i9
+i8.age = 2
+assert i8 > i9
 
 [case testGetAttribute]
 class C:
