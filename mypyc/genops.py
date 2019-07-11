@@ -216,22 +216,35 @@ def is_non_ext_class(cdef: ClassDef) -> bool:
 
 
 def mark_non_ext_classes(class_map: Dict[TypeInfo, ClassIR]) -> None:
-    seen = set()  # type: Set[TypeInfo]
-    stack = list(class_map.keys())
-    to_mark = set()  # type: Set[TypeInfo]
-    while stack:
-        typ = stack.pop()
-        if typ in seen and typ not in to_mark:
-            continue
+    """
+    Mark which classes should be compiled as non-extension classes.
+    Classes in the chain of base classes of a non-extension class
+    will all be marked as non-extension because currently
+    non-extension classes cannot inherit from extension classes.
+    """
+    visit_first = list(class_map.keys())
+    visit_second = []  # type: List[TypeInfo]
+    # First pass to gather all non-extension classes without
+    # considering base class chains
+    for typ in visit_first:
         ir = class_map[typ]
-        seen.add(typ)
-        ir.is_non_ext = True if typ in to_mark else is_non_ext_class(typ.defn)
+        ir.is_non_ext = is_non_ext_class(typ.defn)
         if ir.is_non_ext:
-            # Base class chains will be marked as non-extensions
-            for base_type in typ.bases:
-                if base_type.type not in to_mark and base_type.type in class_map:
-                    to_mark.add(base_type.type)
-                    stack.append(base_type.type)
+            visit_second.append(typ)
+
+    # Second pass to propagate non-extension markings up the base class
+    # chains of classes marked as non-extension classes during the first pass.
+    for typ in visit_second:
+        todo = [typ]
+        while todo:
+            child = todo.pop()
+            for parent in child.bases:
+                if parent.type in class_map:
+                    parent_ir = class_map[parent.type]
+                    if parent_ir.is_non_ext:
+                        continue
+                    parent_ir.is_non_ext = True
+                    todo.append(parent.type)
 
 
 def is_trait(cdef: ClassDef) -> bool:
@@ -596,7 +609,7 @@ def prepare_class_def(path: str, module_name: str, cdef: ClassDef,
 
 
 def prepare_non_ext_class_def(path: str, module_name: str, cdef: ClassDef,
-                      errors: Errors, mapper: Mapper) -> None:
+                              errors: Errors, mapper: Mapper) -> None:
 
     ir = mapper.type_to_ir[cdef.info]
     info = cdef.info
@@ -1229,10 +1242,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # dataclass decorator, dataclass will not try to look for __text_signature__.
         # https://github.com/python/cpython/blob/3.7/Lib/dataclasses.py#L957
         filler_doc_str = 'filler docstring for classes decorated with dataclass'
-        self.primitive_op(dict_set_item_op,
-                         [self.non_ext_dict, self.load_static_unicode('__doc__'),
-                          self.load_static_unicode(filler_doc_str)], line)
-
+        self.add_to_non_ext_dict('__doc__', self.load_static_unicode(filler_doc_str), line)
         metaclass = self.primitive_op(type_object_op, [], line)
         metaclass = self.primitive_op(py_calc_meta_op, [metaclass, self.non_ext_bases], line)
 
@@ -1255,8 +1265,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return dec_class
 
     def populate_non_ext_bases(self, cdef: ClassDef) -> Value:
-        # Populate the base-class tuple passed to the metaclass constructor
-        # for non-extension classes.
+        """
+        Populate the base-class tuple passed to the metaclass constructor
+        for non-extension classes.
+        """
         ir = self.mapper.type_to_ir[cdef.info]
         bases = []
         for cls in cdef.info.mro[1:]:
@@ -1278,6 +1290,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def add_non_ext_class_attr(self, lvalue: NameExpr,
                                stmt: AssignmentStmt, class_ir: ClassIR) -> None:
+        """
+        Add a class attribute to __annotations__ of a non-extension class. If the
+        attribute is assigned to a value, it is also added to __dict__.
+        """
+
         # We populate __annotations__ because dataclasses uses it to determine
         # which attributes to compute on.
         # TODO: Maybe generate more precise types for annotations
@@ -1288,13 +1305,15 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.primitive_op(dict_set_item_op, [self.non_ext_anns, key, typ], stmt.line)
 
         # Only add the attribute to the __dict__ if the assignment is of the form:
-        # x : type = value (don't add attributes of the form 'x : type' to the __dict__).
+        # x: type = value (don't add attributes of the form 'x: type' to the __dict__).
         if not isinstance(stmt.rvalue, TempNode):
             self.add_to_non_ext_dict(lvalue.name, self.accept(stmt.rvalue), stmt.line)
 
     def setup_non_ext_dict(self, cdef: ClassDef) -> Value:
-        # Initialize the class dictionary for a non-extension class. This class dictionary
-        # is passed to the metaclass constructor.
+        """
+        Initialize the class dictionary for a non-extension class. This class dictionary
+        is passed to the metaclass constructor.
+        """
         assert self.non_ext_bases is not None
 
         # Check if the metaclass defines a __prepare__ method, and if so, call it.
