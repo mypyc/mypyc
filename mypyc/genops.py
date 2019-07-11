@@ -1064,7 +1064,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         func_ir = FuncIR(FuncDecl(TOP_LEVEL_NAME, None, self.module_name, sig), blocks, env)
         self.functions.append(func_ir)
 
-    def visit_method(self, cdef: ClassDef, fdef: FuncDef) -> None:
+    def handle_ext_method(self, cdef: ClassDef, fdef: FuncDef) -> None:
+        # Perform the function of visit_method for methods inside extension classes.
         name = fdef.name()
         class_ir = self.mapper.type_to_ir[cdef.info]
         func_ir, func_reg = self.gen_func_item(fdef, name, self.mapper.fdef_to_sig(fdef), cdef)
@@ -1074,57 +1075,33 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # Obtain the the function name in order to construct the name of the helper function.
             _, _, name = fdef.fullname().rpartition('.')
             helper_name = decorator_helper_name(name)
-
-            if class_ir.is_non_ext:
-                # If the class is a non-extension class, the undecorated method is the
-                # generated callable class
-                assert func_reg is not None
-                orig_func = func_reg
-            else:
-                # Read the PyTypeObject representing the class, get the callable object
-                # representing the non-decorated method
-                typ = self.load_native_type_object(cdef.fullname)
-                orig_func = self.py_get_attr(typ, helper_name, fdef.line)
+            # Read the PyTypeObject representing the class, get the callable object
+            # representing the non-decorated method
+            typ = self.load_native_type_object(cdef.fullname)
+            orig_func = self.py_get_attr(typ, helper_name, fdef.line)
 
             # Decorate the non-decorated method
             decorated_func = self.load_decorated_func(fdef, orig_func)
 
-            if class_ir.is_non_ext:
-                func_reg = decorated_func
-
-            else:
-                # Set the callable object representing the decorated method as an attribute of the
-                # extension class.
-                class_ir.attributes[name] = decorated_func.type
-                self.primitive_op(py_setattr_op,
-                                  [typ, self.load_static_unicode(name), decorated_func], fdef.line)
+            # Set the callable object representing the decorated method as an attribute of the
+            # extension class.
+            class_ir.attributes[name] = decorated_func.type
+            self.primitive_op(py_setattr_op,
+                              [typ, self.load_static_unicode(name), decorated_func], fdef.line)
 
         if fdef.is_property:
-            if class_ir.is_non_ext:
-                # Wrap the method in a call to property if it is in a non-extension class
-                prop = self.load_module_attr_by_fullname('builtins.property', fdef.line)
-                assert func_reg is not None
-                func_reg = self.py_call(prop, [func_reg], fdef.line)
-            else:
-                # If there is a property setter, it will be processed after the getter,
-                # We populate the optional setter field with none for now.
-                assert name not in class_ir.properties
-                class_ir.properties[name] = (func_ir, None)
+            # If there is a property setter, it will be processed after the getter,
+            # We populate the optional setter field with none for now.
+            assert name not in class_ir.properties
+            class_ir.properties[name] = (func_ir, None)
 
-        # TODO: Support property setters in non-extension classes
-        elif fdef in self.prop_setters and not class_ir.is_non_ext:
+        elif fdef in self.prop_setters:
             # The respective property getter must have been processed already
             assert name in class_ir.properties
             getter_ir, _ = class_ir.properties[name]
             class_ir.properties[name] = (getter_ir, func_ir)
 
-        # If the classs is a non-extension class, add the function to the classes dict.
-        if class_ir.is_non_ext:
-            assert func_reg is not None
-            self.add_to_non_ext_dict(name, func_reg, fdef.line)
-            return
-
-        elif func_ir.decl.is_prop_setter:
+        if func_ir.decl.is_prop_setter:
             class_ir.methods[PROPSET_PREFIX + name] = func_ir
         else:
             class_ir.methods[name] = func_ir
@@ -1149,6 +1126,35 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
                 class_ir.glue_methods[(cls, name)] = f
                 self.functions.append(f)
+
+    def handle_non_ext_method(self, cdef: ClassDef, fdef: FuncDef) -> None:
+        # Perform the function of visit_method for methods inside non-extension classes.
+        name = fdef.name()
+        func_ir, func_reg = self.gen_func_item(fdef, name, self.mapper.fdef_to_sig(fdef), cdef)
+        self.functions.append(func_ir)
+
+        if self.is_decorated(fdef):
+            # The undecorated method is a generated callable class
+            assert func_reg is not None
+            orig_func = func_reg
+            func_reg = self.load_decorated_func(fdef, orig_func)
+
+        # TODO: Support property setters in non-extension classes
+        if fdef.is_property:
+            # Wrap the method in a call to builtins.property
+            prop = self.load_module_attr_by_fullname('builtins.property', fdef.line)
+            assert func_reg is not None
+            func_reg = self.py_call(prop, [func_reg], fdef.line)
+
+        assert func_reg is not None
+        self.add_to_non_ext_dict(name, func_reg, fdef.line)
+
+    def visit_method(self, cdef: ClassDef, fdef: FuncDef) -> None:
+        class_ir = self.mapper.type_to_ir[cdef.info]
+        if class_ir.is_non_ext:
+            self.handle_non_ext_method(cdef, fdef)
+        else:
+            self.handle_ext_method(cdef, fdef)
 
     def is_approximately_constant(self, e: Expression) -> bool:
         """Check whether we allow an expression to appear as a default value.
@@ -1345,8 +1351,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
     def visit_class_def(self, cdef: ClassDef) -> None:
         ir = self.mapper.type_to_ir[cdef.info]
         # Currently, we only create non-extension classes for classes that are
-        # decorated. Classes decorated with @trait do not apply here, and are
-        # handled in a different way.
+        # decorated or inherit from Enum. Classes decorated with @trait do not
+        # apply here, and are handled in a different way.
         if ir.is_non_ext:
             self.non_ext_bases = self.populate_non_ext_bases(cdef)
             self.non_ext_dict = self.setup_non_ext_dict(cdef)
