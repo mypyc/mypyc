@@ -3093,7 +3093,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             return self.py_method_call(base, name, arg_values, base.line, arg_kinds, arg_names)
 
         # If the base type is one of ours, do a MethodCall
-        if isinstance(base.type, RInstance) and not base.type.class_ir.builtin_base:
+        if (isinstance(base.type, RInstance) and base.type.class_ir.is_ext_class
+                and not base.type.class_ir.builtin_base):
             if base.type.class_ir.has_method(name):
                 decl = base.type.class_ir.method_decl(name)
                 if arg_kinds is None:
