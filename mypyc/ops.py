@@ -1537,11 +1537,11 @@ class ClassIR:
     """
     def __init__(self, name: str, module_name: str, is_trait: bool = False,
                  is_generated: bool = False, is_abstract: bool = False,
-                 is_non_ext: bool = False) -> None:
+                 is_ext_class: bool = True) -> None:
         self.name = name
         self.module_name = module_name
         self.is_trait = is_trait
-        self.is_non_ext = is_non_ext
+        self.is_ext_class = is_ext_class
         self.is_abstract = is_abstract
         self.is_generated = is_generated
         self.inherits_python = False

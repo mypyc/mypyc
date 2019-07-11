@@ -149,7 +149,7 @@ class ModuleGenerator:
             self.define_finals(module.final_names, emitter)
 
             for cl in module.classes:
-                if not cl.is_non_ext:
+                if cl.is_ext_class:
                     generate_class(cl, module_name, emitter)
 
             # Generate Python extension module definitions and module initialization functions.
