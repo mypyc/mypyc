@@ -61,11 +61,11 @@ from mypyc.ops import (
     BasicBlock, AssignmentTarget, AssignmentTargetRegister, AssignmentTargetIndex,
     AssignmentTargetAttr, AssignmentTargetTuple, Environment, Op, LoadInt, RType, Value, Register,
     Return, FuncIR, Assign, Branch, Goto, RuntimeArg, Call, Box, Unbox, Cast, RTuple, Unreachable,
-    TupleGet, TupleSet, ClassIR, RInstance, ModuleIR, GetAttr, SetAttr, LoadStatic, InitStatic,
-    MethodCall, INVALID_FUNC_DEF, int_rprimitive, float_rprimitive, bool_rprimitive,
-    list_rprimitive, is_list_rprimitive, dict_rprimitive, set_rprimitive, str_rprimitive,
-    tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive, exc_rtuple,
-    is_tuple_rprimitive,
+    TupleGet, TupleSet, ClassIR, NonExtClassInfo, RInstance, ModuleIR, GetAttr, SetAttr,
+    LoadStatic, InitStatic, MethodCall, INVALID_FUNC_DEF, int_rprimitive, float_rprimitive,
+    bool_rprimitive, list_rprimitive, is_list_rprimitive, dict_rprimitive, set_rprimitive,
+    str_rprimitive, tuple_rprimitive, none_rprimitive, is_none_rprimitive, object_rprimitive,
+    exc_rtuple, is_tuple_rprimitive,
     PrimitiveOp, ControlOp, LoadErrorValue, ERR_FALSE, OpDescription, RegisterOp,
     is_object_rprimitive, LiteralsMap, FuncSignature, VTableAttr, VTableMethod, VTableEntries,
     NAMESPACE_TYPE, RaiseStandardError, LoadErrorValue, NO_TRACEBACK_LINE_NO, FuncDecl,
@@ -210,7 +210,8 @@ def is_extension_class(cdef: ClassDef) -> bool:
     if any(not (isinstance(d, RefExpr) and d.fullname == 'mypy_extensions.trait')
            for d in cdef.decorators):
         return False
-    elif cdef.info.metaclass_type and cdef.info.metaclass_type.type.fullname() == 'enum.EnumMeta':
+    elif (cdef.info.metaclass_type and cdef.info.metaclass_type.type.fullname() not in (
+            'abc.ABCMeta', 'typing.TypingMeta', 'typing.GenericMeta')):
         return False
     return True
 
@@ -515,11 +516,6 @@ def prepare_class_def(path: str, module_name: str, cdef: ClassDef,
 
     ir = mapper.type_to_ir[cdef.info]
     info = cdef.info
-
-    # The metaclass chain for GenericMeta all works, but in general they don't
-    if (cdef.info.metaclass_type and cdef.info.metaclass_type.type.fullname() not in (
-            'abc.ABCMeta', 'typing.TypingMeta', 'typing.GenericMeta')):
-        errors.error("Metaclasses are not supported", path, cdef.line)
 
     for name, node in info.names.items():
         if isinstance(node.node, Var):
@@ -994,12 +990,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.callable_class_names = set()  # type: Set[str]
         self.options = options
 
-        # These variables keep track of values that are needed only when constructing a
-        # non-extension class. This includes a tuple of base classes, and a class dictionary.
-        # and an annotations dictionary
-        self.non_ext_dict = None  # type: Optional[Value]
-        self.non_ext_bases = None  # type: Optional[Value]
-        self.non_ext_anns = None  # type: Optional[Value]
+        # This instance of NonExtClassInfo keeps track of information needed to construct
+        # a non-extension class. Its' value is None if the current class being visited
+        # is an extension class.
+        self.non_ext_info = None  # type: Optional[NonExtClassInfo]
 
         # These variables keep track of the number of lambdas, implicit indices, and implicit
         # iterators instantiated so we avoid name conflicts. The indices and iterators are
@@ -1233,16 +1227,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         cls.methods[ir.name] = ir
 
     def load_non_ext_class(self, ir: ClassIR, line: int) -> Value:
-        assert self.non_ext_dict is not None
-        assert self.non_ext_anns is not None
-        assert self.non_ext_bases is not None
+        assert self.non_ext_info is not None
 
         cls_name = self.load_static_unicode(ir.name)
 
         # Add __annotations__ to the class dict.
         self.primitive_op(dict_set_item_op,
-                          [self.non_ext_dict, self.load_static_unicode('__annotations__'),
-                           self.non_ext_anns], -1)
+                          [self.non_ext_info.dict, self.load_static_unicode('__annotations__'),
+                           self.non_ext_info.anns], -1)
 
         # We add a __doc__ attribute so if the non-extension class is decorated with the
         # dataclass decorator, dataclass will not try to look for __text_signature__.
@@ -1250,9 +1242,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         filler_doc_str = 'filler docstring for classes decorated with dataclass'
         self.add_to_non_ext_dict('__doc__', self.load_static_unicode(filler_doc_str), line)
         metaclass = self.primitive_op(type_object_op, [], line)
-        metaclass = self.primitive_op(py_calc_meta_op, [metaclass, self.non_ext_bases], line)
+        metaclass = self.primitive_op(py_calc_meta_op, [metaclass, self.non_ext_info.bases], line)
 
-        class_type_obj = self.py_call(metaclass, [cls_name, self.non_ext_bases, self.non_ext_dict],
+        class_type_obj = self.py_call(metaclass,
+                                      [cls_name, self.non_ext_info.bases, self.non_ext_info.dict],
                                       line)
         return class_type_obj
 
@@ -1290,9 +1283,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def add_to_non_ext_dict(self, key: str, val: Value, line: int) -> None:
         # Add an attribute entry into the class dict of a non-extension class.
-        assert self.non_ext_dict is not None
+        assert self.non_ext_info is not None
         key_unicode = self.load_static_unicode(key)
-        self.primitive_op(dict_set_item_op, [self.non_ext_dict, key_unicode, val], line)
+        self.primitive_op(dict_set_item_op, [self.non_ext_info.dict, key_unicode, val], line)
 
     def add_non_ext_class_attr(self, lvalue: NameExpr,
                                stmt: AssignmentStmt, class_ir: ClassIR) -> None:
@@ -1304,27 +1297,26 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # We populate __annotations__ because dataclasses uses it to determine
         # which attributes to compute on.
         # TODO: Maybe generate more precise types for annotations
-        assert self.non_ext_anns is not None
-
+        assert self.non_ext_info is not None
         key = self.load_static_unicode(lvalue.name)
         typ = self.primitive_op(type_object_op, [], stmt.line)
-        self.primitive_op(dict_set_item_op, [self.non_ext_anns, key, typ], stmt.line)
+        self.primitive_op(dict_set_item_op, [self.non_ext_info.anns, key, typ], stmt.line)
 
         # Only add the attribute to the __dict__ if the assignment is of the form:
         # x: type = value (don't add attributes of the form 'x: type' to the __dict__).
         if not isinstance(stmt.rvalue, TempNode):
             self.add_to_non_ext_dict(lvalue.name, self.accept(stmt.rvalue), stmt.line)
 
-    def setup_non_ext_dict(self, cdef: ClassDef) -> Value:
+    def setup_non_ext_dict(self, cdef: ClassDef, bases: Value) -> Value:
         """
         Initialize the class dictionary for a non-extension class. This class dictionary
         is passed to the metaclass constructor.
         """
-        assert self.non_ext_bases is not None
 
         # Check if the metaclass defines a __prepare__ method, and if so, call it.
         metaclass = self.primitive_op(type_object_op, [], cdef.line)
-        metaclass = self.primitive_op(py_calc_meta_op, [metaclass, self.non_ext_bases], cdef.line)
+        metaclass = self.primitive_op(py_calc_meta_op, [metaclass, bases],
+                                      cdef.line)
         has_prepare = self.primitive_op(py_hasattr_op,
                                         [metaclass,
                                         self.load_static_unicode('__prepare__')], cdef.line)
@@ -1337,7 +1329,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.activate_block(true_block)
         cls_name = self.load_static_unicode(cdef.name)
         prepare_meth = self.py_get_attr(metaclass, '__prepare__', cdef.line)
-        prepare_dict = self.py_call(prepare_meth, [cls_name, self.non_ext_bases], cdef.line)
+        prepare_dict = self.py_call(prepare_meth, [cls_name, bases], cdef.line)
         self.assign(non_ext_dict, prepare_dict, cdef.line)
         self.goto(exit_block)
 
@@ -1357,12 +1349,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             # If the class is not decorated, generate an extension class for it.
             self.allocate_class(cdef)
         else:
-            self.non_ext_bases = self.populate_non_ext_bases(cdef)
-            self.non_ext_dict = self.setup_non_ext_dict(cdef)
+            non_ext_bases = self.populate_non_ext_bases(cdef)
+            non_ext_dict = self.setup_non_ext_dict(cdef, non_ext_bases)
             # We populate __annotations__ for non-extension classes
             # because dataclasses uses it to determine which attributes to compute on.
             # TODO: Maybe generate more precise types for annotations
-            self.non_ext_anns = self.primitive_op(new_dict_op, [], cdef.line)
+            non_ext_anns = self.primitive_op(new_dict_op, [], cdef.line)
+
+            self.non_ext_info = NonExtClassInfo(non_ext_dict, non_ext_bases, non_ext_anns)
 
         for stmt in cdef.defs.body:
             if isinstance(stmt, OverloadedFuncDef) and stmt.is_property:
@@ -1429,6 +1423,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.primitive_op(dict_set_item_op,
                               [self.load_globals_dict(), self.load_static_unicode(cdef.name),
                                non_ext_class], cdef.line)
+
+            # Set this attribute back to None until the next non-extension class is visited.
+            self.non_ext_info = None
 
     def allocate_class(self, cdef: ClassDef) -> None:
         # OK AND NOW THE FUN PART

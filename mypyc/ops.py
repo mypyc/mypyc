@@ -1679,6 +1679,23 @@ class ClassIR:
         return sorted(concrete, key=lambda c: (len(c.children), c.name))
 
 
+class NonExtClassInfo:
+    """Information needed to construct a non-extension class.
+
+
+    Includes the class dictionary, a tuple of base classes, and
+    the class annotations dictionary.
+    """
+
+    def __init__(self,
+            non_ext_dict: Value,
+            non_ext_bases: Value,
+            non_ext_anns: Value) -> None:
+        self.dict = non_ext_dict
+        self.bases = non_ext_bases
+        self.anns = non_ext_anns
+
+
 LiteralsMap = Dict[Tuple[Type[object], Union[int, float, str, bytes, complex]], str]
 
 
