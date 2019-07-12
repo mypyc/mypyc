@@ -4120,14 +4120,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                                        false_op)
         return None
 
+    # Special case for 'dataclasses.field' and 'attr.Factory' function calls
+    # because the results of such calls are typechecked by mypy using the types
+    # of the arguments to their respective functions, resulting in attempted
+    # coercions by mypyc that throw a runtime error.
     @specialize_function('dataclasses.field')
+    @specialize_function('attr.Factory')
     def translate_dataclasses_field_call(self, expr: CallExpr, callee: RefExpr) -> Optional[Value]:
-        # Annoying special case for dataclasses 'field' function calls because
-        # the mypy dataclass plugin typechecks such a call using the types
-        # of the parameters to the default and default_factory
-        # arguments, resulting in attempted coercions that throw a runtime error.
-        if isinstance(expr.callee, NameExpr) and expr.callee.fullname == 'dataclasses.field':
-            self.types[expr] = AnyType(TypeOfAny.from_error)
+        self.types[expr] = AnyType(TypeOfAny.from_error)
         return None
 
     def any_all_helper(self,
