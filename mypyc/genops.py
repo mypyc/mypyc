@@ -50,6 +50,7 @@ from mypy.types import (
 from mypy.visitor import ExpressionVisitor, StatementVisitor
 from mypy.subtypes import is_named_instance
 from mypy.checkexpr import map_actuals_to_formals
+from mypy.state import strict_optional_set
 
 from mypyc.common import (
     ENV_ATTR_NAME, NEXT_LABEL_ATTR_NAME, TEMP_ATTR_NAME, LAMBDA_NAME,
@@ -130,6 +131,7 @@ class Errors:
             print(error)
 
 
+@strict_optional_set(True)  # Turn on strict optional for any type manipulations we do
 def build_ir(modules: List[MypyFile],
              graph: Graph,
              types: Dict[Expression, Type],
