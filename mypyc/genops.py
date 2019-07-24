@@ -14,7 +14,7 @@ It would be translated to something that conceptually looks like this:
    return r3
 """
 from typing import (
-    Callable, Dict, List, Tuple, Optional, Union, Sequence, Set, Any, cast, overload,
+    TypeVar, Callable, Dict, List, Tuple, Optional, Union, Sequence, Set, Any, cast, overload,
 )
 MYPY = False
 if MYPY:
@@ -130,8 +130,12 @@ class Errors:
         for error in self._errors.new_messages():
             print(error)
 
+# The stubs for callable contextmanagers are busted so cast it to the
+# right type...
+F = TypeVar('F', bound=Callable[..., Any])
+strict_optional_dec = cast(Callable[[F], F], strict_optional_set(True))
 
-@strict_optional_set(True)  # Turn on strict optional for any type manipulations we do
+@strict_optional_dec  # Turn on strict optional for any type manipulations we do
 def build_ir(modules: List[MypyFile],
              graph: Graph,
              types: Dict[Expression, Type],
