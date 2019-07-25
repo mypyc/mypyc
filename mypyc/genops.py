@@ -300,7 +300,8 @@ def compute_vtable(cls: ClassIR) -> None:
     """Compute the vtable structure for a class."""
     if cls.vtable is not None: return
 
-    cls.has_dict = any(x.inherits_python for x in cls.mro)
+    if not cls.is_generated:
+        cls.has_dict = any(x.inherits_python for x in cls.mro)
 
     for t in cls.mro[1:]:
         # Make sure all ancestors are processed first
@@ -4654,6 +4655,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Define the actual callable class ClassIR, and set its environment to point at the
         # previously defined environment class.
         callable_class_ir = ClassIR(name, self.module_name, is_generated=True)
+
+        # The functools @wraps decorator attempts to call setattr on nested functions, so
+        # we create a dict for these nested functions.
+        # https://github.com/python/cpython/blob/3.7/Lib/functools.py#L58
+        if self.fn_info.is_nested:
+            callable_class_ir.has_dict = True
+
         # If the enclosing class doesn't contain nested (which will happen if
         # this is a toplevel lambda), don't set up an environment.
         if self.fn_infos[-2].contains_nested:
