@@ -4051,7 +4051,6 @@ with assertRaises(StopIteration):
 42
 
 [case testGeneratorSuper]
-from dataclasses import dataclass
 from typing import Iterator, Callable, Any
 
 class A():
