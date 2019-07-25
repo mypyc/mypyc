@@ -1131,22 +1131,27 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # Perform the function of visit_method for methods inside non-extension classes.
         name = fdef.name()
         func_ir, func_reg = self.gen_func_item(fdef, name, self.mapper.fdef_to_sig(fdef), cdef)
+        assert func_reg is not None
         self.functions.append(func_ir)
 
         if self.is_decorated(fdef):
             # The undecorated method is a generated callable class
-            assert func_reg is not None
             orig_func = func_reg
             func_reg = self.load_decorated_func(fdef, orig_func)
 
         # TODO: Support property setters in non-extension classes
         if fdef.is_property:
-            # Wrap the method in a call to builtins.property
             prop = self.load_module_attr_by_fullname('builtins.property', fdef.line)
-            assert func_reg is not None
             func_reg = self.py_call(prop, [func_reg], fdef.line)
 
-        assert func_reg is not None
+        elif self.mapper.func_to_decl[fdef].kind == FUNC_CLASSMETHOD:
+            cls_meth = self.load_module_attr_by_fullname('builtins.classmethod', fdef.line)
+            func_reg = self.py_call(cls_meth, [func_reg], fdef.line)
+
+        elif self.mapper.func_to_decl[fdef].kind == FUNC_STATICMETHOD:
+            stat_meth = self.load_module_attr_by_fullname('builtins.staticmethod', fdef.line)
+            func_reg = self.py_call(stat_meth, [func_reg], fdef.line)
+
         self.add_to_non_ext_dict(name, func_reg, fdef.line)
 
     def visit_method(self, cdef: ClassDef, fdef: FuncDef) -> None:
@@ -3013,7 +3018,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             decl = ir.method_decl(callee.name)
             args = []
             arg_kinds, arg_names = expr.arg_kinds[:], expr.arg_names[:]
-            if decl.kind == FUNC_CLASSMETHOD:  # Add the class argument for class methods
+            # Add the class argument for class methods in extension classes
+            if decl.kind == FUNC_CLASSMETHOD and ir.is_ext_class:
                 args.append(self.load_native_type_object(callee.expr.node.fullname()))
                 arg_kinds.insert(0, ARG_POS)
                 arg_names.insert(0, None)
