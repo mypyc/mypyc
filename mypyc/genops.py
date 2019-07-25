@@ -1752,15 +1752,15 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.enter(FuncInfo(fitem, name, class_name, self.gen_func_ns(),
                             is_nested, contains_nested, is_decorated, in_non_ext))
 
-        if self.fn_info.is_nested or self.fn_info.in_non_ext:
-            self.setup_callable_class()
-
         # Functions that contain nested functions need an environment class to store variables that
         # are free in their nested functions. Generator functions need an environment class to
         # store a variable denoting the next instruction to be executed when the __next__ function
         # is called, along with all the variables inside the function itself.
         if self.fn_info.contains_nested or self.fn_info.is_generator:
             self.setup_env_class()
+
+        if self.fn_info.is_nested or self.fn_info.in_non_ext:
+            self.setup_callable_class()
 
         if self.fn_info.is_generator:
             # Do a first-pass and generate a function that just returns a generator object.
@@ -3084,6 +3084,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             vself = next(iter(self.environment.indexes))  # grab first argument
             if decl.kind == FUNC_CLASSMETHOD:
                 vself = self.primitive_op(type_op, [vself], expr.line)
+            elif self.fn_info.is_generator:
+                # self is sixth value in symtable for generator functions
+                self_targ = list(self.environment.symtable.values())[6]
+                vself = self.read(self_targ, self.fn_info.fitem.line)
             arg_values.insert(0, vself)
             arg_kinds.insert(0, ARG_POS)
             arg_names.insert(0, None)
@@ -3948,7 +3952,11 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             ir = self.mapper.type_to_ir[o.info]
             iter_env = iter(self.environment.indexes)
             vself = next(iter_env)  # grab first argument
-            if not ir.is_ext_class:
+            if self.fn_info.is_generator:
+                # self is sixth value in symtable
+                self_targ = list(self.environment.symtable.values())[6]
+                vself = self.read(self_targ, self.fn_info.fitem.line)
+            elif not ir.is_ext_class:
                 vself = next(iter_env)  # second argument is self if non_extension class
             args = [typ, vself]
         res = self.py_call(sup_val, args, o.line)
