@@ -100,6 +100,7 @@ assert a.c == 3
 assert a.get_a() == 1
 assert a.get_b() == 2
 assert a.get_c() == 3
+assert A.constant() == 4
 
 [case testEnum]
 from enum import Enum
