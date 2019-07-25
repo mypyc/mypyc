@@ -84,7 +84,7 @@ from mypyc.ops_dict import (
 )
 from mypyc.ops_set import new_set_op, set_add_op, set_update_op
 from mypyc.ops_misc import (
-    none_op, none_object_op, true_op, false_op, iter_op, next_op, next_raw_op,
+    none_op, none_object_op, true_op, false_op, iter_op, next_op,
     check_stop_op, send_op, yield_from_except_op,
     py_getattr_op, py_setattr_op, py_delattr_op, py_hasattr_op,
     py_call_op, py_call_with_kwargs_op, py_method_call_op,
@@ -3999,7 +3999,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.primitive_op(iter_op, [self.accept(o.expr)], o.line))
 
         stop_block, main_block, done_block = BasicBlock(), BasicBlock(), BasicBlock()
-        _y_init = self.primitive_op(next_raw_op, [self.read(iter_reg)], o.line)
+        _y_init = self.primitive_op(next_op, [self.read(iter_reg)], o.line)
         self.add(Branch(_y_init, stop_block, main_block, Branch.IS_ERROR))
 
         # Try extracting a return value from a StopIteration and return it.
