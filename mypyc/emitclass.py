@@ -100,12 +100,14 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     dealloc_name = '{}_dealloc'.format(name_prefix)
     methods_name = '{}_methods'.format(name_prefix)
     vtable_setup_name = '{}_trait_vtable_setup'.format(name_prefix)
+    async_struct_name = '{}_async_struct'.format(name_prefix)
 
     fields = OrderedDict()  # type: Dict[str, str]
     fields['tp_name'] = '"{}"'.format(name)
 
     generate_full = not cl.is_trait and not cl.builtin_base
     needs_getseters = not cl.is_generated
+    need_async_struct = '__await__' in cl.methods
 
     if generate_full:
         fields['tp_new'] = new_name
@@ -115,6 +117,8 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
     if needs_getseters:
         fields['tp_getset'] = getseters_name
     fields['tp_methods'] = methods_name
+    if need_async_struct:
+        fields['tp_as_async'] = '&{}'.format(async_struct_name)
 
     def emit_line() -> None:
         emitter.emit_line()
@@ -196,6 +200,9 @@ def generate_class(cl: ClassIR, module: str, emitter: Emitter) -> None:
         generate_getseter_declarations(cl, emitter)
         emit_line()
         generate_getseters_table(cl, getseters_name, emitter)
+        emit_line()
+    if need_async_struct:
+        generate_async_struct_for_class(cl, async_struct_name, emitter)
         emit_line()
     generate_methods_table(cl, methods_name, emitter)
     emit_line()
@@ -512,6 +519,34 @@ def generate_clear_for_class(cl: ClassIR,
             object_rprimitive)
     emitter.emit_line('return 0;')
     emitter.emit_line('}')
+
+
+def generate_async_struct_for_class(cl: ClassIR,
+                                    async_struct_name: str,
+                                    emitter: Emitter) -> None:
+    emitter.emit_line('{} {} = '.format('PyAsyncMethods', async_struct_name))
+    emitter.emit_line('{')
+    if '__await__' in cl.methods:
+        fn = cl.methods['__await__']
+        emitter.emit_line('.am_await = (unaryfunc){}{},'.format(
+            NATIVE_PREFIX, fn.cname(emitter.names)))
+    else:
+        emitter.emit_line('.am_await = NULL,')
+
+    if '__iter__' in cl.methods:
+        fn = cl.methods['__iter__']
+        emitter.emit_line('.am_aiter = (unaryfunc){}{},'.format(
+            NATIVE_PREFIX, fn.cname(emitter.names)))
+    else:
+        emitter.emit_line('.am_aiter = NULL,')
+
+    if '__next__' in cl.methods:
+        fn = cl.methods['__next__']
+        emitter.emit_line('.am_anext = (unaryfunc){}{}'.format(
+            NATIVE_PREFIX, fn.cname(emitter.names)))
+    else:
+        emitter.emit_line('.am_anext = NULL')
+    emitter.emit_line('};')
 
 
 def generate_dealloc_for_class(cl: ClassIR,

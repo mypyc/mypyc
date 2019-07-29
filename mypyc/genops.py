@@ -678,7 +678,7 @@ class FuncInfo(object):
 
     @property
     def is_generator(self) -> bool:
-        return self.fitem.is_generator
+        return self.fitem.is_generator or self.fitem.is_coroutine
 
     @property
     def callable_class(self) -> 'ImplicitClass':
@@ -1734,8 +1734,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         | c_obj |   --------------------------+
         +-------+
         """
-        if fitem.is_coroutine:
-            self.error('async functions are unimplemented', fitem.line)
 
         func_reg = None  # type: Optional[Value]
 
@@ -1831,6 +1829,10 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.add_send_to_generator_class(fn_info, helper_fn_decl, sig)
             self.add_iter_to_generator_class(fn_info)
             self.add_throw_to_generator_class(fn_info, helper_fn_decl, sig)
+            self.add_close_to_generator_class(fn_info)
+            if fitem.is_coroutine:
+                self.add_await_to_generator_class(fn_info)
+
         else:
             func_ir, func_reg = self.gen_func_ir(blocks, sig, env, fn_info, cdef)
 
@@ -3996,15 +3998,23 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         assert cls.send_arg_reg is not None
         return cls.send_arg_reg
 
-    def visit_yield_from_expr(self, o: YieldFromExpr) -> Value:
+    def handle_yield_from_and_await(self, o: Union[YieldFromExpr, AwaitExpr]) -> Value:
         # This is basically an implementation of the code in PEP 380.
 
         # TODO: do we want to use the right types here?
         result = self.alloc_temp(object_rprimitive)
         to_yield_reg = self.alloc_temp(object_rprimitive)
         received_reg = self.alloc_temp(object_rprimitive)
-        iter_reg = self.maybe_spill_assignable(
-            self.primitive_op(iter_op, [self.accept(o.expr)], o.line))
+
+        if isinstance(o, YieldFromExpr):
+            iter_val = self.primitive_op(iter_op, [self.accept(o.expr)], o.line)
+        else:
+            # If the object is a coroutine, call its' await method to get the iterator
+            iter_val = self.gen_method_call(self.accept(o.expr), '__await__', [],
+                                            object_rprimitive,
+                                            o.line)
+
+        iter_reg = self.maybe_spill_assignable(iter_val)
 
         stop_block, main_block, done_block = BasicBlock(), BasicBlock(), BasicBlock()
         _y_init = self.primitive_op(next_raw_op, [self.read(iter_reg)], o.line)
@@ -4071,6 +4081,9 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
         self.goto_and_activate(done_block)
         return self.read(result)
+
+    def visit_yield_from_expr(self, o: YieldFromExpr) -> Value:
+        return self.handle_yield_from_and_await(o)
 
     def visit_ellipsis(self, o: EllipsisExpr) -> Value:
         return self.primitive_op(ellipsis_op, [], o.line)
@@ -4259,9 +4272,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
                     return None
             return res
 
-    # Unimplemented constructs
     def visit_await_expr(self, o: AwaitExpr) -> Value:
-        self.bail("await is unimplemented", o.line)
+        return self.handle_yield_from_and_await(o)
 
     # Unimplemented constructs that shouldn't come up because they are py2 only
     def visit_backquote_expr(self, o: BackquoteExpr) -> Value:
@@ -4967,6 +4979,23 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         fn_info.generator_class.ir.methods['throw'] = throw_fn_ir
         self.functions.append(throw_fn_ir)
 
+    def add_close_to_generator_class(self, fn_info: FuncInfo) -> None:
+        """Generates the '__close__' method for a generator class."""
+
+        # TODO: Currently this is a dummy method does the exact same thing as
+        # __iter__, we need to actually fill this in.
+        self.enter(fn_info)
+        self_target = self.add_self_to_env(fn_info.generator_class.ir)
+        self.add(Return(self.read(self_target, fn_info.fitem.line)))
+        blocks, env, _, fn_info = self.leave()
+
+        # Next, add the actual function as a method of the generator class.
+        sig = FuncSignature((RuntimeArg(SELF_NAME, object_rprimitive),), object_rprimitive)
+        close_fn_decl = FuncDecl('close', fn_info.generator_class.ir.name, self.module_name, sig)
+        close_fn_ir = FuncIR(close_fn_decl, blocks, env)
+        fn_info.generator_class.ir.methods['close'] = close_fn_ir
+        self.functions.append(close_fn_ir)
+
     def create_switch_for_generator_class(self) -> None:
         self.add(Goto(self.fn_info.generator_class.switch_block))
         self.fn_info.generator_class.blocks.append(self.new_block())
@@ -5006,6 +5035,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         zero_reg = self.add(LoadInt(0))
         self.add(SetAttr(curr_env_reg, NEXT_LABEL_ATTR_NAME, zero_reg, fitem.line))
         return generator_reg
+
+    def add_await_to_generator_class(self, fn_info: FuncInfo) -> None:
+        """Generates the '__await__' method for a generator class."""
+        self.enter(fn_info)
+        self_target = self.add_self_to_env(fn_info.generator_class.ir)
+        self.add(Return(self.read(self_target, fn_info.fitem.line)))
+        blocks, env, _, fn_info = self.leave()
+
+        # Next, add the actual function as a method of the generator class.
+        sig = FuncSignature((RuntimeArg(SELF_NAME, object_rprimitive),), object_rprimitive)
+        await_fn_decl = FuncDecl('__await__', fn_info.generator_class.ir.name,
+                                 self.module_name, sig)
+        await_fn_ir = FuncIR(await_fn_decl, blocks, env)
+        fn_info.generator_class.ir.methods['__await__'] = await_fn_ir
+        self.functions.append(await_fn_ir)
 
     def add_raise_exception_blocks_to_generator_class(self, line: int) -> None:
         """
