@@ -465,7 +465,7 @@ class Environment:
             if k.name() == 'self':
                 self_targ = v
                 break
-        assert self_targ != None
+        assert self_targ is not None
         return self_targ
 
     def add_temp(self, typ: RType, is_arg: bool = False) -> 'Register':
