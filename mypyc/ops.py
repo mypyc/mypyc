@@ -459,6 +459,15 @@ class Environment:
     def lookup(self, symbol: SymbolNode) -> AssignmentTarget:
         return self.symtable[symbol]
 
+    def get_self_targ(self) -> AssignmentTarget:
+        self_targ = None
+        for k, v in self.symtable.items():
+            if k.name() == 'self':
+                self_targ = v
+                break
+        assert self_targ != None
+        return self_targ
+
     def add_temp(self, typ: RType, is_arg: bool = False) -> 'Register':
         assert isinstance(typ, RType)
         reg = Register(typ, is_arg=is_arg)

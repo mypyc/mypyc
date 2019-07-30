@@ -3085,8 +3085,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             if decl.kind == FUNC_CLASSMETHOD:
                 vself = self.primitive_op(type_op, [vself], expr.line)
             elif self.fn_info.is_generator:
-                # self is sixth value in symtable for generator functions
-                self_targ = list(self.environment.symtable.values())[6]
+                self_targ = self.environment.get_self_targ()
                 vself = self.read(self_targ, self.fn_info.fitem.line)
             arg_values.insert(0, vself)
             arg_kinds.insert(0, ARG_POS)
@@ -3954,8 +3953,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             iter_env = iter(self.environment.indexes)
             vself = next(iter_env)  # grab first argument
             if self.fn_info.is_generator:
-                # self is sixth value in symtable
-                self_targ = list(self.environment.symtable.values())[6]
+                self_targ = self.environment.get_self_targ()
                 vself = self.read(self_targ, self.fn_info.fitem.line)
             elif not ir.is_ext_class:
                 vself = next(iter_env)  # second argument is self if non_extension class
