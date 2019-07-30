@@ -13,10 +13,6 @@ from mypy.nodes import ARG_POS, ARG_OPT, ARG_NAMED_OPT, ARG_NAMED, ARG_STAR, ARG
 
 from typing import List, Optional
 
-MYPY = False
-if MYPY:
-    pass
-
 
 def wrapper_function_header(fn: FuncIR, names: NameGenerator) -> str:
     return 'PyObject *{prefix}{name}(PyObject *self, PyObject *args, PyObject *kw)'.format(
