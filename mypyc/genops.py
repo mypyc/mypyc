@@ -1252,6 +1252,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         # https://github.com/python/cpython/blob/3.7/Lib/dataclasses.py#L957
         filler_doc_str = 'filler docstring for classes decorated with dataclass'
         self.add_to_non_ext_dict('__doc__', self.load_static_unicode(filler_doc_str), line)
+        self.add_to_non_ext_dict('__module__', self.load_static_unicode(self.module_name), line)
         metaclass = self.primitive_op(type_object_op, [], line)
         metaclass = self.primitive_op(py_calc_meta_op, [metaclass, self.non_ext_info.bases], line)
 
