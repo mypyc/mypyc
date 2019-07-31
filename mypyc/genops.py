@@ -81,7 +81,7 @@ from mypyc.ops_dict import (
 )
 from mypyc.ops_set import new_set_op, set_add_op, set_update_op
 from mypyc.ops_misc import (
-    none_op, none_object_op, true_op, false_op, iter_op, next_op,
+    none_op, none_object_op, true_op, false_op, iter_op, next_op, next_raw_op,
     check_stop_op, send_op, yield_from_except_op,
     py_getattr_op, py_setattr_op, py_delattr_op, py_hasattr_op,
     py_call_op, py_call_with_kwargs_op, py_method_call_op,
@@ -3083,7 +3083,12 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             if decl.kind == FUNC_CLASSMETHOD:
                 vself = self.primitive_op(type_op, [vself], expr.line)
             elif self.fn_info.is_generator:
-                self_targ = self.environment.get_self_targ()
+                # For generator classes, the self target is the 6th value
+                # in the symbol table (which is an ordered dict). This is sort
+                # of ugly, but we can't search by name since the 'self' parameter
+                # could be named anything, and it doesn't get added to the
+                # environment indexes.
+                self_targ = list(self.environment.symtable.values())[6]
                 vself = self.read(self_targ, self.fn_info.fitem.line)
             arg_values.insert(0, vself)
             arg_kinds.insert(0, ARG_POS)
@@ -3951,7 +3956,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             iter_env = iter(self.environment.indexes)
             vself = next(iter_env)  # grab first argument
             if self.fn_info.is_generator:
-                self_targ = self.environment.get_self_targ()
+                # grab sixth argument (see comment in translate_super_method_call)
+                self_targ = list(self.environment.symtable.values())[6]
                 vself = self.read(self_targ, self.fn_info.fitem.line)
             elif not ir.is_ext_class:
                 vself = next(iter_env)  # second argument is self if non_extension class
@@ -3996,7 +4002,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.primitive_op(iter_op, [self.accept(o.expr)], o.line))
 
         stop_block, main_block, done_block = BasicBlock(), BasicBlock(), BasicBlock()
-        _y_init = self.primitive_op(next_op, [self.read(iter_reg)], o.line)
+        _y_init = self.primitive_op(next_raw_op, [self.read(iter_reg)], o.line)
         self.add(Branch(_y_init, stop_block, main_block, Branch.IS_ERROR))
 
         # Try extracting a return value from a StopIteration and return it.

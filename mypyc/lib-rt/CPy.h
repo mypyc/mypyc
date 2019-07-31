@@ -912,6 +912,11 @@ static PyObject *CPyDict_FromAny(PyObject *obj) {
     }
 }
 
+static PyObject *CPyIter_Next(PyObject *iter)
+{
+    return (*iter->ob_type->tp_iternext)(iter);
+}
+
 static PyObject *CPy_FetchStopIterationValue(void)
 {
     PyObject *val = NULL;
@@ -925,7 +930,7 @@ static PyObject *CPyIter_Send(PyObject *iter, PyObject *val)
     // (This behavior is to match the PEP 380 spec for yield from.)
     _Py_IDENTIFIER(send);
     if (val == Py_None) {
-        return PyIter_Next(iter);
+        return CPyIter_Next(iter);
     } else {
         return _PyObject_CallMethodIdObjArgs(iter, &PyId_send, val, NULL);
     }

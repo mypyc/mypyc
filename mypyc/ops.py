@@ -414,7 +414,7 @@ class Environment:
     def __init__(self, name: Optional[str] = None) -> None:
         self.name = name
         self.indexes = OrderedDict()  # type: Dict[Value, int]
-        self.symtable = {}  # type: Dict[SymbolNode, AssignmentTarget]
+        self.symtable = OrderedDict()  # type: OrderedDict[SymbolNode, AssignmentTarget]
         self.temp_index = 0
         self.names = {}  # type: Dict[str, int]
         self.vars_needing_init = set()  # type: Set[Value]
@@ -456,15 +456,6 @@ class Environment:
 
     def lookup(self, symbol: SymbolNode) -> AssignmentTarget:
         return self.symtable[symbol]
-
-    def get_self_targ(self) -> AssignmentTarget:
-        self_targ = None
-        for k, v in self.symtable.items():
-            if k.name() == 'self':
-                self_targ = v
-                break
-        assert self_targ is not None
-        return self_targ
 
     def add_temp(self, typ: RType, is_arg: bool = False) -> 'Register':
         assert isinstance(typ, RType)
