@@ -4,7 +4,7 @@
 from typing import Optional, List, Tuple, Dict, Callable, Mapping, Set
 from collections import OrderedDict
 
-from mypyc.common import PREFIX, NATIVE_PREFIX, REG_PREFIX, DUNDER_PREFIX
+from mypyc.common import PREFIX, NATIVE_PREFIX, REG_PREFIX
 from mypyc.emit import Emitter, HeaderDeclaration
 from mypyc.emitfunc import native_function_header, native_getter_name, native_setter_name
 from mypyc.emitwrapper import (
