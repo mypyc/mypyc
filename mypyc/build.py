@@ -35,6 +35,7 @@ from mypy.options import Options
 from mypy.build import BuildSource
 from mypyc.namegen import exported_name
 from mypyc.options import CompilerOptions
+from mypyc.errors import Errors
 
 from mypyc import emitmodule
 
@@ -188,12 +189,27 @@ def generate_c(sources: List[BuildSource], options: Options,
     if compiler_options.verbose:
         print("Parsed and typechecked in {:.3f}s".format(t1 - t0))
 
+    all_module_names = []
+    for group_sources, _ in groups:
+        all_module_names.extend([source.module for source in group_sources])
+
+    errors = Errors()
+
+    mapper = emitmodule.prepare_groups(result, all_module_names,
+                                       compiler_options=compiler_options,
+                                       errors=errors)
+
     ops = []  # type: List[str]
     ctext = []  # type: List[Tuple[str, str]]
     for group_sources, shared_lib_name in groups:
         module_names = [source.module for source in group_sources]
         ctext += emitmodule.compile_modules_to_c(result, module_names, shared_lib_name,
-                                                 compiler_options=compiler_options, ops=ops)
+                                                 mapper,
+                                                 compiler_options=compiler_options,
+                                                 errors=errors, ops=ops)
+    if errors.num_errors:
+        errors.flush_errors()
+        sys.exit(1)
 
     t2 = time.time()
     if compiler_options.verbose:

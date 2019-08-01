@@ -1,7 +1,5 @@
 """Generate C code for a Python C extension module from Python source code."""
 
-import sys
-
 from collections import OrderedDict
 from typing import List, Tuple, Dict, Iterable, Set, TypeVar, Optional
 
@@ -24,6 +22,7 @@ from mypyc.refcount import insert_ref_count_opcodes
 from mypyc.exceptions import insert_exception_handling
 from mypyc.emit import EmitterContext, Emitter, HeaderDeclaration
 from mypyc.namegen import exported_name
+from mypyc.errors import Errors
 
 
 class MarkedDeclaration:
@@ -44,18 +43,27 @@ def parse_and_typecheck(sources: List[BuildSource], options: Options,
     return result
 
 
+def prepare_groups(result: BuildResult,
+                   module_names: List[str],
+                   compiler_options: CompilerOptions,
+                   errors: Errors) -> genops.Mapper:
+    file_nodes = [result.files[name] for name in module_names]
+    return genops.build_type_map(file_nodes, result.graph, result.types, errors)
+
+
 def compile_modules_to_c(result: BuildResult, module_names: List[str],
                          shared_lib_name: Optional[str],
+                         mapper: genops.Mapper,
                          compiler_options: CompilerOptions,
+                         errors: Errors,
                          ops: Optional[List[str]] = None) -> List[Tuple[str, str]]:
     """Compile Python module(s) to C that can be used from Python C extension modules."""
-
     # Generate basic IR, with missing exception and refcount handling.
     file_nodes = [result.files[name] for name in module_names]
-    literals, modules, errors = genops.build_ir(file_nodes, result.graph, result.types,
-                                                compiler_options)
-    if errors > 0:
-        sys.exit(1)
+    literals, modules = genops.build_ir(file_nodes, result.graph, result.types, mapper,
+                                        compiler_options, errors)
+    if errors.num_errors > 0:
+        return []
     # Insert uninit checks.
     for _, module in modules:
         for fn in module.functions:
