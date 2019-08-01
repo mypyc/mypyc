@@ -1479,6 +1479,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         'os.path': ('os',),
         'tokenize': ('token',),
         'weakref': ('_weakref',),
+        'asyncio': ('asyncio.events', 'asyncio.tasks'),
     }  # type: ClassVar[Dict[str, Sequence[str]]]
 
     def gen_import(self, id: str, line: int) -> None:
@@ -4978,12 +4979,14 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
 
     def add_close_to_generator_class(self, fn_info: FuncInfo) -> None:
         """Generates the '__close__' method for a generator class."""
-
-        # TODO: Currently this is a dummy method does the exact same thing as
-        # __iter__, we need to actually fill this in.
+        # TODO: Currently this method just triggers a runtime error,
+        # we should fill this out eventually.
         self.enter(fn_info)
-        self_target = self.add_self_to_env(fn_info.generator_class.ir)
-        self.add(Return(self.read(self_target, fn_info.fitem.line)))
+        self.add_self_to_env(fn_info.generator_class.ir)
+        self.add(RaiseStandardError(RaiseStandardError.RUNTIME_ERROR,
+                                    'close method on generator classes uimplemented',
+                                    fn_info.fitem.line))
+        self.add(Unreachable())
         blocks, env, _, fn_info = self.leave()
 
         # Next, add the actual function as a method of the generator class.
@@ -4992,6 +4995,21 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         close_fn_ir = FuncIR(close_fn_decl, blocks, env)
         fn_info.generator_class.ir.methods['close'] = close_fn_ir
         self.functions.append(close_fn_ir)
+
+    def add_await_to_generator_class(self, fn_info: FuncInfo) -> None:
+        """Generates the '__await__' method for a generator class."""
+        self.enter(fn_info)
+        self_target = self.add_self_to_env(fn_info.generator_class.ir)
+        self.add(Return(self.read(self_target, fn_info.fitem.line)))
+        blocks, env, _, fn_info = self.leave()
+
+        # Next, add the actual function as a method of the generator class.
+        sig = FuncSignature((RuntimeArg(SELF_NAME, object_rprimitive),), object_rprimitive)
+        await_fn_decl = FuncDecl('__await__', fn_info.generator_class.ir.name,
+                                 self.module_name, sig)
+        await_fn_ir = FuncIR(await_fn_decl, blocks, env)
+        fn_info.generator_class.ir.methods['__await__'] = await_fn_ir
+        self.functions.append(await_fn_ir)
 
     def create_switch_for_generator_class(self) -> None:
         self.add(Goto(self.fn_info.generator_class.switch_block))
@@ -5032,21 +5050,6 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         zero_reg = self.add(LoadInt(0))
         self.add(SetAttr(curr_env_reg, NEXT_LABEL_ATTR_NAME, zero_reg, fitem.line))
         return generator_reg
-
-    def add_await_to_generator_class(self, fn_info: FuncInfo) -> None:
-        """Generates the '__await__' method for a generator class."""
-        self.enter(fn_info)
-        self_target = self.add_self_to_env(fn_info.generator_class.ir)
-        self.add(Return(self.read(self_target, fn_info.fitem.line)))
-        blocks, env, _, fn_info = self.leave()
-
-        # Next, add the actual function as a method of the generator class.
-        sig = FuncSignature((RuntimeArg(SELF_NAME, object_rprimitive),), object_rprimitive)
-        await_fn_decl = FuncDecl('__await__', fn_info.generator_class.ir.name,
-                                 self.module_name, sig)
-        await_fn_ir = FuncIR(await_fn_decl, blocks, env)
-        fn_info.generator_class.ir.methods['__await__'] = await_fn_ir
-        self.functions.append(await_fn_ir)
 
     def add_raise_exception_blocks_to_generator_class(self, line: int) -> None:
         """

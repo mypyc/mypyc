@@ -941,15 +941,11 @@ static PyObject *CPy_GetCoro(PyObject *obj)
     // If the type has an __await__ method, call it,
     // otherwise, fallback to calling __iter__.
     PyAsyncMethods* async_struct = obj->ob_type->tp_as_async;
-    if (async_struct != NULL) {
-        if (async_struct->am_await != NULL) {
-            return (async_struct->am_await)(obj);
-        }
-        else {
-            return PyObject_GetIter(obj);
-        }
-    }
-    else {
+    if (async_struct != NULL && async_struct->am_await != NULL) {
+        return (async_struct->am_await)(obj);
+    } else {
+        // TODO: We should check that the type is a generator decorated with
+        // asyncio.coroutine
         return PyObject_GetIter(obj);
     }
 }

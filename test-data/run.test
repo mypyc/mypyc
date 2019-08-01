@@ -303,8 +303,6 @@ for k in range(12):
 
 [case testAsync]
 import asyncio
-import asyncio.tasks
-import asyncio.events
 
 async def h() -> int:
     return 1
