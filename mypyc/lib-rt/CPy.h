@@ -936,6 +936,24 @@ static PyObject *CPyIter_Send(PyObject *iter, PyObject *val)
     }
 }
 
+static PyObject *CPy_GetCoro(PyObject *obj)
+{
+    // If the type has an __await__ method, call it,
+    // otherwise, fallback to calling __iter__.
+    PyAsyncMethods* async_struct = obj->ob_type->tp_as_async;
+    if (async_struct != NULL) {
+        if (async_struct->am_await != NULL) {
+            return (async_struct->am_await)(obj);
+        }
+        else {
+            return PyObject_GetIter(obj);
+        }
+    }
+    else {
+        return PyObject_GetIter(obj);
+    }
+}
+
 // mypy lets ints silently coerce to floats, so a mypyc runtime float
 // might be an int also
 static inline bool CPyFloat_Check(PyObject *o) {

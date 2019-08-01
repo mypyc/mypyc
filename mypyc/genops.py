@@ -82,7 +82,7 @@ from mypyc.ops_dict import (
 from mypyc.ops_set import new_set_op, set_add_op, set_update_op
 from mypyc.ops_misc import (
     none_op, none_object_op, true_op, false_op, iter_op, next_op, next_raw_op,
-    check_stop_op, send_op, yield_from_except_op,
+    check_stop_op, send_op, yield_from_except_op, coro_op,
     py_getattr_op, py_setattr_op, py_delattr_op, py_hasattr_op,
     py_call_op, py_call_with_kwargs_op, py_method_call_op,
     fast_isinstance_op, bool_op, new_slice_op,
@@ -4009,10 +4009,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         if isinstance(o, YieldFromExpr):
             iter_val = self.primitive_op(iter_op, [self.accept(o.expr)], o.line)
         else:
-            # If the object is a coroutine, call its' await method to get the iterator
-            iter_val = self.gen_method_call(self.accept(o.expr), '__await__', [],
-                                            object_rprimitive,
-                                            o.line)
+            iter_val = self.primitive_op(coro_op, [self.accept(o.expr)], o.line)
 
         iter_reg = self.maybe_spill_assignable(iter_val)
 
