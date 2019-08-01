@@ -325,6 +325,7 @@ from native import f
 import asyncio
 loop = asyncio.get_event_loop()
 result = loop.run_until_complete(f())
+assert result == 1
 
 [case testRecursiveFibonacci]
 def fib(n: int) -> int:

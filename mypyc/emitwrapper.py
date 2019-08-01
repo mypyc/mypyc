@@ -196,6 +196,21 @@ def generate_bool_wrapper(cl: ClassIR, fn: FuncIR, emitter: Emitter) -> str:
     return name
 
 
+def generate_async_meth_wrapper(cl: ClassIR, fn: FuncIR, emitter: Emitter) -> str:
+    """Generates a wrapper for native  __await__, __aiter__, or __anext__ methods"""
+    name = '{}{}{}'.format(DUNDER_PREFIX, fn.name, cl.name_prefix(emitter.names))
+    emitter.emit_line('static PyObject *{name}(PyObject *self) {{'.format(
+        name=name
+    ))
+    emitter.emit_line('{}val = {}{}(self);'.format(emitter.ctype_spaced(fn.ret_type),
+                                                   NATIVE_PREFIX,
+                                                   fn.cname(emitter.names)))
+    emitter.emit_line('return val;')
+    emitter.emit_line('}')
+
+    return name
+
+
 def generate_wrapper_core(fn: FuncIR, emitter: Emitter,
                           optional_args: Optional[List[RuntimeArg]] = None,
                           arg_names: Optional[List[str]] = None,
