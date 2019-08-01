@@ -9,7 +9,7 @@ from mypyc.emit import Emitter
 from mypyc.emitfunc import native_function_header, native_getter_name, native_setter_name
 from mypyc.emitwrapper import (
     generate_dunder_wrapper, generate_hash_wrapper, generate_richcompare_wrapper,
-    generate_bool_wrapper, generate_get_wrapper, generate_async_meth_wrapper,
+    generate_bool_wrapper, generate_get_wrapper,
 )
 from mypyc.ops import (
     ClassIR, FuncIR, FuncDecl, RType, RTuple, object_rprimitive,
@@ -55,9 +55,9 @@ AS_NUMBER_SLOT_DEFS = {
 }  # type: SlotTable
 
 AS_ASYNC_SLOT_DEFS = {
-    '__await__': ('am_await', generate_async_meth_wrapper),
-    '__aiter__': ('am_aiter', generate_async_meth_wrapper),
-    '__anext__': ('am_anext', generate_async_meth_wrapper),
+    '__await__': ('am_await', native_slot),
+    '__aiter__': ('am_aiter', native_slot),
+    '__anext__': ('am_anext', native_slot),
 }  # type: SlotTable
 
 SIDE_TABLES = [
