@@ -70,7 +70,10 @@ SIDE_TABLES = [
 def generate_slots(cl: ClassIR, table: SlotTable, emitter: Emitter) -> Dict[str, str]:
     fields = OrderedDict()  # type: Dict[str, str]
     for name, (slot, generator) in table.items():
-        method = cl.get_method(name)
+        # XXX: Is this dodgy? This only works if the slots are inherited,
+        # but it allows us to avoid putting PyPy stuff in the tables.
+        # method = cl.get_method(name)
+        method = cl.methods.get(name)
         if method:
             fields[slot] = generator(cl, method, emitter)
 
@@ -382,8 +385,10 @@ def generate_vtable(entries: VTableEntries,
 
     for entry in entries:
         if isinstance(entry, VTableMethod):
-            emitter.emit_line('(CPyVTableItem){}{},'.format(NATIVE_PREFIX,
-                                                            entry.method.cname(emitter.names)))
+            emitter.emit_line('(CPyVTableItem){}{}{},'.format(
+                emitter.get_lib_prefix(entry.method.decl),
+                NATIVE_PREFIX,
+                entry.method.cname(emitter.names)))
         else:
             cl, attr, is_setter = entry
             namer = native_setter_name if is_setter else native_getter_name

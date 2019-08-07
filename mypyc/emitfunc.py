@@ -227,8 +227,12 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
                 op.attr))
         else:
             typ, decl_cl = cl.attr_details(op.attr)
-            self.emit_line('%s = %s((%s *)%s); /* %s */' % (
+            # FIXME: We use the lib_prefixed version which is an
+            # indirect call we can't inline. We should investigate
+            # duplicating getter/setter code.
+            self.emit_line('%s = %s%s((%s *)%s); /* %s */' % (
                 dest,
+                self.emitter.get_lib_prefix(cl),
                 native_getter_name(decl_cl, op.attr, self.emitter.names),
                 decl_cl.struct_name(self.names),
                 obj,
@@ -254,8 +258,9 @@ class FunctionEmitterVisitor(OpVisitor[None], EmitterInterface):
                 op.attr))
         else:
             typ, decl_cl = cl.attr_details(op.attr)
-            self.emit_line('%s = %s((%s *)%s, %s); /* %s */' % (
+            self.emit_line('%s = %s%s((%s *)%s, %s); /* %s */' % (
                 dest,
+                self.emitter.get_lib_prefix(cl),
                 native_setter_name(decl_cl, op.attr, self.emitter.names),
                 decl_cl.struct_name(self.names),
                 obj,
