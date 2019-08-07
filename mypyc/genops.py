@@ -1458,10 +1458,12 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         tp = self.primitive_op(pytype_from_template_op,
                                [template, tp_bases, modname], cdef.line)
         # Immediately fix up the trait vtables, before doing anything with the class.
-        self.add(Call(
-            FuncDecl(cdef.name + '_trait_vtable_setup',
-                     None, self.module_name,
-                     FuncSignature([], bool_rprimitive)), [], -1))
+        ir = self.mapper.type_to_ir[cdef.info]
+        if not ir.is_trait and not ir.builtin_base:
+            self.add(Call(
+                FuncDecl(cdef.name + '_trait_vtable_setup',
+                         None, self.module_name,
+                         FuncSignature([], bool_rprimitive)), [], -1))
         # Save the class
         self.add(InitStatic(tp, cdef.name, self.module_name, NAMESPACE_TYPE))
 
