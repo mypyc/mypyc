@@ -5,7 +5,8 @@ from typing import List, Set, Dict, Optional, List, Callable, Union
 
 from mypyc.common import (
     REG_PREFIX, ATTR_PREFIX, STATIC_PREFIX, TYPE_PREFIX, NATIVE_PREFIX,
-    FAST_ISINSTANCE_MAX_SUBCLASSES
+    FAST_ISINSTANCE_MAX_SUBCLASSES,
+    lib_suffix,
 )
 from mypyc.ops import (
     Environment, BasicBlock, Value, RType, RTuple, RInstance,
@@ -40,9 +41,14 @@ class HeaderDeclaration:
 class EmitterContext:
     """Shared emitter state for an entire compilation unit."""
 
-    def __init__(self, module_names: List[str]) -> None:
+    def __init__(self, module_names: List[str],
+                 group_map: Optional[Dict[str, Optional[str]]] = None,
+                 shared_lib_name: Optional[str] = None) -> None:
         self.temp_counter = 0
         self.names = NameGenerator(module_names)
+        self.group_map = group_map or {}
+        self.shared_lib_name = shared_lib_name
+        self.library_deps = set()  # type: Set[str]
 
         # The map below is used for generating declarations and
         # definitions at the top of the C file. The main idea is that they can
@@ -117,6 +123,20 @@ class Emitter:
         self.context.temp_counter += 1
         return '__LL%d' % self.context.temp_counter
 
+    def get_lib_prefix(self, obj: Union[str, ClassIR, FuncDecl],
+                       *,
+                       is_variable: bool = False) -> str:
+        """XXX document"""
+        module_name = obj if isinstance(obj, str) else obj.module_name
+        groups = self.context.group_map
+        target_name = groups.get(module_name)
+        if target_name and target_name != self.context.shared_lib_name:
+            self.context.library_deps.add(target_name)
+            star_maybe = '*' if is_variable else ''
+            return '{}exports{}.'.format(star_maybe, lib_suffix(target_name))
+        else:
+            return ''
+
     def static_name(self, id: str, module: Optional[str], prefix: str = STATIC_PREFIX) -> str:
         """Create name of a C static variable.
 
@@ -127,8 +147,10 @@ class Emitter:
         overlap with other calls to this method within a compilation
         unit.
         """
+        # XXX: this doesn't know about the *current* module
+        lib_prefix = '' if not module else self.get_lib_prefix(module, is_variable=True)
         suffix = self.names.private_name(module or '', id)
-        return '{}{}'.format(prefix, suffix)
+        return '{}{}{}'.format(lib_prefix, prefix, suffix)
 
     def type_struct_name(self, cl: ClassIR) -> str:
         return self.static_name(cl.name, cl.module_name, prefix=TYPE_PREFIX)

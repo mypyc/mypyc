@@ -65,7 +65,8 @@ from mypyc.ops import (
     exc_rtuple,
     PrimitiveOp, ControlOp, LoadErrorValue, OpDescription, RegisterOp,
     is_object_rprimitive, LiteralsMap, FuncSignature, VTableAttr, VTableMethod, VTableEntries,
-    NAMESPACE_TYPE, RaiseStandardError, LoadErrorValue, NO_TRACEBACK_LINE_NO, FuncDecl,
+    NAMESPACE_TYPE, NAMESPACE_MODULE,
+    RaiseStandardError, LoadErrorValue, NO_TRACEBACK_LINE_NO, FuncDecl,
     FUNC_NORMAL, FUNC_STATICMETHOD, FUNC_CLASSMETHOD,
     RUnion, is_optional_type, optional_value_type, all_concrete_classes
 )
@@ -1494,13 +1495,13 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         self.imports.append(id)
 
         needs_import, out = BasicBlock(), BasicBlock()
-        first_load = self.add(LoadStatic(object_rprimitive, 'module', id))
+        first_load = self.load_module(id)
         comparison = self.binary_op(first_load, self.none_object(), 'is not', line)
         self.add_bool_branch(comparison, out, needs_import)
 
         self.activate_block(needs_import)
         value = self.primitive_op(import_op, [self.load_static_unicode(id)], line)
-        self.add(InitStatic(value, 'module', id))
+        self.add(InitStatic(value, id, namespace=NAMESPACE_MODULE))
         self.goto_and_activate(out)
 
     def visit_import(self, node: Import) -> None:
@@ -1546,7 +1547,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         id = importlib.util.resolve_name('.' * node.relative + node.id, module_package)
 
         self.gen_import(id, node.line)
-        module = self.add(LoadStatic(object_rprimitive, 'module', id))
+        module = self.load_module(id)
 
         # Copy everything into our module's dict.
         # Note that we miscompile import from inside of functions here,
@@ -5134,7 +5135,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
         return self.add(LoadStatic(str_rprimitive, static_symbol, ann=value))
 
     def load_module(self, name: str) -> Value:
-        return self.add(LoadStatic(object_rprimitive, 'module', name))
+        return self.add(LoadStatic(object_rprimitive, name, namespace=NAMESPACE_MODULE))
 
     def load_module_attr(self, expr: RefExpr) -> Value:
         assert expr.node, "RefExpr not resolved"

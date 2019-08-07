@@ -1,3 +1,5 @@
+from typing import Optional
+
 MYPY = False
 if MYPY:
     from typing_extensions import Final
@@ -8,6 +10,7 @@ DUNDER_PREFIX = 'CPyDunder_'  # type: Final # Wrappers for exposing dunder metho
 REG_PREFIX = 'cpy_r_'  # type: Final # Registers
 STATIC_PREFIX = 'CPyStatic_'  # type: Final # Static variables (for literals etc.)
 TYPE_PREFIX = 'CPyType_'  # type: Final # Type object struct
+MODULE_PREFIX = 'CPyModule_'  # type: Final # Cached modules
 ATTR_PREFIX = '_'  # type: Final # Attributes
 
 ENV_ATTR_NAME = '__mypyc_env__'  # type: Final
@@ -30,3 +33,7 @@ FAST_ISINSTANCE_MAX_SUBCLASSES = 2  # type: Final
 
 def decorator_helper_name(func_name: str) -> str:
     return '__mypyc_{}_decorator_helper__'.format(func_name)
+
+
+def lib_suffix(shared_lib_name: Optional[str]) -> str:
+    return '' if shared_lib_name is None else shared_lib_name[5:]

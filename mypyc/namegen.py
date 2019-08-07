@@ -125,4 +125,6 @@ def candidate_suffixes(fullname: str) -> List[str]:
     result = ['']
     for i in range(len(components)):
         result.append('_'.join(components[-i - 1:]) + '_')
-    return result
+    # return result
+    # XXX: ASDF
+    return [result[-1]]
