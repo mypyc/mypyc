@@ -1337,7 +1337,7 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             self.add_to_non_ext_dict(lvalue.name, rvalue, stmt.line)
             # We cache enum attributes to speed up enum attribute lookup since they
             # are final.
-            if cdef.info.bases and cdef.info.bases[0].type.name() == 'Enum':
+            if cdef.info.bases and cdef.info.bases[0].type.fullname() == 'enum.Enum':
                 attr_to_cache.append(lvalue)
 
     def setup_non_ext_dict(self, cdef: ClassDef, bases: Value) -> Value:
@@ -2698,7 +2698,8 @@ class IRBuilder(ExpressionVisitor[Value], StatementVisitor[None]):
             sym = expr.expr.node.get(expr.name)
             if sym and isinstance(sym.node, Var):
                 # Enum attribute are treated as final since they are added to the global cache
-                is_final = sym.node.is_final or expr.expr.node.bases[0].type.name() == 'Enum'
+                expr_fullname = expr.expr.node.bases[0].type.fullname()
+                is_final = sym.node.is_final or expr_fullname == 'enum.Enum'
                 if is_final:
                     final_var = sym.node
                     fullname = '{}.{}'.format(sym.node.info.fullname(), final_var.name())
