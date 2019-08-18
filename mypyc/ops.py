@@ -1428,10 +1428,14 @@ class FuncIR:
     def __init__(self,
                  decl: FuncDecl,
                  blocks: List[BasicBlock],
-                 env: Environment) -> None:
+                 env: Environment,
+                 line: int = -1,
+                 traceback_name: Optional[str] = None) -> None:
         self.decl = decl
         self.blocks = blocks
         self.env = env
+        self.traceback_name = traceback_name
+        self.line = line
 
     @property
     def args(self) -> Sequence[RuntimeArg]:

@@ -9,7 +9,7 @@ We need to split basic blocks on each error check since branches can
 only be placed at the end of a basic block.
 """
 
-from typing import List
+from typing import List, Optional
 
 from mypyc.ops import (
     FuncIR, BasicBlock, LoadErrorValue, Return, Branch, RegisterOp,
@@ -28,7 +28,7 @@ def insert_exception_handling(ir: FuncIR) -> None:
             error_label = add_handler_block(ir)
             break
     if error_label:
-        ir.blocks = split_blocks_at_errors(ir.blocks, error_label, ir.name)
+        ir.blocks = split_blocks_at_errors(ir.blocks, error_label, ir.traceback_name)
 
 
 def add_handler_block(ir: FuncIR) -> BasicBlock:
@@ -43,7 +43,7 @@ def add_handler_block(ir: FuncIR) -> BasicBlock:
 
 def split_blocks_at_errors(blocks: List[BasicBlock],
                            default_error_handler: BasicBlock,
-                           func: str) -> List[BasicBlock]:
+                           func: Optional[str]) -> List[BasicBlock]:
     new_blocks = []  # type: List[BasicBlock]
 
     # First split blocks on ops that may raise.
@@ -86,7 +86,7 @@ def split_blocks_at_errors(blocks: List[BasicBlock],
                                 op=variant,
                                 line=op.line)
                 branch.negated = negated
-                if op.line != NO_TRACEBACK_LINE_NO:
+                if op.line != NO_TRACEBACK_LINE_NO and func:
                     branch.traceback_entry = (func, op.line)
                 cur_block.ops.append(branch)
                 cur_block = new_block
