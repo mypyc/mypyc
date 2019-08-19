@@ -277,7 +277,7 @@ class RInstance(RType):
     is_unboxed = False
 
     def __init__(self, class_ir: 'ClassIR') -> None:
-        self.name = class_ir.name
+        self.name = "{}.{}".format(class_ir.module_name, class_ir.name)
         self.class_ir = class_ir
         self._ctype = 'PyObject *'
 
