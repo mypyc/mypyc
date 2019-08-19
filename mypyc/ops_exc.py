@@ -22,7 +22,7 @@ set_stop_iteration_value = custom_op(
     result_type=bool_rprimitive,
     error_kind=ERR_FALSE,
     format_str = 'set_stop_iteration_value({args[0]}); {dest} = 0',
-    emit=simple_emit('_PyGen_SetStopIterationValue({args[0]}); {dest} = 0;'))
+    emit=simple_emit('CPyGen_SetStopIterationValue({args[0]}); {dest} = 0;'))
 
 raise_exception_with_tb_op = custom_op(
     arg_types=[object_rprimitive, object_rprimitive, object_rprimitive],
