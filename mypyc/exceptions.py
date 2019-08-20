@@ -43,7 +43,7 @@ def add_handler_block(ir: FuncIR) -> BasicBlock:
 
 def split_blocks_at_errors(blocks: List[BasicBlock],
                            default_error_handler: BasicBlock,
-                           func: Optional[str]) -> List[BasicBlock]:
+                           func_name: Optional[str]) -> List[BasicBlock]:
     new_blocks = []  # type: List[BasicBlock]
 
     # First split blocks on ops that may raise.
@@ -86,8 +86,8 @@ def split_blocks_at_errors(blocks: List[BasicBlock],
                                 op=variant,
                                 line=op.line)
                 branch.negated = negated
-                if op.line != NO_TRACEBACK_LINE_NO and func:
-                    branch.traceback_entry = (func, op.line)
+                if op.line != NO_TRACEBACK_LINE_NO and func_name is not None:
+                    branch.traceback_entry = (func_name, op.line)
                 cur_block.ops.append(branch)
                 cur_block = new_block
 

@@ -1434,8 +1434,11 @@ class FuncIR:
         self.decl = decl
         self.blocks = blocks
         self.env = env
-        self.traceback_name = traceback_name
         self.line = line
+        # The name that should be displayed for tracebacks that
+        # include this function. Function will be omitted from
+        # tracebacks if None.
+        self.traceback_name = traceback_name
 
     @property
     def args(self) -> Sequence[RuntimeArg]:
