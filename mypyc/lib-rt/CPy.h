@@ -1007,7 +1007,7 @@ static PyObject *CPy_GetTypeName(PyObject *type) {
     if (!module) {
         goto out;
     }
-    name = PyObject_GetAttrString(type, "__name__");
+    name = PyObject_GetAttrString(type, "__qualname__");
     if (!name) {
         goto out;
     }
@@ -1033,10 +1033,15 @@ static PyObject *CPy_FormatTypeName(PyObject *value) {
         return PyUnicode_FromString("None");
     }
 
-    if (!PyTuple_CheckExact(value) || PyTuple_GET_SIZE(value) > 10) {
+    if (!PyTuple_CheckExact(value)) {
         return CPy_GetTypeName((PyObject *)Py_TYPE(value));
     }
 
+    if (PyTuple_GET_SIZE(value) > 10) {
+        return PyUnicode_FromFormat("tuple[<%d items>]", PyTuple_GET_SIZE(value));
+    }
+
+    // Most of the logic is all for tuples, which is the only interesting case
     PyObject *output = PyUnicode_FromString("tuple[");
     if (!output) {
         return NULL;
