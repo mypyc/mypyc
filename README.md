@@ -1,4 +1,4 @@
-# mypyc: Compile type-annotated Python to fast C extensions
+# mypyc
 
 Mypyc compiles Python modules to C extensions. It uses standard Python
 [type hints](https://mypy.readthedocs.io/en/stable/cheat_sheet_py3.html) to
