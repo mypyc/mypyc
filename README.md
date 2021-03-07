@@ -5,7 +5,22 @@ Mypyc compiles Python modules to C extensions. It uses standard Python
 generate fast code. Mypyc uses [mypy](http://www.mypy-lang.org) to
 perform type checking and type inference.
 
-Mypyc can compile anything from one module or your entire codebase.
+Mypyc can compile anything from one module to an entire codebase. The
+mypy project has been using mypyc to compile mypy since 2019, giving
+it a 4x performance boost over regular Python.
+
+## Features
+
+* Support most features in the stdlib ``typing`` module
+* Compile clean, regular-looking Python code with type annotations
+* Expressive type system, including generics, optional types, union types and tuple types
+* Powerful type inference -- no need to annotate most variables
+* All code is valid Python, and all Python editors and IDEs work just fine
+* Access to all stdlib and third-party libraries in compiled code
+* Strict runtime enforcement of type annotations for runtime type safety
+* Ahead-of-time compilation for fast program startup
+* Compiled code runs as normal Python code (compilation is optional)
+* Both static type checking (via mypy) and runtime type checking
 
 ## Documentation
 
@@ -28,16 +43,12 @@ repository. You can also ask questions in our
 
 * Write clean code without non-standard syntax, such as ``cpdef``, or
   extra decorators, with good performance.
-
 * First-class support for type system features such as tuple types,
   union types and generics.
-
 * Variable type annotations are not needed for good performance, due to
   powerful type inference provided by mypy.
-
 * Full integration with mypy for robust and seamless static type
   checking.
-
 * Mypyc performs strict enforcement of type annotations at runtime,
   for better runtime type safety.
 
